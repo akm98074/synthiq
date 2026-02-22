@@ -1,25 +1,35 @@
 """
 Source ingestion endpoints — file upload and URL ingestion.
+
+After creating a Source record, the file is stored in S3/local storage
+and an ARQ background job (ingest_source) is enqueued to process it.
 """
 from __future__ import annotations
 
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from database import get_db
 from models.database import Project, Source, User
 from models.schemas import SourceOut, SourceUrlCreate
+from storage.s3 import get_storage
 
 router = APIRouter(prefix="/projects/{project_id}/sources", tags=["sources"])
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 PLAN_SOURCE_LIMITS = {"free": 10, "professional": 50, "team": 100, "enterprise": None}
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+
+CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".txt": "text/plain",
+}
 
 
 @router.get("", response_model=list[SourceOut])
@@ -44,6 +54,7 @@ async def list_sources(
 )
 async def upload_file(
     project_id: str,
+    request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -51,37 +62,46 @@ async def upload_file(
     await _assert_project_owned(db, project_id, current_user.id)
     await _assert_source_limit(db, project_id, current_user.plan)
 
-    # Validate extension
+    # ── Validate extension ────────────────────────────────────────────────────
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type '{ext}'. Allowed: {ALLOWED_EXTENSIONS}",
+            detail=f"Unsupported file type '{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}",
         )
 
-    # Validate size
+    # ── Read & validate size ──────────────────────────────────────────────────
     content = await file.read()
     if len(content) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
 
-    source_type = ext.lstrip(".")  # pdf | docx | txt → we store as "text" for txt
-    if source_type == "txt":
-        source_type = "text"
+    source_type = "text" if ext == ".txt" else ext.lstrip(".")
 
+    # ── Upload to storage ─────────────────────────────────────────────────────
+    source_id = str(uuid.uuid4())
+    s3_key = f"sources/{project_id}/{source_id}{ext}"
+    storage = get_storage()
+    await storage.upload(
+        s3_key, content, content_type=CONTENT_TYPES.get(ext, "application/octet-stream")
+    )
+
+    # ── Persist source record ─────────────────────────────────────────────────
     source = Source(
+        id=source_id,
         project_id=project_id,
         type=source_type,
         filename=file.filename,
+        s3_key=s3_key,
         status="pending",
-        # s3_key would be set by the background worker after upload
     )
     db.add(source)
     await db.flush()
-
-    # Update project source_count
     await _increment_source_count(db, project_id)
-
     await db.refresh(source)
+
+    # ── Enqueue ingestion job ─────────────────────────────────────────────────
+    await _enqueue_ingest(request, source.id)
+
     return SourceOut.model_validate(source)
 
 
@@ -92,6 +112,7 @@ async def upload_file(
 )
 async def add_url(
     project_id: str,
+    request: Request,
     payload: SourceUrlCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -107,10 +128,29 @@ async def add_url(
     )
     db.add(source)
     await db.flush()
-
     await _increment_source_count(db, project_id)
-
     await db.refresh(source)
+
+    await _enqueue_ingest(request, source.id)
+
+    return SourceOut.model_validate(source)
+
+
+@router.get("/{source_id}", response_model=SourceOut)
+async def get_source(
+    project_id: str,
+    source_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Poll a single source's status during ingestion."""
+    await _assert_project_owned(db, project_id, current_user.id)
+    result = await db.execute(
+        select(Source).where(Source.id == source_id, Source.project_id == project_id)
+    )
+    source = result.scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
     return SourceOut.model_validate(source)
 
 
@@ -130,9 +170,20 @@ async def delete_source(
     if source is None:
         raise HTTPException(status_code=404, detail="Source not found")
 
+    # Remove from vector store (best-effort)
+    from pipeline.vector_store import delete_source_vectors
+    await delete_source_vectors(source_id, project_id)
+
+    # Remove from storage (best-effort)
+    if source.s3_key:
+        try:
+            storage = get_storage()
+            await storage.delete(source.s3_key)
+        except Exception:
+            pass
+
     await db.delete(source)
 
-    # Decrement source count
     project_result = await db.execute(
         select(Project).where(Project.id == project_id)
     )
@@ -141,6 +192,14 @@ async def delete_source(
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+async def _enqueue_ingest(request: Request, source_id: str) -> None:
+    """Enqueue the ingest_source ARQ job. Silently skip if pool unavailable."""
+    arq_pool = getattr(request.app.state, "arq_pool", None)
+    if arq_pool is None:
+        return
+    await arq_pool.enqueue_job("ingest_source", source_id)
 
 
 async def _assert_project_owned(

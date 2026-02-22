@@ -42,6 +42,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://synthiq:synthiq_dev@postgres:5432/synthiq
+      DATABASE_URL_SYNC: postgresql://synthiq:synthiq_dev@postgres:5432/synthiq
       REDIS_URL: redis://redis:6379
     ports:
       - "8000:8000"
@@ -52,7 +53,31 @@ services:
         condition: service_healthy
     volumes:
       - ./api:/app
+      - source_storage:/tmp/synthiq-dev
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: synthiq_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://synthiq:synthiq_dev@postgres:5432/synthiq
+      DATABASE_URL_SYNC: postgresql://synthiq:synthiq_dev@postgres:5432/synthiq
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./api:/app
+      - source_storage:/tmp/synthiq-dev
+    command: python -m arq workers.settings.WorkerSettings
 
 volumes:
   postgres_data:
+  source_storage:

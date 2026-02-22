@@ -3,16 +3,49 @@ Synthiq FastAPI application entry point.
 """
 from __future__ import annotations
 
+import logging
+from contextlib import asynccontextmanager
+
+from arq import create_pool
+from arq.connections import RedisSettings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from routers import projects, sources, synthesis, voice
 
+log = logging.getLogger(__name__)
+
+
+# ─── Lifespan ─────────────────────────────────────────────────────────────────
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create ARQ Redis pool on startup; close on shutdown."""
+    try:
+        app.state.arq_pool = await create_pool(
+            RedisSettings.from_dsn(settings.redis_url)
+        )
+        log.info("ARQ Redis pool connected: %s", settings.redis_url)
+    except Exception as exc:
+        log.warning("Could not connect ARQ pool (jobs will be skipped): %s", exc)
+        app.state.arq_pool = None
+
+    yield
+
+    if app.state.arq_pool:
+        await app.state.arq_pool.aclose()
+
+
+# ─── App ──────────────────────────────────────────────────────────────────────
+
+
 app = FastAPI(
     title="Synthiq API",
     version="1.0.0",
     description="Research Synthesis & Knowledge Management",
+    lifespan=lifespan,
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
 )
@@ -43,4 +76,5 @@ app.include_router(voice.router)
 
 @app.get("/health", tags=["health"])
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
+    arq_ok = app.state.arq_pool is not None
+    return {"status": "ok", "version": "1.0.0", "queue": "connected" if arq_ok else "disconnected"}

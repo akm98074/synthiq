@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str = ""
 
+    # Voyage AI (embeddings)
+    voyage_api_key: str = ""
+    voyage_model: str = "voyage-3"
+    voyage_dimensions: int = 1024
+
     # Pinecone
     pinecone_api_key: str = ""
     pinecone_index_name: str = "synthiq-chunks"
@@ -36,6 +41,13 @@ class Settings(BaseSettings):
     # App
     environment: str = "development"
     api_url: str = "http://localhost:8000"
+
+    # Ingestion pipeline
+    chunk_target_chars: int = 2000   # ~512 tokens
+    chunk_overlap_chars: int = 200
+    entity_batch_size: int = 10      # chunks per Claude Haiku call
+    embed_batch_size: int = 96       # texts per Voyage AI call
+    pinecone_upsert_batch: int = 100 # vectors per Pinecone batch
 
     # Plan limits
     free_project_limit: int = 3
