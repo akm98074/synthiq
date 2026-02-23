@@ -43,6 +43,10 @@ redis==5.2.1
 # HTTP + multipart
 python-multipart==0.0.20
 
+# ML / clustering
+scikit-learn==1.6.1
+numpy==2.2.3
+
 # Utilities
 python-dotenv==1.0.1
 

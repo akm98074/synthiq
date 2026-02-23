@@ -90,6 +90,8 @@ class SourceOut(OrmModel):
     status: str
     confidence_score: float | None = None
     page_count: int | None = None
+    is_excluded: bool = False
+    is_flagged: bool = False
     created_at: datetime
 
 
@@ -100,28 +102,55 @@ class ClusterOut(BaseModel):
     id: str
     label: str
     source_count: int
+    chunk_count: int
+    source_ids: list[str]
     key_entities: list[str]
 
 
 class ContradictionOut(BaseModel):
     id: str
+    entity: str
     claim: str
     source_a: str
+    source_a_id: str
     source_b: str
+    source_b_id: str
     quote_a: str
     quote_b: str
+    significance: float = 0.5
 
 
 class GapOut(BaseModel):
     topic: str
     mentioned_in_count: int
     missing_in_count: int
+    missing_source_ids: list[str]
+
+
+class SourceSidebarOut(BaseModel):
+    id: str
+    filename: str | None = None
+    url: str | None = None
+    type: str
+    status: str
+    confidence_score: float | None = None
+    page_count: int | None = None
+    is_excluded: bool = False
+    is_flagged: bool = False
+    cluster_ids: list[str] = []
+
+
+class SourceFlagUpdate(BaseModel):
+    is_flagged: bool | None = None
+    is_excluded: bool | None = None
 
 
 class SourceMapOut(BaseModel):
     clusters: list[ClusterOut]
     contradictions: list[ContradictionOut]
     gaps: list[GapOut]
+    sources: list[SourceSidebarOut]
+    entity_count: int = 0
 
 
 # ─── Deliverable ──────────────────────────────────────────────────────────────

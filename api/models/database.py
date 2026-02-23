@@ -82,6 +82,9 @@ class Project(Base):
         String(32), nullable=False, server_default="created"
     )
     source_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # Phase 3: populated by index_project worker
+    source_map: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    entity_graph: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -121,6 +124,9 @@ class Source(Base):
     )
     confidence_score: Mapped[float | None] = mapped_column()
     page_count: Mapped[int | None] = mapped_column(Integer)
+    # Phase 3: user controls
+    is_excluded: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    is_flagged: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

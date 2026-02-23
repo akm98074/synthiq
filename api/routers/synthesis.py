@@ -1,6 +1,5 @@
 """
 Source Map and Deliverable generation endpoints.
-These are stubs for Week 1-2; full pipeline logic lands in Phase 3-5.
 """
 from __future__ import annotations
 
@@ -10,13 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from database import get_db
-from models.database import Deliverable, Project, User
+from models.database import Deliverable, Project, Source, User
 from models.schemas import (
+    ClusterOut,
+    ContradictionOut,
     DeliverableOut,
     ExportRequest,
     ExportResponse,
+    GapOut,
     SectionInstructRequest,
+    SourceFlagUpdate,
     SourceMapOut,
+    SourceSidebarOut,
 )
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["synthesis"])
@@ -31,9 +35,55 @@ async def get_source_map(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    project = await _assert_project_owned(db, project_id, current_user.id)
+
+    sm = project.source_map
+    if not sm:
+        # Pipeline not yet complete — return empty structure
+        return SourceMapOut(clusters=[], contradictions=[], gaps=[], sources=[], entity_count=0)
+
+    clusters = [ClusterOut(**c) for c in (sm.get("clusters") or [])]
+    contradictions = [ContradictionOut(**c) for c in (sm.get("contradictions") or [])]
+    gaps = [GapOut(**g) for g in (sm.get("gaps") or [])]
+    sources = [SourceSidebarOut(**s) for s in (sm.get("sources") or [])]
+
+    return SourceMapOut(
+        clusters=clusters,
+        contradictions=contradictions,
+        gaps=gaps,
+        sources=sources,
+        entity_count=sm.get("entity_count", 0),
+    )
+
+
+# ─── Source flag / exclude ────────────────────────────────────────────────────
+
+
+@router.put("/sources/{source_id}/flag", response_model=dict)
+async def flag_source(
+    project_id: str,
+    source_id: str,
+    payload: SourceFlagUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     await _assert_project_owned(db, project_id, current_user.id)
-    # Full pipeline implemented in Phase 3; return empty structure for now
-    return SourceMapOut(clusters=[], contradictions=[], gaps=[])
+    result = await db.execute(
+        select(Source).where(
+            Source.id == source_id, Source.project_id == project_id
+        )
+    )
+    source = result.scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    if payload.is_flagged is not None:
+        source.is_flagged = payload.is_flagged
+    if payload.is_excluded is not None:
+        source.is_excluded = payload.is_excluded
+
+    await db.commit()
+    return {"id": source_id, "is_flagged": source.is_flagged, "is_excluded": source.is_excluded}
 
 
 # ─── Deliverable ──────────────────────────────────────────────────────────────
@@ -144,12 +194,14 @@ async def export_deliverable(
 
 async def _assert_project_owned(
     db: AsyncSession, project_id: str, user_id: str
-) -> None:
+) -> Project:
     result = await db.execute(
         select(Project).where(Project.id == project_id, Project.user_id == user_id)
     )
-    if result.scalar_one_or_none() is None:
+    project = result.scalar_one_or_none()
+    if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    return project
 
 
 async def _get_deliverable_or_404(db: AsyncSession, project_id: str) -> Deliverable:

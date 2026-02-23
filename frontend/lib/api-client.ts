@@ -113,4 +113,72 @@ export const sourcesApi = {
     apiClient
       .delete(`/projects/${projectId}/sources/${sourceId}`)
       .then((r) => r.data),
+
+  flag: (
+    projectId: string,
+    sourceId: string,
+    payload: { is_flagged?: boolean; is_excluded?: boolean }
+  ) =>
+    apiClient
+      .put(`/projects/${projectId}/sources/${sourceId}/flag`, payload)
+      .then((r) => r.data),
+};
+
+// ─── Source Map API ────────────────────────────────────────────────────────────
+
+export interface ClusterData {
+  id: string;
+  label: string;
+  source_count: number;
+  chunk_count: number;
+  source_ids: string[];
+  key_entities: string[];
+}
+
+export interface ContradictionData {
+  id: string;
+  entity: string;
+  claim: string;
+  source_a: string;
+  source_a_id: string;
+  source_b: string;
+  source_b_id: string;
+  quote_a: string;
+  quote_b: string;
+  significance: number;
+}
+
+export interface GapData {
+  topic: string;
+  mentioned_in_count: number;
+  missing_in_count: number;
+  missing_source_ids: string[];
+}
+
+export interface SourceSidebarData {
+  id: string;
+  filename?: string;
+  url?: string;
+  type: string;
+  status: string;
+  confidence_score?: number;
+  page_count?: number;
+  is_excluded: boolean;
+  is_flagged: boolean;
+  cluster_ids: string[];
+}
+
+export interface SourceMapData {
+  clusters: ClusterData[];
+  contradictions: ContradictionData[];
+  gaps: GapData[];
+  sources: SourceSidebarData[];
+  entity_count: number;
+}
+
+export const sourceMapApi = {
+  get: (projectId: string) =>
+    apiClient
+      .get<SourceMapData>(`/projects/${projectId}/source-map`)
+      .then((r) => r.data),
 };

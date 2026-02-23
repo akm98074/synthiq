@@ -113,7 +113,8 @@ async def ingest_source(ctx: dict[str, Any], source_id: str) -> dict[str, Any]:
             result = await db.execute(select(Source).where(Source.id == source_id))
             source = result.scalar_one()
             source.status = "ready"
-            source.confidence_score = 1.0
+            from pipeline.confidence import compute_confidence
+            source.confidence_score = compute_confidence(source.type, entities_list)
             page_count = max(
                 (c.page_number or 0 for c in chunks), default=0
             )
@@ -183,6 +184,20 @@ async def _parse(
     raise ValueError(f"Unknown source type: {source_type!r}")
 
 
+async def _enqueue_index_project(project_id: str) -> None:
+    """Enqueue the index_project ARQ task via the worker's own ARQ pool."""
+    try:
+        from arq.connections import create_pool, RedisSettings
+        from config import settings as cfg
+
+        pool = await create_pool(RedisSettings.from_dsn(cfg.redis_url))
+        await pool.enqueue_job("index_project", project_id)
+        await pool.aclose()
+        log.info("Enqueued index_project for project=%s", project_id)
+    except Exception as exc:
+        log.warning("Failed to enqueue index_project for project=%s: %s", project_id, exc)
+
+
 async def _maybe_advance_project_status(project_id: str) -> None:
     """
     If all sources in the project are now ready (or errored), update
@@ -216,8 +231,9 @@ async def _maybe_advance_project_status(project_id: str) -> None:
 
         if error > 0 and ready == 0:
             project.status = "error"
+            await db.commit()
         else:
-            # All done — move to indexing (cross-reference stage in Phase 3)
+            # All done — move to indexing and enqueue index_project
             project.status = "indexing"
-
-        await db.commit()
+            await db.commit()
+            await _enqueue_index_project(project_id)

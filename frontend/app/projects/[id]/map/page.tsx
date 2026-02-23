@@ -1,166 +1,146 @@
 "use client";
 
+import { useState } from "react";
+import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
+import { projectsApi } from "@/lib/api-client";
+import { useSourceMap, useFlagSource } from "@/lib/hooks/use-source-map";
+import { ClusterGrid } from "@/components/source-map/cluster-grid";
+import { ContradictionPanel } from "@/components/source-map/contradiction-panel";
+import { GapPanel } from "@/components/source-map/gap-panel";
+import { SourceSidebar } from "@/components/source-map/source-sidebar";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { AlertTriangle, Layers, Search } from "lucide-react";
+import { Loader2, Network } from "lucide-react";
 
-interface SourceMapData {
-  clusters: {
-    id: string;
-    label: string;
-    source_count: number;
-    key_entities: string[];
-  }[];
-  contradictions: {
-    id: string;
-    claim: string;
-    source_a: string;
-    source_b: string;
-    quote_a: string;
-    quote_b: string;
-  }[];
-  gaps: {
-    topic: string;
-    mentioned_in_count: number;
-    missing_in_count: number;
-  }[];
-}
+const STATUS_LABEL: Record<string, string> = {
+  created: "Waiting for sources",
+  ingesting: "Ingesting sources…",
+  indexing: "Clustering sources…",
+  cross_referencing: "Detecting contradictions & gaps…",
+  generating: "Generating deliverable…",
+  ready: "Analysis complete",
+  error: "Processing error",
+};
 
-export default function SourceMapPage({ params }: { params: { id: string } }) {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["source-map", params.id],
-    queryFn: () =>
-      apiClient
-        .get<SourceMapData>(`/projects/${params.id}/source-map`)
-        .then((r) => r.data),
-  });
+function ProcessingBanner({ status }: { status: string }) {
+  const isTerminal = status === "ready" || status === "error";
+  const label = STATUS_LABEL[status] ?? status;
 
-  if (isLoading) {
-    return (
-      <div className="max-w-5xl mx-auto px-6 py-10 space-y-6">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-32 rounded-xl bg-slate-200 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
-  if (isError || !data) {
-    return (
-      <div className="max-w-5xl mx-auto px-6 py-20 text-center text-slate-500">
-        <p>Source map not yet available. Ingest sources first.</p>
-      </div>
-    );
-  }
+  if (isTerminal) return null;
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
-      {/* Theme Clusters */}
-      <section>
-        <div className="flex items-center gap-2 mb-4">
-          <Layers className="w-5 h-5 text-indigo-600" />
-          <h2 className="text-lg font-semibold text-slate-900">
-            Theme Clusters
-          </h2>
-          <Badge variant="secondary">{data.clusters.length}</Badge>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {data.clusters.map((cluster) => (
-            <Card key={cluster.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">{cluster.label}</CardTitle>
-                <p className="text-xs text-slate-500">
-                  {cluster.source_count} source
-                  {cluster.source_count !== 1 ? "s" : ""}
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-1">
-                  {cluster.key_entities.map((entity) => (
-                    <Badge key={entity} variant="outline" className="text-xs">
-                      {entity}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+    <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
+      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+      <span>{label}</span>
+      <span className="text-indigo-400 text-xs ml-auto">
+        Refreshing automatically…
+      </span>
+    </div>
+  );
+}
+
+export default function SourceMapPage() {
+  const { id: projectId } = useParams<{ id: string }>();
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(
+    null
+  );
+
+  // Project status drives polling
+  const { data: project } = useQuery({
+    queryKey: ["project", projectId],
+    queryFn: () => projectsApi.get(projectId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (!status || status === "ready" || status === "error") return false;
+      return 5000;
+    },
+  });
+
+  const projectStatus = project?.status ?? "created";
+
+  const {
+    data: sourceMap,
+    isLoading: isMapLoading,
+    isError: isMapError,
+  } = useSourceMap(projectId, projectStatus);
+
+  const { mutate: flagSource, isPending: isFlagging } =
+    useFlagSource(projectId);
+
+  const isEmpty =
+    !isMapLoading &&
+    !isMapError &&
+    sourceMap &&
+    sourceMap.clusters.length === 0 &&
+    sourceMap.contradictions.length === 0 &&
+    sourceMap.gaps.length === 0;
+
+  return (
+    <div className="max-w-7xl mx-auto px-6 py-10 space-y-8">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Network className="w-6 h-6 text-indigo-600" />
+        <h1 className="text-xl font-semibold text-slate-900">Source Map</h1>
+        {sourceMap && sourceMap.entity_count > 0 && (
+          <Badge variant="secondary">
+            {sourceMap.entity_count} cross-source entities
+          </Badge>
+        )}
+      </div>
+
+      {/* Processing banner */}
+      <ProcessingBanner status={projectStatus} />
+
+      {/* Loading skeleton */}
+      {isMapLoading && (
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-32 rounded-xl bg-slate-200 animate-pulse"
+            />
           ))}
         </div>
-      </section>
-
-      {/* Contradictions */}
-      {data.contradictions.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h2 className="text-lg font-semibold text-slate-900">
-              Contradictions
-            </h2>
-            <Badge variant="secondary">{data.contradictions.length}</Badge>
-          </div>
-          <div className="space-y-4">
-            {data.contradictions.map((c) => (
-              <div
-                key={c.id}
-                className="border rounded-xl overflow-hidden bg-white"
-              >
-                <div className="px-4 py-2 bg-amber-50 border-b text-sm font-medium text-amber-900">
-                  {c.claim}
-                </div>
-                <div className="grid grid-cols-2 divide-x">
-                  <div className="p-4">
-                    <p className="text-xs font-semibold text-slate-500 mb-1">
-                      {c.source_a}
-                    </p>
-                    <p className="text-sm text-slate-700 italic">
-                      &ldquo;{c.quote_a}&rdquo;
-                    </p>
-                  </div>
-                  <div className="p-4">
-                    <p className="text-xs font-semibold text-slate-500 mb-1">
-                      {c.source_b}
-                    </p>
-                    <p className="text-sm text-slate-700 italic">
-                      &ldquo;{c.quote_b}&rdquo;
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
       )}
 
-      {/* Gaps */}
-      {data.gaps.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <Search className="w-5 h-5 text-slate-400" />
-            <h2 className="text-lg font-semibold text-slate-900">
-              Coverage Gaps
-            </h2>
-            <Badge variant="secondary">{data.gaps.length}</Badge>
+      {/* Error */}
+      {!isMapLoading && isMapError && (
+        <div className="py-20 text-center text-slate-500 text-sm">
+          Failed to load source map. Please try again.
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!isMapLoading && isEmpty && (
+        <div className="py-20 text-center text-slate-400 text-sm">
+          {projectStatus === "ready"
+            ? "No analysis data found. Ensure sources were ingested successfully."
+            : "Analysis will appear here once sources are processed."}
+        </div>
+      )}
+
+      {/* Main content */}
+      {!isMapLoading && !isMapError && sourceMap && !isEmpty && (
+        <div className="flex gap-8">
+          {/* Left: clusters + panels */}
+          <div className="flex-1 min-w-0 space-y-10">
+            <ClusterGrid
+              clusters={sourceMap.clusters}
+              selectedClusterId={selectedClusterId}
+              onSelectCluster={setSelectedClusterId}
+            />
+            <ContradictionPanel contradictions={sourceMap.contradictions} />
+            <GapPanel gaps={sourceMap.gaps} />
           </div>
-          <div className="space-y-2">
-            {data.gaps.map((gap) => (
-              <div
-                key={gap.topic}
-                className="flex items-center justify-between px-4 py-3 bg-white border rounded-lg"
-              >
-                <span className="text-sm font-medium text-slate-700">
-                  {gap.topic}
-                </span>
-                <span className="text-xs text-slate-400">
-                  Mentioned in {gap.mentioned_in_count} source
-                  {gap.mentioned_in_count !== 1 ? "s" : ""}, absent in{" "}
-                  {gap.missing_in_count}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+
+          {/* Right: source sidebar */}
+          <SourceSidebar
+            sources={sourceMap.sources}
+            selectedClusterId={selectedClusterId}
+            onFlag={(sourceId, payload) => flagSource({ sourceId, payload })}
+            isPending={isFlagging}
+          />
+        </div>
       )}
     </div>
   );
