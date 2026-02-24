@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Mic2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProject } from "@/lib/hooks/use-projects";
+import { useVoiceProfile, useProjectVoiceToggle } from "@/lib/hooks/use-voice";
 
 const TABS = [
   { label: "Ingest", href: (id: string) => `/projects/${id}/ingest` },
@@ -23,6 +24,11 @@ export default function ProjectLayout({
 }) {
   const pathname = usePathname();
   const { data: project } = useProject(params.id);
+  const { data: voiceProfile } = useVoiceProfile();
+  const toggleVoice = useProjectVoiceToggle(params.id);
+
+  const hasVoiceProfile = (voiceProfile?.sample_count ?? 0) > 0;
+  const voiceEnabled = project?.use_voice_calibration ?? false;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -41,7 +47,46 @@ export default function ProjectLayout({
             {project?.name ?? "Loading..."}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          {/* Voice calibration toggle — only shown when profile exists */}
+          {hasVoiceProfile ? (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={voiceEnabled}
+                  disabled={toggleVoice.isPending}
+                  onChange={(e) => toggleVoice.mutate(e.target.checked)}
+                />
+                <div
+                  className={cn(
+                    "w-9 h-5 rounded-full transition-colors",
+                    voiceEnabled ? "bg-indigo-600" : "bg-slate-200"
+                  )}
+                />
+                <div
+                  className={cn(
+                    "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform",
+                    voiceEnabled ? "translate-x-4" : "translate-x-0"
+                  )}
+                />
+              </div>
+              <span className="flex items-center gap-1 text-xs text-slate-600">
+                <Mic2 className="w-3.5 h-3.5" />
+                Voice
+              </span>
+            </label>
+          ) : (
+            <Link
+              href="/settings"
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-indigo-600 transition-colors"
+            >
+              <Mic2 className="w-3.5 h-3.5" />
+              Calibrate voice
+            </Link>
+          )}
+
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center">
               <span className="text-white font-bold text-xs">S</span>

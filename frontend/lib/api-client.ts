@@ -42,7 +42,34 @@ export interface Project {
   deliverable_type: DeliverableType;
   status: ProjectStatus;
   source_count: number;
+  use_voice_calibration: boolean;
   created_at: string;
+  updated_at: string;
+}
+
+// ─── Voice Profile types ────────────────────────────────────────────────────
+
+export type HedgingFrequency = "low" | "moderate" | "high";
+export type TechVocabDensity = "low" | "moderate" | "high";
+export type StructuralPreference = "bullets" | "prose" | "mixed";
+export type SectionHeaderStyle = "numbered" | "plain" | "bold" | "none";
+export type FormalityRegister = "informal" | "neutral" | "formal";
+
+export interface StyleSignature {
+  avg_sentence_length: number;
+  avg_paragraph_length: number;
+  hedging_frequency: HedgingFrequency;
+  technical_vocab_density: TechVocabDensity;
+  structural_preference: StructuralPreference;
+  section_header_style: SectionHeaderStyle;
+  formality_register: FormalityRegister;
+}
+
+export interface VoiceProfile {
+  id: string;
+  sample_count: number;
+  style_signature: StyleSignature | null;
+  voice_system_prompt: string | null;
   updated_at: string;
 }
 
@@ -78,6 +105,11 @@ export const projectsApi = {
 
   get: (id: string) =>
     apiClient.get<Project>(`/projects/${id}`).then((r) => r.data),
+
+  updateVoice: (id: string, use_voice_calibration: boolean) =>
+    apiClient
+      .patch<Project>(`/projects/${id}/voice`, { use_voice_calibration })
+      .then((r) => r.data),
 
   create: (payload: CreateProjectPayload) =>
     apiClient.post<Project>("/projects", payload).then((r) => r.data),
@@ -181,4 +213,24 @@ export const sourceMapApi = {
     apiClient
       .get<SourceMapData>(`/projects/${projectId}/source-map`)
       .then((r) => r.data),
+};
+
+// ─── Voice API ────────────────────────────────────────────────────────────────
+
+export const voiceApi = {
+  get: () =>
+    apiClient.get<VoiceProfile | null>("/voice").then((r) => r.data),
+
+  uploadSample: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiClient
+      .post<VoiceProfile>("/voice/samples", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((r) => r.data);
+  },
+
+  deleteProfile: () =>
+    apiClient.delete("/voice").then((r) => r.data),
 };

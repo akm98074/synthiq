@@ -85,6 +85,10 @@ class Project(Base):
     # Phase 3: populated by index_project worker
     source_map: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     entity_graph: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Phase 4: voice calibration toggle
+    use_voice_calibration: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

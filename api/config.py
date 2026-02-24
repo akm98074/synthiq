@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-haiku-4-5-20251001"
+    voice_analysis_model: str = "claude-sonnet-4-6"
 
     # Voyage AI (embeddings)
     voyage_api_key: str = ""

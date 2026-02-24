@@ -63,8 +63,13 @@ class ProjectOut(OrmModel):
     deliverable_type: str
     status: str
     source_count: int
+    use_voice_calibration: bool = False
     created_at: datetime
     updated_at: datetime
+
+
+class ProjectVoiceUpdate(BaseModel):
+    use_voice_calibration: bool
 
 
 class PaginatedProjects(BaseModel):
@@ -196,8 +201,21 @@ class ExportResponse(BaseModel):
 # ─── Voice ────────────────────────────────────────────────────────────────────
 
 
+class VoiceStyleSignature(BaseModel):
+    """Structured style signature extracted from writing samples."""
+    avg_sentence_length: float = 0.0
+    avg_paragraph_length: float = 0.0
+    hedging_frequency: Literal["low", "moderate", "high"] = "moderate"
+    technical_vocab_density: Literal["low", "moderate", "high"] = "moderate"
+    structural_preference: Literal["bullets", "prose", "mixed"] = "prose"
+    section_header_style: Literal["numbered", "plain", "bold", "none"] = "plain"
+    formality_register: Literal["informal", "neutral", "formal"] = "formal"
+    sample_count: int = 0
+
+
 class VoiceProfileOut(BaseModel):
     id: str
     sample_count: int
     style_signature: dict[str, Any] | None = None
+    voice_system_prompt: str | None = None
     updated_at: datetime

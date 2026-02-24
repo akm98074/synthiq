@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProjectCard } from "@/components/dashboard/project-card";
@@ -29,7 +30,14 @@ export default function DashboardPage() {
           </div>
           <span className="font-semibold text-slate-900">Synthiq</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/settings"
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+            Settings
+          </Link>
           <Button
             size="sm"
             className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1"

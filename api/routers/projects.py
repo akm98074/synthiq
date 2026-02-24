@@ -14,6 +14,7 @@ from models.schemas import (
     PaginatedProjects,
     ProjectCreate,
     ProjectOut,
+    ProjectVoiceUpdate,
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -101,6 +102,21 @@ async def delete_project(
 ):
     project = await _get_owned_project(db, project_id, current_user.id)
     await db.delete(project)
+
+
+@router.patch("/{project_id}/voice", response_model=ProjectOut)
+async def update_project_voice(
+    project_id: str,
+    payload: ProjectVoiceUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Toggle voice calibration on/off for a specific project."""
+    project = await _get_owned_project(db, project_id, current_user.id)
+    project.use_voice_calibration = payload.use_voice_calibration
+    await db.flush()
+    await db.refresh(project)
+    return ProjectOut.model_validate(project)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
