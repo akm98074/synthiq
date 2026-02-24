@@ -215,6 +215,63 @@ export const sourceMapApi = {
       .then((r) => r.data),
 };
 
+// ─── Deliverable API ──────────────────────────────────────────────────────────
+
+export interface CitationData {
+  source_id: string;
+  source_title: string;
+  page?: number;
+  marker?: string;
+  quote?: string;
+}
+
+export interface SectionData {
+  id: string;
+  title: string;
+  content: string;
+  status: "pending" | "generating" | "done" | "error";
+  citations: CitationData[];
+}
+
+export interface DeliverableData {
+  id: string;
+  version: number;
+  status: "generating" | "ready" | "error";
+  outline?: Record<string, unknown>;
+  sections: SectionData[];
+}
+
+export const deliverableApi = {
+  get: (projectId: string) =>
+    apiClient
+      .get<DeliverableData>(`/projects/${projectId}/deliverable`)
+      .then((r) => r.data),
+
+  generate: (projectId: string) =>
+    apiClient
+      .post<DeliverableData>(`/projects/${projectId}/deliverable/generate`)
+      .then((r) => r.data),
+
+  regenerateSection: (projectId: string, sectionId: string) =>
+    apiClient
+      .post<DeliverableData>(
+        `/projects/${projectId}/deliverable/sections/${sectionId}/regenerate`
+      )
+      .then((r) => r.data),
+
+  instructSection: (
+    projectId: string,
+    sectionId: string,
+    instruction: string
+  ) =>
+    apiClient
+      .post<DeliverableData>(
+        `/projects/${projectId}/deliverable/sections/${sectionId}/instruct`,
+        { instruction }
+      )
+      .then((r) => r.data),
+};
+
 // ─── Voice API ────────────────────────────────────────────────────────────────
 
 export const voiceApi = {

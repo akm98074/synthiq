@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import { ArrowLeft, Mic2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,15 +17,14 @@ const TABS = [
 
 export default function ProjectLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: { id: string };
 }) {
+  const { id } = useParams<{ id: string }>();
   const pathname = usePathname();
-  const { data: project } = useProject(params.id);
+  const { data: project } = useProject(id);
   const { data: voiceProfile } = useVoiceProfile();
-  const toggleVoice = useProjectVoiceToggle(params.id);
+  const toggleVoice = useProjectVoiceToggle(id);
 
   const hasVoiceProfile = (voiceProfile?.sample_count ?? 0) > 0;
   const voiceEnabled = project?.use_voice_calibration ?? false;
@@ -44,7 +43,7 @@ export default function ProjectLayout({
           </Link>
           <span className="text-slate-300">|</span>
           <span className="font-semibold text-slate-900 truncate max-w-xs">
-            {project?.name ?? "Loading..."}
+            {project?.name ?? "Loading…"}
           </span>
         </div>
         <div className="flex items-center gap-4">
@@ -101,7 +100,7 @@ export default function ProjectLayout({
       <nav className="bg-white border-b px-6">
         <div className="flex gap-0">
           {TABS.map((tab) => {
-            const href = tab.href(params.id);
+            const href = tab.href(id);
             const isActive = pathname === href;
             return (
               <Link

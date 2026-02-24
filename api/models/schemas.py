@@ -165,12 +165,15 @@ class CitationOut(BaseModel):
     source_id: str
     source_title: str
     page: int | None = None
+    marker: str | None = None
+    quote: str | None = None
 
 
 class SectionOut(BaseModel):
     id: str
     title: str
     content: str
+    status: str = "done"
     citations: list[CitationOut]
 
 
@@ -178,6 +181,7 @@ class DeliverableOut(BaseModel):
     id: str
     version: int
     status: str
+    outline: dict[str, Any] | None = None
     sections: list[SectionOut]
 
 

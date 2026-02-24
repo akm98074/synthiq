@@ -3,14 +3,23 @@ Source Map and Deliverable generation endpoints.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import asyncio
+import json
+import logging
+from typing import AsyncGenerator
+
+from arq.connections import RedisSettings, create_pool
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
+from config import settings
 from database import get_db
-from models.database import Deliverable, Project, Source, User
+from models.database import Chunk, Deliverable, Project, Source, User, VoiceProfile
 from models.schemas import (
+    CitationOut,
     ClusterOut,
     ContradictionOut,
     DeliverableOut,
@@ -18,10 +27,14 @@ from models.schemas import (
     ExportResponse,
     GapOut,
     SectionInstructRequest,
+    SectionOut,
     SourceFlagUpdate,
     SourceMapOut,
     SourceSidebarOut,
 )
+from pipeline.draft_generator import generate_section, instruct_section
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["synthesis"])
 
@@ -39,8 +52,9 @@ async def get_source_map(
 
     sm = project.source_map
     if not sm:
-        # Pipeline not yet complete — return empty structure
-        return SourceMapOut(clusters=[], contradictions=[], gaps=[], sources=[], entity_count=0)
+        return SourceMapOut(
+            clusters=[], contradictions=[], gaps=[], sources=[], entity_count=0
+        )
 
     clusters = [ClusterOut(**c) for c in (sm.get("clusters") or [])]
     contradictions = [ContradictionOut(**c) for c in (sm.get("contradictions") or [])]
@@ -83,7 +97,11 @@ async def flag_source(
         source.is_excluded = payload.is_excluded
 
     await db.commit()
-    return {"id": source_id, "is_flagged": source.is_flagged, "is_excluded": source.is_excluded}
+    return {
+        "id": source_id,
+        "is_flagged": source.is_flagged,
+        "is_excluded": source.is_excluded,
+    }
 
 
 # ─── Deliverable ──────────────────────────────────────────────────────────────
@@ -96,24 +114,19 @@ async def get_deliverable(
     current_user: User = Depends(get_current_user),
 ):
     await _assert_project_owned(db, project_id, current_user.id)
-    result = await db.execute(
-        select(Deliverable).where(Deliverable.project_id == project_id)
-    )
-    deliverable = result.scalar_one_or_none()
-    if deliverable is None:
-        raise HTTPException(status_code=404, detail="No deliverable generated yet")
+    deliverable = await _get_deliverable_or_404(db, project_id)
     return _deliverable_to_out(deliverable)
 
 
 @router.post("/deliverable/generate", response_model=DeliverableOut)
-async def generate_deliverable(
+async def generate_deliverable_endpoint(
     project_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     await _assert_project_owned(db, project_id, current_user.id)
 
-    # Check if one already exists; bump version if so
+    # Upsert deliverable record
     result = await db.execute(
         select(Deliverable).where(Deliverable.project_id == project_id)
     )
@@ -124,18 +137,89 @@ async def generate_deliverable(
             project_id=project_id,
             version=1,
             status="generating",
+            outline=None,
             sections=[],
         )
         db.add(deliverable)
     else:
         deliverable.version += 1
         deliverable.status = "generating"
+        deliverable.outline = None
         deliverable.sections = []
 
     await db.flush()
     await db.refresh(deliverable)
-    # Full pipeline (Stages 4-5) enqueued as background job in Phase 5
+    await db.commit()
+
+    # Enqueue Stage 4+5 background job
+    try:
+        pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        await pool.enqueue_job("generate_deliverable", project_id)
+        await pool.aclose()
+    except Exception as exc:
+        log.warning("Could not enqueue generate_deliverable (%s)", exc)
+
     return _deliverable_to_out(deliverable)
+
+
+# ─── SSE progress stream ──────────────────────────────────────────────────────
+
+
+@router.get("/deliverable/events")
+async def deliverable_events(
+    project_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Server-Sent Events endpoint.
+
+    Polls the DB every 2 s and emits 'progress' events with incremental
+    section data until status is 'ready' or 'error', then sends 'done'.
+    """
+    await _assert_project_owned(db, project_id, current_user.id)
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        last_section_count = -1
+        while True:
+            if await request.is_disconnected():
+                break
+
+            result = await db.execute(
+                select(Deliverable).where(Deliverable.project_id == project_id)
+            )
+            await db.commit()  # ensure fresh read
+            deliverable = result.scalar_one_or_none()
+
+            if deliverable is None:
+                yield _sse("error", {"detail": "No deliverable found"})
+                break
+
+            section_count = len(deliverable.sections or [])
+            if section_count != last_section_count:
+                last_section_count = section_count
+                data = _deliverable_to_out(deliverable).model_dump()
+                yield _sse("progress", data)
+
+            if deliverable.status in ("ready", "error"):
+                yield _sse("done", {"status": deliverable.status})
+                break
+
+            await asyncio.sleep(2)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+# ─── Section regenerate / instruct ───────────────────────────────────────────
 
 
 @router.post(
@@ -148,9 +232,35 @@ async def regenerate_section(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await _assert_project_owned(db, project_id, current_user.id)
+    project = await _assert_project_owned(db, project_id, current_user.id)
     deliverable = await _get_deliverable_or_404(db, project_id)
-    # Section regeneration implemented in Phase 5
+
+    sections: list[dict] = list(deliverable.sections or [])
+    section = next((s for s in sections if s.get("id") == section_id), None)
+    if section is None:
+        raise HTTPException(status_code=404, detail="Section not found")
+
+    client = _make_anthropic_client()
+    _, chunk_map = await _load_chunks(db, project_id)
+    voice_prompt = (
+        await _load_voice_prompt(db, project) if project.use_voice_calibration else None
+    )
+
+    # Merge outline section data so chunk_ids are available
+    outline_section = _find_outline_section(deliverable.outline, section_id)
+    merged = {**outline_section, **section} if outline_section else section
+
+    updated = await generate_section(
+        client=client,
+        section=merged,
+        chunk_map=chunk_map,
+        deliverable_type=project.deliverable_type,
+        voice_system_prompt=voice_prompt,
+    )
+
+    sections = [updated if s.get("id") == section_id else s for s in sections]
+    deliverable.sections = sections
+    await db.commit()
     return _deliverable_to_out(deliverable)
 
 
@@ -158,16 +268,42 @@ async def regenerate_section(
     "/deliverable/sections/{section_id}/instruct",
     response_model=DeliverableOut,
 )
-async def instruct_section(
+async def instruct_section_endpoint(
     project_id: str,
     section_id: str,
     payload: SectionInstructRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await _assert_project_owned(db, project_id, current_user.id)
+    project = await _assert_project_owned(db, project_id, current_user.id)
     deliverable = await _get_deliverable_or_404(db, project_id)
-    # Instruction-based editing implemented in Phase 5
+
+    sections: list[dict] = list(deliverable.sections or [])
+    section = next((s for s in sections if s.get("id") == section_id), None)
+    if section is None:
+        raise HTTPException(status_code=404, detail="Section not found")
+
+    client = _make_anthropic_client()
+    _, chunk_map = await _load_chunks(db, project_id)
+    voice_prompt = (
+        await _load_voice_prompt(db, project) if project.use_voice_calibration else None
+    )
+
+    outline_section = _find_outline_section(deliverable.outline, section_id)
+    merged = {**outline_section, **section} if outline_section else section
+
+    updated = await instruct_section(
+        client=client,
+        section=merged,
+        instruction=payload.instruction,
+        chunk_map=chunk_map,
+        deliverable_type=project.deliverable_type,
+        voice_system_prompt=voice_prompt,
+    )
+
+    sections = [updated if s.get("id") == section_id else s for s in sections]
+    deliverable.sections = sections
+    await db.commit()
     return _deliverable_to_out(deliverable)
 
 
@@ -189,7 +325,7 @@ async def export_deliverable(
     )
 
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+# ─── Private helpers ──────────────────────────────────────────────────────────
 
 
 async def _assert_project_owned(
@@ -214,19 +350,93 @@ async def _get_deliverable_or_404(db: AsyncSession, project_id: str) -> Delivera
     return d
 
 
+async def _load_chunks(
+    db: AsyncSession, project_id: str
+) -> tuple[list[dict], dict[str, dict]]:
+    result = await db.execute(
+        select(Chunk, Source.filename, Source.url)
+        .join(Source, Chunk.source_id == Source.id)
+        .where(
+            Source.project_id == project_id,
+            Source.is_excluded.is_(False),
+        )
+        .order_by(Source.id, Chunk.chunk_index)
+    )
+    rows = result.all()
+    chunk_rows = [
+        {
+            "id": c.id,
+            "source_id": c.source_id,
+            "content": c.content,
+            "page_number": c.page_number,
+            "entities": c.entities,
+            "filename": filename,
+            "url": url,
+        }
+        for c, filename, url in rows
+    ]
+    chunk_map = {r["id"]: r for r in chunk_rows}
+    return chunk_rows, chunk_map
+
+
+async def _load_voice_prompt(db: AsyncSession, project: Project) -> str | None:
+    result = await db.execute(
+        select(VoiceProfile).where(VoiceProfile.user_id == project.user_id)
+    )
+    vp = result.scalar_one_or_none()
+    return vp.voice_system_prompt if vp else None
+
+
+def _make_anthropic_client():
+    """Create a fresh AsyncAnthropic client (used by synchronous endpoints)."""
+    try:
+        import anthropic
+        return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    except Exception:
+        return None
+
+
+def _find_outline_section(
+    outline: dict | None, section_id: str
+) -> dict | None:
+    if not outline:
+        return None
+    for s in outline.get("sections") or []:
+        if s.get("id") == section_id:
+            return s
+        for sub in s.get("subsections") or []:
+            if sub.get("id") == section_id:
+                return sub
+    return None
+
+
 def _deliverable_to_out(d: Deliverable) -> DeliverableOut:
     sections = d.sections or []
+    section_outs = []
+    for s in sections:
+        citations = [
+            CitationOut(
+                source_id=c.get("source_id", ""),
+                source_title=c.get("source_title", ""),
+                page=c.get("page"),
+                marker=c.get("marker"),
+                quote=c.get("quote"),
+            )
+            for c in (s.get("citations") or [])
+        ]
+        section_outs.append(
+            SectionOut(
+                id=s.get("id", ""),
+                title=s.get("title", ""),
+                content=s.get("content", ""),
+                status=s.get("status", "done"),
+                citations=citations,
+            )
+        )
     return DeliverableOut(
         id=d.id,
         version=d.version,
         status=d.status,
-        sections=[
-            {
-                "id": s.get("id", ""),
-                "title": s.get("title", ""),
-                "content": s.get("content", ""),
-                "citations": s.get("citations", []),
-            }
-            for s in sections
-        ],
+        outline=d.outline,
+        sections=section_outs,
     )

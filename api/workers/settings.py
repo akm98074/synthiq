@@ -15,6 +15,7 @@ from arq.connections import RedisSettings, create_pool
 from config import settings
 from workers.ingest import ingest_source
 from workers.index_project import index_project
+from workers.generate_deliverable import generate_deliverable
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ async def on_shutdown(ctx: dict) -> None:
 
 
 class WorkerSettings:
-    functions = [ingest_source, index_project]
+    functions = [ingest_source, index_project, generate_deliverable]
     on_startup = on_startup
     on_shutdown = on_shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
