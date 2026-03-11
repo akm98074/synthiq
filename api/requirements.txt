@@ -50,6 +50,9 @@ python-multipart==0.0.20
 scikit-learn==1.6.1
 numpy==2.2.3
 
+# Payments
+stripe==11.4.1
+
 # Utilities
 python-dotenv==1.0.1
 

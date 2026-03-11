@@ -46,7 +46,40 @@ class UserOut(OrmModel):
     clerk_id: str
     email: str
     plan: str
+    subscription_status: str = "inactive"
     created_at: datetime
+
+
+# ─── Billing ──────────────────────────────────────────────────────────────────
+
+
+class PlanInfoOut(BaseModel):
+    plan: str
+    label: str
+    price_monthly_usd: int | None
+    project_limit: int | None
+    sources_per_project: int | None
+    voice_calibration: bool
+
+
+class BillingStatusOut(BaseModel):
+    plan: str
+    subscription_status: str
+    stripe_customer_id: str | None = None
+
+
+class BillingCheckoutRequest(BaseModel):
+    plan: Literal["professional", "team"]
+    success_url: str = Field(default="http://localhost:3000/settings")
+    cancel_url: str = Field(default="http://localhost:3000/settings")
+
+
+class BillingCheckoutResponse(BaseModel):
+    checkout_url: str
+
+
+class BillingPortalResponse(BaseModel):
+    portal_url: str
 
 
 # ─── Project ──────────────────────────────────────────────────────────────────

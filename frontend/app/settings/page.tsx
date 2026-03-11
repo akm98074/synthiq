@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { SampleUploader } from "@/components/voice/sample-uploader";
 import { StyleSignatureCard } from "@/components/voice/style-signature-card";
 import { useVoiceProfile } from "@/lib/hooks/use-voice";
+import { BillingSection } from "@/components/billing/billing-section";
 
 export default function SettingsPage() {
   const { data: profile, isLoading } = useVoiceProfile();
@@ -34,13 +35,19 @@ export default function SettingsPage() {
         <UserButton afterSignOutUrl="/" />
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 py-10 space-y-8">
+      <main className="max-w-2xl mx-auto px-6 py-10 space-y-10">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
           <p className="text-slate-500 text-sm mt-1">
-            Manage your account preferences and voice calibration.
+            Manage your account preferences, plan, and voice calibration.
           </p>
         </div>
+
+        {/* Billing section */}
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold text-slate-900">Billing</h2>
+          <BillingSection />
+        </section>
 
         {/* Voice Calibration section */}
         <section className="space-y-4">
@@ -57,7 +64,7 @@ export default function SettingsPage() {
                 Upload Writing Samples
               </CardTitle>
               <CardDescription className="text-xs">
-                Upload 3–5 past documents that reflect your writing style.
+                Upload 3-5 past documents that reflect your writing style.
                 Synthiq will analyse them to calibrate drafts to sound like you.
                 Supported formats: PDF, DOCX, TXT.
               </CardDescription>

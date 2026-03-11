@@ -21,6 +21,7 @@ from pipeline.voice_extractor import (
     generate_voice_system_prompt,
     merge_signatures,
 )
+from services.plan_limits import check_voice_access
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 log = logging.getLogger(__name__)
@@ -77,7 +78,9 @@ async def upload_voice_sample(
     Upload a writing sample (PDF, DOCX, or TXT).
     Parses the document, extracts a style signature via Claude Sonnet 4.6,
     merges it into the user's voice profile, and re-generates the system prompt.
+    Requires Professional or Team plan.
     """
+    check_voice_access(current_user.plan)
     content = await file.read()
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="Empty file")

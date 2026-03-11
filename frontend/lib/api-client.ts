@@ -296,6 +296,53 @@ export const exportApi = {
       .then((r) => r.data),
 };
 
+// ─── Billing API ──────────────────────────────────────────────────────────────
+
+export interface PlanInfo {
+  plan: string;
+  label: string;
+  price_monthly_usd: number | null;
+  project_limit: number | null;
+  sources_per_project: number | null;
+  voice_calibration: boolean;
+}
+
+export interface BillingStatus {
+  plan: string;
+  subscription_status: string;
+  stripe_customer_id: string | null;
+}
+
+export interface CheckoutRequest {
+  plan: "professional" | "team";
+  success_url?: string;
+  cancel_url?: string;
+}
+
+export interface CheckoutResponse {
+  checkout_url: string;
+}
+
+export interface PortalResponse {
+  portal_url: string;
+}
+
+export const billingApi = {
+  plans: () =>
+    apiClient.get<PlanInfo[]>("/billing/plans").then((r) => r.data),
+
+  status: () =>
+    apiClient.get<BillingStatus>("/billing/status").then((r) => r.data),
+
+  checkout: (payload: CheckoutRequest) =>
+    apiClient
+      .post<CheckoutResponse>("/billing/checkout", payload)
+      .then((r) => r.data),
+
+  portal: () =>
+    apiClient.post<PortalResponse>("/billing/portal").then((r) => r.data),
+};
+
 // ─── Voice API ────────────────────────────────────────────────────────────────
 
 export const voiceApi = {

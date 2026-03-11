@@ -49,6 +49,12 @@ class User(Base):
     plan: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="free"
     )
+    # Phase 7: Stripe billing
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), unique=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), unique=True)
+    subscription_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="inactive"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

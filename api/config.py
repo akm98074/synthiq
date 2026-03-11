@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    stripe_price_professional: str = ""   # Stripe Price ID for Professional plan
+    stripe_price_team: str = ""           # Stripe Price ID for Team plan
 
     # App
     environment: str = "development"

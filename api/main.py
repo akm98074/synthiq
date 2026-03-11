@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from config import settings
-from routers import projects, sources, synthesis, voice
+from routers import billing, projects, sources, synthesis, voice
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ app.add_middleware(
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 
+app.include_router(billing.router)
 app.include_router(projects.router)
 app.include_router(sources.router)
 app.include_router(synthesis.router)

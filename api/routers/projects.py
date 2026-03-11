@@ -16,10 +16,9 @@ from models.schemas import (
     ProjectOut,
     ProjectVoiceUpdate,
 )
+from services.plan_limits import check_project_limit, check_voice_access
 
 router = APIRouter(prefix="/projects", tags=["projects"])
-
-PLAN_PROJECT_LIMITS = {"free": 3, "professional": None, "team": None, "enterprise": None}
 
 
 @router.get("", response_model=PaginatedProjects)
@@ -59,17 +58,11 @@ async def create_project(
     current_user: User = Depends(get_current_user),
 ):
     # Enforce plan project limit
-    limit = PLAN_PROJECT_LIMITS.get(current_user.plan)
-    if limit is not None:
-        count_result = await db.execute(
-            select(func.count(Project.id)).where(Project.user_id == current_user.id)
-        )
-        count = count_result.scalar_one()
-        if count >= limit:
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=f"Free plan limit reached ({limit} projects). Upgrade to Professional.",
-            )
+    count_result = await db.execute(
+        select(func.count(Project.id)).where(Project.user_id == current_user.id)
+    )
+    count = count_result.scalar_one()
+    check_project_limit(current_user.plan, count)
 
     project = Project(
         user_id=current_user.id,
@@ -112,6 +105,8 @@ async def update_project_voice(
     current_user: User = Depends(get_current_user),
 ):
     """Toggle voice calibration on/off for a specific project."""
+    if payload.use_voice_calibration:
+        check_voice_access(current_user.plan)
     project = await _get_owned_project(db, project_id, current_user.id)
     project.use_voice_calibration = payload.use_voice_calibration
     await db.flush()

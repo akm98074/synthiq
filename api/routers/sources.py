@@ -17,12 +17,12 @@ from auth import get_current_user
 from database import get_db
 from models.database import Project, Source, User
 from models.schemas import SourceOut, SourceUrlCreate
+from services.plan_limits import check_source_limit
 from storage.s3 import get_storage
 
 router = APIRouter(prefix="/projects/{project_id}/sources", tags=["sources"])
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
-PLAN_SOURCE_LIMITS = {"free": 10, "professional": 50, "team": 100, "enterprise": None}
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 
 CONTENT_TYPES = {
@@ -215,18 +215,11 @@ async def _assert_project_owned(
 async def _assert_source_limit(
     db: AsyncSession, project_id: str, plan: str
 ) -> None:
-    limit = PLAN_SOURCE_LIMITS.get(plan)
-    if limit is None:
-        return
     count_result = await db.execute(
         select(func.count(Source.id)).where(Source.project_id == project_id)
     )
     count = count_result.scalar_one()
-    if count >= limit:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Source limit reached ({limit} for {plan} plan). Upgrade to add more.",
-        )
+    check_source_limit(plan, count)
 
 
 async def _increment_source_count(db: AsyncSession, project_id: str) -> None:

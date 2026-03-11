@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateProject } from "@/lib/hooks/use-projects";
+import { UpgradeModal } from "@/components/billing/upgrade-modal";
 import type { DeliverableType } from "@/lib/api-client";
 
 const DELIVERABLE_TYPES: { value: DeliverableType; label: string; description: string }[] = [
@@ -59,22 +60,39 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [deliverableType, setDeliverableType] = useState<DeliverableType | "">("");
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [limitCode, setLimitCode] = useState<"project_limit_reached" | undefined>();
   const { mutateAsync: createProject, isPending } = useCreateProject();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !deliverableType) return;
-    const project = await createProject({
-      name: name.trim(),
-      deliverable_type: deliverableType,
-    });
-    onOpenChange(false);
-    setName("");
-    setDeliverableType("");
-    router.push(`/projects/${project.id}/ingest`);
+    try {
+      const project = await createProject({
+        name: name.trim(),
+        deliverable_type: deliverableType,
+      });
+      onOpenChange(false);
+      setName("");
+      setDeliverableType("");
+      router.push(`/projects/${project.id}/ingest`);
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number; data?: { detail?: { code?: string } } } })?.response?.status;
+      const code = (err as { response?: { status?: number; data?: { detail?: { code?: string } } } })?.response?.data?.detail?.code;
+      if (status === 402 && code === "project_limit_reached") {
+        setLimitCode("project_limit_reached");
+        setUpgradeOpen(true);
+      }
+    }
   }
 
   return (
+    <>
+    <UpgradeModal
+      open={upgradeOpen}
+      onClose={() => setUpgradeOpen(false)}
+      limitCode={limitCode}
+    />
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
@@ -133,5 +151,6 @@ export function CreateProjectDialog({ open, onOpenChange }: Props) {
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
