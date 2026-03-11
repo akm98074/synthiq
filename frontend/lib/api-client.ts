@@ -272,6 +272,30 @@ export const deliverableApi = {
       .then((r) => r.data),
 };
 
+// ─── Export API ───────────────────────────────────────────────────────────────
+
+export type ExportFormat = "docx" | "pdf";
+export type CitationStyle = "inline" | "footnotes";
+
+export interface ExportRequest {
+  format: ExportFormat;
+  citation_style: CitationStyle;
+  include_source_map: boolean;
+}
+
+export interface ExportResponse {
+  download_url: string;
+  filename: string;
+  format: ExportFormat;
+}
+
+export const exportApi = {
+  export: (projectId: string, payload: ExportRequest) =>
+    apiClient
+      .post<ExportResponse>(`/projects/${projectId}/export`, payload)
+      .then((r) => r.data),
+};
+
 // ─── Voice API ────────────────────────────────────────────────────────────────
 
 export const voiceApi = {

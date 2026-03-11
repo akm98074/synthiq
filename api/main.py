@@ -4,12 +4,15 @@ Synthiq FastAPI application entry point.
 from __future__ import annotations
 
 import logging
+import pathlib
+import tempfile
 from contextlib import asynccontextmanager
 
 from arq import create_pool
 from arq.connections import RedisSettings
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from config import settings
 from routers import projects, sources, synthesis, voice
@@ -77,4 +80,36 @@ app.include_router(voice.router)
 @app.get("/health", tags=["health"])
 async def health():
     arq_ok = app.state.arq_pool is not None
-    return {"status": "ok", "version": "1.0.0", "queue": "connected" if arq_ok else "disconnected"}
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "queue": "connected" if arq_ok else "disconnected",
+    }
+
+
+# ─── Local export download (dev mode, no S3) ──────────────────────────────────
+
+
+@app.get("/export-download/{token}/{filename}", tags=["export"])
+async def serve_export(token: str, filename: str):
+    """
+    Serve a locally-stored export file.
+
+    Used when AWS S3 is not configured (development mode).
+    The file is stored in the OS temp directory by the export endpoint.
+    """
+    export_dir = pathlib.Path(tempfile.gettempdir()) / "synthiq-exports"
+    path = export_dir / f"{token}_{filename}"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Export not found or expired")
+
+    if filename.endswith(".pdf"):
+        media_type = "application/pdf"
+    elif filename.endswith(".docx"):
+        media_type = (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    else:
+        media_type = "application/octet-stream"
+
+    return FileResponse(path=str(path), media_type=media_type, filename=filename)

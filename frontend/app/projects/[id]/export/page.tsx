@@ -1,140 +1,287 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
+import { useParams } from "next/navigation";
+import {
+  Download,
+  FileText,
+  FileType2,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Download, FileText, FileIcon } from "lucide-react";
+import { CitationStyle, ExportFormat } from "@/lib/api-client";
+import { useExport } from "@/lib/hooks/use-export";
 
-type ExportFormat = "docx" | "pdf";
+// ─── Reusable controls ────────────────────────────────────────────────────────
 
-interface ExportResponse {
-  download_url: string;
+function ToggleGroup<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string; icon?: React.ReactNode }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        {label}
+      </p>
+      <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-sm font-medium transition-all ${
+              value === opt.value
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {opt.icon}
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-export default function ExportPage({ params }: { params: { id: string } }) {
+function Checkbox({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-3 cursor-pointer group">
+      <div className="mt-0.5 shrink-0">
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <div
+          className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+            checked
+              ? "bg-indigo-600 border-indigo-600"
+              : "bg-white border-slate-300 group-hover:border-slate-400"
+          }`}
+        >
+          {checked && (
+            <svg
+              className="w-2.5 h-2.5 text-white"
+              fill="none"
+              viewBox="0 0 12 12"
+              aria-hidden="true"
+            >
+              <path
+                d="M2 6l3 3 5-5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </div>
+      </div>
+      <div>
+        <p className="text-sm font-medium text-slate-800 leading-snug">{label}</p>
+        <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+      </div>
+    </label>
+  );
+}
+
+// ─── Page ──────────────────────────────────────────────────────────────────────
+
+export default function ExportPage() {
+  const { id: projectId } = useParams<{ id: string }>();
+
   const [format, setFormat] = useState<ExportFormat>("docx");
-  const [includeCitations, setIncludeCitations] = useState(true);
+  const [citationStyle, setCitationStyle] = useState<CitationStyle>("inline");
   const [includeSourceMap, setIncludeSourceMap] = useState(false);
 
-  const exportMutation = useMutation({
-    mutationFn: () =>
-      apiClient
-        .post<ExportResponse>(`/projects/${params.id}/export`, {
-          format,
-          include_citations: includeCitations,
-          include_source_map: includeSourceMap,
-        })
-        .then((r) => r.data),
-    onSuccess: (data) => {
-      window.open(data.download_url, "_blank");
-    },
-  });
+  const { trigger, isPending, result, error, reset } = useExport(projectId);
+
+  function handleGenerate() {
+    reset();
+    trigger({
+      format,
+      citation_style: citationStyle,
+      include_source_map: includeSourceMap,
+    });
+  }
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
-      <div>
-        <h2 className="text-xl font-semibold text-slate-900">Export</h2>
-        <p className="text-slate-500 text-sm mt-1">
-          Download your finished deliverable.
+    <div className="max-w-2xl mx-auto px-6 py-10">
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-slate-900 mb-1">
+          Export deliverable
+        </h2>
+        <p className="text-sm text-slate-500">
+          Download your research deliverable as a formatted document.
         </p>
       </div>
 
-      {/* Format selector */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium text-slate-700">Format</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {(["docx", "pdf"] as const).map((f) => {
-            const Icon = f === "docx" ? FileText : FileIcon;
-            const label = f === "docx" ? "Word Document (.docx)" : "PDF (.pdf)";
-            const desc =
-              f === "docx"
-                ? "Fully editable in Microsoft Word"
-                : "Fixed layout, print-ready";
-            return (
-              <button
-                key={f}
-                onClick={() => setFormat(f)}
-                className={`flex items-start gap-3 p-4 border-2 rounded-xl text-left transition-colors ${
-                  format === f
-                    ? "border-indigo-500 bg-indigo-50"
-                    : "border-slate-200 hover:border-slate-300"
-                }`}
+      <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 shadow-sm">
+        {/* Format selector */}
+        <div className="px-6 py-5 space-y-2">
+          <ToggleGroup<ExportFormat>
+            label="Format"
+            value={format}
+            onChange={(v) => {
+              setFormat(v);
+              reset();
+            }}
+            options={[
+              {
+                value: "docx",
+                label: "Word (.docx)",
+                icon: <FileText className="w-3.5 h-3.5" />,
+              },
+              {
+                value: "pdf",
+                label: "PDF",
+                icon: <FileType2 className="w-3.5 h-3.5" />,
+              },
+            ]}
+          />
+          <p className="text-xs text-slate-400">
+            {format === "docx"
+              ? "Fully editable Word document with styled headings, paragraphs, and tables."
+              : "Print-ready PDF with embedded fonts, page numbers, and a styled layout."}
+          </p>
+        </div>
+
+        {/* Citation style */}
+        <div className="px-6 py-5 space-y-2">
+          <ToggleGroup<CitationStyle>
+            label="Citation style"
+            value={citationStyle}
+            onChange={(v) => {
+              setCitationStyle(v);
+              reset();
+            }}
+            options={[
+              { value: "inline", label: "Inline  [Source N]" },
+              { value: "footnotes", label: "Footnotes  [1]" },
+            ]}
+          />
+          <p className="text-xs text-slate-400">
+            {citationStyle === "inline"
+              ? "Source markers appear inline as [Source N, p.X] throughout the text."
+              : "Markers replaced with superscript numbers; full references listed after each section."}
+          </p>
+        </div>
+
+        {/* Appendix option */}
+        <div className="px-6 py-5">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+            Appendix
+          </p>
+          <Checkbox
+            label="Include Source Map"
+            description="Appends a structured table of topic clusters, contradictions detected between sources, and research gaps at the end of the document."
+            checked={includeSourceMap}
+            onChange={(v) => {
+              setIncludeSourceMap(v);
+              reset();
+            }}
+          />
+        </div>
+
+        {/* Download section */}
+        <div className="px-6 py-5">
+          {result ? (
+            /* Success state */
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-green-700">
+                <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                <span>
+                  <strong>{result.filename}</strong> is ready to download.
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={result.download_url}
+                  download={result.filename}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download {result.format.toUpperCase()}
+                </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handleGenerate}
+                  disabled={isPending}
+                >
+                  {isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    "Regenerate"
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : error ? (
+            /* Error state */
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 text-sm text-red-600">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerate}
+                disabled={isPending}
               >
-                <Icon
-                  className={`w-5 h-5 mt-0.5 ${
-                    format === f ? "text-indigo-600" : "text-slate-400"
-                  }`}
-                />
-                <div>
-                  <div
-                    className={`text-sm font-medium ${
-                      format === f ? "text-indigo-700" : "text-slate-700"
-                    }`}
-                  >
-                    {label}
-                  </div>
-                  <div className="text-xs text-slate-400 mt-0.5">{desc}</div>
-                </div>
-              </button>
-            );
-          })}
+                Try again
+              </Button>
+            </div>
+          ) : (
+            /* Default CTA */
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
+              onClick={handleGenerate}
+              disabled={isPending}
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Building document…
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  Generate &amp; download
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Options */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium text-slate-700">Options</h3>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            className="w-4 h-4 rounded accent-indigo-600"
-            checked={includeCitations}
-            onChange={(e) => setIncludeCitations(e.target.checked)}
-          />
-          <div>
-            <div className="text-sm text-slate-700">Include inline citations</div>
-            <div className="text-xs text-slate-400">
-              Every claim linked to source and page number
-            </div>
-          </div>
-        </label>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            className="w-4 h-4 rounded accent-indigo-600"
-            checked={includeSourceMap}
-            onChange={(e) => setIncludeSourceMap(e.target.checked)}
-          />
-          <div>
-            <div className="text-sm text-slate-700">
-              Append Source Map as PDF appendix
-            </div>
-            <div className="text-xs text-slate-400">
-              Full theme cluster and contradiction summary
-            </div>
-          </div>
-        </label>
-      </div>
-
-      {/* Download button */}
-      <Button
-        size="lg"
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
-        onClick={() => exportMutation.mutate()}
-        disabled={exportMutation.isPending}
-      >
-        <Download className="w-4 h-4" />
-        {exportMutation.isPending
-          ? "Preparing download..."
-          : `Download as ${format.toUpperCase()}`}
-      </Button>
-
-      {exportMutation.isError && (
-        <p className="text-sm text-red-500 text-center">
-          Export failed. Please try again.
-        </p>
-      )}
+      <p className="mt-4 text-xs text-slate-400 text-center">
+        Download links are valid for 1 hour. Regenerate to get a fresh link.
+      </p>
     </div>
   );
 }

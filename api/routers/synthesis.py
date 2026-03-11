@@ -6,6 +6,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import pathlib
+import re
+import tempfile
+import uuid
 from typing import AsyncGenerator
 
 from arq.connections import RedisSettings, create_pool
@@ -33,6 +37,7 @@ from models.schemas import (
     SourceSidebarOut,
 )
 from pipeline.draft_generator import generate_section, instruct_section
+from pipeline.exporter import build_docx, build_pdf
 
 log = logging.getLogger(__name__)
 
@@ -317,11 +322,51 @@ async def export_deliverable(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await _assert_project_owned(db, project_id, current_user.id)
-    await _get_deliverable_or_404(db, project_id)
-    # Full export (python-docx / weasyprint + S3 presigned URL) in Phase 6
+    project = await _assert_project_owned(db, project_id, current_user.id)
+    deliverable = await _get_deliverable_or_404(db, project_id)
+
+    if deliverable.status != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Deliverable is not ready for export",
+        )
+
+    sections = deliverable.sections or []
+    source_map = project.source_map or {}
+
+    slug = re.sub(r"[^\w\-]", "_", project.name.lower())[:48]
+    filename_base = f"{slug}_v{deliverable.version}"
+
+    if payload.format == "docx":
+        file_bytes = build_docx(
+            sections=sections,
+            project_name=project.name,
+            deliverable_type=project.deliverable_type,
+            citation_style=payload.citation_style,
+            include_source_map=payload.include_source_map,
+            source_map=source_map if payload.include_source_map else None,
+        )
+        filename = f"{filename_base}.docx"
+        content_type = (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    else:
+        file_bytes = build_pdf(
+            sections=sections,
+            project_name=project.name,
+            deliverable_type=project.deliverable_type,
+            citation_style=payload.citation_style,
+            include_source_map=payload.include_source_map,
+            source_map=source_map if payload.include_source_map else None,
+        )
+        filename = f"{filename_base}.pdf"
+        content_type = "application/pdf"
+
+    download_url = await _store_export(file_bytes, filename, content_type)
     return ExportResponse(
-        download_url=f"/projects/{project_id}/export/placeholder.{payload.format}"
+        download_url=download_url,
+        filename=filename,
+        format=payload.format,
     )
 
 
@@ -408,6 +453,43 @@ def _find_outline_section(
             if sub.get("id") == section_id:
                 return sub
     return None
+
+
+async def _store_export(
+    file_bytes: bytes, filename: str, content_type: str
+) -> str:
+    """
+    Upload to S3 and return a presigned URL, or save locally and return a
+    /export-download/ URL for local development.
+    """
+    if settings.aws_access_key_id and settings.aws_secret_access_key:
+        import boto3
+
+        s3 = boto3.client(
+            "s3",
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            region_name=settings.aws_region,
+        )
+        key = f"exports/{uuid.uuid4()}/{filename}"
+        s3.put_object(
+            Bucket=settings.aws_s3_bucket,
+            Key=key,
+            Body=file_bytes,
+            ContentType=content_type,
+        )
+        return s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.aws_s3_bucket, "Key": key},
+            ExpiresIn=3600,
+        )
+
+    # Local dev: write to temp dir, return a FastAPI serve URL
+    export_dir = pathlib.Path(tempfile.gettempdir()) / "synthiq-exports"
+    export_dir.mkdir(exist_ok=True)
+    token = str(uuid.uuid4())
+    (export_dir / f"{token}_{filename}").write_bytes(file_bytes)
+    return f"{settings.api_url}/export-download/{token}/{filename}"
 
 
 def _deliverable_to_out(d: Deliverable) -> DeliverableOut:

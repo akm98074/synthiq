@@ -194,12 +194,14 @@ class SectionInstructRequest(BaseModel):
 
 class ExportRequest(BaseModel):
     format: Literal["docx", "pdf"] = "docx"
-    include_citations: bool = True
+    citation_style: Literal["inline", "footnotes"] = "inline"
     include_source_map: bool = False
 
 
 class ExportResponse(BaseModel):
     download_url: str
+    filename: str
+    format: str
 
 
 # ─── Voice ────────────────────────────────────────────────────────────────────
