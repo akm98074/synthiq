@@ -1,0 +1,144 @@
+{"text": "hey there", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "good morning!", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "thanks, that was helpful", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "haha that's funny", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "how are you doing today?", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "I'm so tired today", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "you're the best", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "ok cool", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "what's up", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "ugh, Mondays", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "goodnight, talk tomorrow", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "I just finished a big project, feeling great", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "lol no worries", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "tell me something fun", "intent": "chit_chat", "memory": false, "complexity": 2}
+{"text": "I'm bored", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "nice job", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "hello again", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "sorry, I was away for a bit", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "that made my day", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "can we just chat for a minute?", "intent": "chit_chat", "memory": false, "complexity": 1}
+{"text": "what's the capital of Australia?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "how many ounces in a cup?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "why is the sky blue?", "intent": "quick_answer", "memory": false, "complexity": 2}
+{"text": "what does HTTP 404 mean?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "how long should I boil an egg for a soft yolk?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "what's the difference between RAM and storage?", "intent": "quick_answer", "memory": false, "complexity": 2}
+{"text": "is it safe to eat raw cookie dough?", "intent": "quick_answer", "memory": false, "complexity": 2}
+{"text": "who wrote Pride and Prejudice?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "how do vaccines work?", "intent": "quick_answer", "memory": false, "complexity": 3}
+{"text": "convert 30 celsius to fahrenheit", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "what time zone is Tokyo in?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "what's a good way to fall asleep faster?", "intent": "quick_answer", "memory": false, "complexity": 2}
+{"text": "explain compound interest simply", "intent": "quick_answer", "memory": false, "complexity": 2}
+{"text": "what is a Roth IRA?", "intent": "quick_answer", "memory": false, "complexity": 2}
+{"text": "how far is the moon?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "what does 'ad hoc' mean?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "should I use a VPN on public wifi?", "intent": "quick_answer", "memory": false, "complexity": 2}
+{"text": "how many calories are in a banana?", "intent": "quick_answer", "memory": false, "complexity": 1}
+{"text": "what's the best way to remove a red wine stain?", "intent": "quick_answer", "memory": false, "complexity": 2}
+{"text": "how does a heat pump work?", "intent": "quick_answer", "memory": false, "complexity": 3}
+{"text": "draft an email to my landlord about the broken heater", "intent": "task", "memory": false, "complexity": 3}
+{"text": "write a short birthday message for my sister", "intent": "task", "memory": false, "complexity": 2}
+{"text": "summarize this article for me: the city council voted to expand bike lanes...", "intent": "task", "memory": false, "complexity": 3}
+{"text": "plan a 3-day itinerary for Lisbon", "intent": "task", "memory": false, "complexity": 4}
+{"text": "rewrite this paragraph to sound more professional", "intent": "task", "memory": false, "complexity": 3}
+{"text": "make a packing list for a beach weekend", "intent": "task", "memory": false, "complexity": 2}
+{"text": "give me a weekly meal plan with a shopping list", "intent": "task", "memory": false, "complexity": 4}
+{"text": "write a cover letter for a product manager role", "intent": "task", "memory": false, "complexity": 4}
+{"text": "brainstorm 10 names for my bakery", "intent": "task", "memory": false, "complexity": 2}
+{"text": "help me write a toast for my best friend's wedding", "intent": "task", "memory": false, "complexity": 3}
+{"text": "create a workout routine for beginners, 3 days a week", "intent": "task", "memory": false, "complexity": 3}
+{"text": "translate this into Spanish: see you next week", "intent": "task", "memory": false, "complexity": 2}
+{"text": "compare these two laptops and recommend one", "intent": "task", "memory": false, "complexity": 4}
+{"text": "write a polite reply declining the meeting", "intent": "task", "memory": false, "complexity": 2}
+{"text": "outline a presentation about our Q3 results", "intent": "task", "memory": false, "complexity": 4}
+{"text": "turn these notes into a to-do list", "intent": "task", "memory": false, "complexity": 2}
+{"text": "write a python script that renames files by date", "intent": "task", "memory": false, "complexity": 4}
+{"text": "draft a complaint to the airline about my lost bag", "intent": "task", "memory": false, "complexity": 3}
+{"text": "create a budget template for a family of four", "intent": "task", "memory": false, "complexity": 4}
+{"text": "help me plan a surprise party", "intent": "task", "memory": false, "complexity": 4}
+{"text": "remind me to call mom at 6pm", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "set a reminder for my dentist appointment next Tuesday", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "what's on my calendar tomorrow?", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "move my 3pm meeting to Thursday", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "schedule a run every morning at 7", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "remind me to pay rent on the first of every month", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "am I free on Friday afternoon?", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "block two hours tomorrow for deep work", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "add lunch with Sam on Wednesday at noon", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "wake me up at 6:30", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "don't let me forget to water the plants this weekend", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "when is my next meeting?", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "cancel my yoga class tonight", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "find a time next week for a call with Priya", "intent": "schedule", "memory": false, "complexity": 3}
+{"text": "remind me in 20 minutes to take the laundry out", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "set an alarm for my flight on Sunday", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "put the school pickup on the calendar every weekday at 3", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "what do I have going on this week?", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "ping me before my 10am", "intent": "schedule", "memory": false, "complexity": 1}
+{"text": "reschedule the dentist to next month", "intent": "schedule", "memory": false, "complexity": 2}
+{"text": "I'm vegetarian", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "my wife's name is Elena", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I prefer window seats on flights", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I work as a nurse on night shifts", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "remember that I'm allergic to peanuts", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "my favorite coffee place is Blue Bottle on Market Street", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I live in Austin", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I usually go to the gym after work on Mondays and Thursdays", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "my son Leo is 7 and loves dinosaurs", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "please remember I don't like phone calls, text me instead", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "my birthday is March 14", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I'm learning Japanese", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "note that my manager is called Priya", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I always fly United because of my status", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I hate cilantro", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "our anniversary is June 2nd", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "my dog is a golden retriever named Max", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I'm trying to cut down on sugar", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "the usual place for date night is Luigi's on 5th", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "I'm a morning person, I do my best work before 10", "intent": "memory_write", "memory": true, "complexity": 1}
+{"text": "what do you know about me?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "do you remember my wife's name?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what's my favorite coffee place?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "which seat do I like on flights?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what am I allergic to?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "where do I live again?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what did I tell you about my son?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what are my food preferences?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "remind me what my dog's name is", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what do you remember about my work?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "when is my birthday?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what's the usual place for date night?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "have I told you about my manager?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what languages am I learning?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what do I usually do on Mondays?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "list everything you've saved about me", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "do you know my anniversary?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "which airline do I prefer?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what don't I like to eat?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "what time of day am I most productive?", "intent": "memory_query", "memory": false, "complexity": 1}
+{"text": "open my downloads folder and delete the old installers", "intent": "computer_action", "memory": false, "complexity": 3}
+{"text": "send this email to John", "intent": "computer_action", "memory": false, "complexity": 2}
+{"text": "find the PDF I saved last week about the lease", "intent": "computer_action", "memory": false, "complexity": 3}
+{"text": "turn on do not disturb", "intent": "computer_action", "memory": false, "complexity": 1}
+{"text": "book a table for two at Luigi's on Friday", "intent": "computer_action", "memory": false, "complexity": 4}
+{"text": "order more coffee beans from my usual store", "intent": "computer_action", "memory": false, "complexity": 4}
+{"text": "reply to Sarah's email saying I'll be late", "intent": "computer_action", "memory": false, "complexity": 2}
+{"text": "clean up my desktop", "intent": "computer_action", "memory": false, "complexity": 3}
+{"text": "open Spotify and play some jazz", "intent": "computer_action", "memory": false, "complexity": 2}
+{"text": "mute my notifications for an hour", "intent": "computer_action", "memory": false, "complexity": 1}
+{"text": "archive all the newsletters in my inbox", "intent": "computer_action", "memory": false, "complexity": 3}
+{"text": "fill out the visa application form for me", "intent": "computer_action", "memory": false, "complexity": 5}
+{"text": "buy the cheapest flight to Denver next Friday", "intent": "computer_action", "memory": false, "complexity": 5}
+{"text": "take a screenshot and save it to my desktop", "intent": "computer_action", "memory": false, "complexity": 1}
+{"text": "text Mark that I'm on my way", "intent": "computer_action", "memory": false, "complexity": 2}
+{"text": "unsubscribe me from these promo emails", "intent": "computer_action", "memory": false, "complexity": 3}
+{"text": "rename all the photos in this folder by date", "intent": "computer_action", "memory": false, "complexity": 3}
+{"text": "call me an Uber to the airport", "intent": "computer_action", "memory": false, "complexity": 4}
+{"text": "move the files from Desktop into a folder called Archive", "intent": "computer_action", "memory": false, "complexity": 2}
+{"text": "check my bank site and download last month's statement", "intent": "computer_action", "memory": false, "complexity": 4}
+{"text": "I'm vegan, can you suggest a quick dinner?", "intent": "task", "memory": true, "complexity": 2}
+{"text": "I just moved to Seattle, what neighborhoods are fun?", "intent": "quick_answer", "memory": true, "complexity": 2}
+{"text": "my daughter Mia starts school next week, help me write a note to her teacher", "intent": "task", "memory": true, "complexity": 3}
+{"text": "since I'm lactose intolerant, what can I use instead of milk in pancakes?", "intent": "quick_answer", "memory": true, "complexity": 2}

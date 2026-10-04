@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LocalAIAgent</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ccircle cx=%278%27 cy=%278%27 r=%277%27 fill=%27%232f6f5e%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="dot" id="status-dot" title="checking"></span><span id="agent-name">LocalAIAgent</span></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="chat">Chat</button>
+      <button class="tab" data-tab="decisions">Decisions</button>
+      <button class="tab" data-tab="memory">Memory</button>
+      <button class="tab" data-tab="models">Models</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <main>
+    <!-- Chat -->
+    <section id="tab-chat" class="panel active">
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form id="composer" class="composer">
+        <textarea id="input" rows="1" placeholder="Message your agent… (Enter to send, Shift+Enter for a new line)"></textarea>
+        <button type="submit" id="send" class="primary">Send</button>
+      </form>
+      <div class="composer-foot"><button class="link" id="clear-chat">Clear conversation</button><span>Everything stays on this Mac.</span></div>
+    </section>
+
+    <!-- Decisions -->
+    <section id="tab-decisions" class="panel">
+      <div class="panel-head">
+        <h2>Decision log</h2>
+        <p class="muted">The decision layer's first call on every message, with its probabilities. Fix a wrong one and it learns from it immediately.</p>
+      </div>
+      <form id="try-decide" class="inline-form">
+        <input id="try-text" placeholder="Try a message without sending it…">
+        <button class="secondary">Decide</button>
+      </form>
+      <div id="try-result"></div>
+      <div id="decision-list" class="list"></div>
+    </section>
+
+    <!-- Memory -->
+    <section id="tab-memory" class="panel">
+      <div class="panel-head">
+        <h2>Memory</h2>
+        <p class="muted">What your agent remembers about you. Forget deletes the fact and its embedding for good.</p>
+      </div>
+      <form id="add-memory" class="inline-form">
+        <select id="mem-kind">
+          <option>preference</option><option selected>fact</option><option>person</option><option>place</option><option>routine</option>
+        </select>
+        <input id="mem-text" placeholder="Add something to remember…">
+        <button class="secondary">Add</button>
+      </form>
+      <div id="memory-list" class="list"></div>
+      <details class="identity"><summary>Identity file (about-me.md)</summary><pre id="identity"></pre></details>
+    </section>
+
+    <!-- Models -->
+    <section id="tab-models" class="panel">
+      <div class="panel-head">
+        <h2>Models</h2>
+        <p class="muted">Local models served by Ollama. Only one large model needs to be loaded at a time.</p>
+      </div>
+      <div id="ram" class="ram"></div>
+      <div id="models" class="list"></div>
+      <h3>System check</h3>
+      <div id="doctor" class="list"></div>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="panel">
+      <div class="panel-head"><h2>Settings</h2></div>
+      <form id="settings-form" class="settings">
+        <fieldset><legend>Persona</legend>
+          <label>Agent name <input name="agent_name"></label>
+          <label>Your name <input name="user_name"></label>
+          <label>Tone <input name="tone"></label>
+        </fieldset>
+        <fieldset><legend>Models (Ollama tags)</legend>
+          <label>Chat model <input name="chat_model"></label>
+          <label>Fast / judge model <input name="fast_model"></label>
+          <label>Embedding model <input name="embed_model"></label>
+          <label>Ollama URL <input name="ollama_url"></label>
+        </fieldset>
+        <fieldset><legend>Decision layer</legend>
+          <label>Backend
+            <select name="decision_backend">
+              <option value="hybrid">hybrid: prototype, escalate to SLM when unsure</option>
+              <option value="prototype">prototype only (fastest)</option>
+              <option value="slm">SLM judge only (slowest)</option>
+              <option value="systemone">external Jev-style server (experimental)</option>
+            </select>
+          </label>
+          <label>Confidence threshold <input name="confidence_threshold" type="number" min="0" max="1" step="0.05"></label>
+          <label>Prototype temperature <input name="prototype_temperature" type="number" min="1" max="200" step="1"></label>
+          <label>System-One server URL <input name="systemone_url"></label>
+        </fieldset>
+        <div class="row"><button class="primary">Save</button><span id="settings-status" class="muted"></span></div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>
