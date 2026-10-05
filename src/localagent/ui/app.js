@@ -46,7 +46,11 @@ document.querySelectorAll(".tab").forEach((btn) =>
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
     document.querySelectorAll(".panel").forEach((p) =>
       p.classList.toggle("active", p.id === `tab-${btn.dataset.tab}`));
-    loaders[btn.dataset.tab]?.();
+    Promise.resolve(loaders[btn.dataset.tab]?.()).catch((err) => {
+      const b = $("#banner");
+      b.textContent = `Couldn't load ${btn.dataset.tab}: ${err.message || err}. Try reloading the page (Cmd+Shift+R).`;
+      b.classList.remove("hidden");
+    });
   }));
 
 /* ── chat ─────────────────────────────────────────────────────────────── */

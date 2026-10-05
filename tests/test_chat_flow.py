@@ -69,7 +69,10 @@ def test_models_doctor_ui(client):
     assert st["error"] is None and all(m["installed"] for m in st["configured"])
     checks = {c["name"]: c["status"] for c in client.get("/api/doctor").json()}
     assert checks["ollama"] == "ok" and checks["chat model"] == "ok"
-    assert "LocalAIAgent" in client.get("/").text
+    page = client.get("/")
+    assert "LocalAIAgent" in page.text and "/ui/app.js?v=" in page.text
+    assert page.headers["cache-control"] == "no-cache"
+    assert client.get("/ui/app.js").headers["cache-control"] == "no-cache"
     assert client.get("/ui/app.js").status_code == 200
     assert client.post("/api/models/unload", json={"model": "qwen3:4b"}).json() == {"ok": True}
 

@@ -5,7 +5,7 @@ To upgrade first, follow `UPGRADING.md` (it takes about 2 minutes, and your memo
 ## 0. Install / upgrade
 
 ```bash
-bash install.sh localaiagent-0.2.0-py3-none-any.whl     # no sudo
+bash install.sh localaiagent-0.2.1-py3-none-any.whl     # no sudo
 localagent start
 localagent version                                     # 0.2.0
 ```

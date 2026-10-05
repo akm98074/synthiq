@@ -18,7 +18,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.2.0-py3-none-any.whl   # installs pipx + Ollama via Homebrew, pulls models
+bash install.sh localaiagent-0.2.1-py3-none-any.whl   # installs pipx + Ollama via Homebrew, pulls models
 localagent start                                     # opens http://127.0.0.1:8765
 ```
 
@@ -27,7 +27,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.2.0-py3-none-any.whl
+pipx install ./localaiagent-0.2.1-py3-none-any.whl
 localagent setup     # downloads qwen3:4b, qwen3:1.7b, all-minilm (~4 GB)
 localagent start
 ```

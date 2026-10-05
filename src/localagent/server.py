@@ -10,7 +10,7 @@ from importlib import resources
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -92,9 +92,21 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
     # ── UI ────────────────────────────────────────────────────────────────
     app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")
 
+    @app.middleware("http")
+    async def no_stale_ui(request, call_next):
+        # Make browsers revalidate UI files, so an upgrade never pairs a new page
+        # with an old cached script.
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/ui/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.get("/", include_in_schema=False)
-    async def index() -> FileResponse:
-        return FileResponse(UI_DIR / "index.html")
+    async def index() -> HTMLResponse:
+        html = (UI_DIR / "index.html").read_text()
+        for asset in ("/ui/app.js", "/ui/app.css"):
+            html = html.replace(f'"{asset}"', f'"{asset}?v={__version__}"')
+        return HTMLResponse(html)
 
     # ── meta ──────────────────────────────────────────────────────────────
     @app.get("/api/health")

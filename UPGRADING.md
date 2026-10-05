@@ -2,15 +2,15 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
-## From 0.1.x to 0.2.0 (Step 2: connectors and approvals)
+## From 0.1.x or 0.2.0 to 0.2.1 (Step 2: connectors and approvals)
 
-1. Put the new files in one folder (for example `~/Downloads/LocalAIAgent-0.2.0/`):
-   `localaiagent-0.2.0-py3-none-any.whl`, `install.sh`, `TESTING.md`, `UPGRADING.md`.
+1. Put the new files in one folder (for example `~/Downloads/LocalAIAgent-0.2.1/`):
+   `localaiagent-0.2.1-py3-none-any.whl`, `install.sh`, `TESTING.md`, `UPGRADING.md`.
 2. Open Terminal in that folder and run, **without `sudo`**:
 
    ```bash
-   cd ~/Downloads/LocalAIAgent-0.2.0
-   bash install.sh localaiagent-0.2.0-py3-none-any.whl
+   cd ~/Downloads/LocalAIAgent-0.2.1
+   bash install.sh localaiagent-0.2.1-py3-none-any.whl
    ```
 
    The installer stops the running agent, replaces the program, checks the models (already downloaded, so this is quick), and runs `localagent doctor`.
@@ -18,7 +18,7 @@ Upgrading keeps everything you've built up: memories, conversation history, deci
 
    ```bash
    localagent start
-   localagent version      # should print 0.2.0
+   localagent version      # should print 0.2.1
    ```
 
    If `localagent` isn't found, use `~/.local/bin/localagent start` and see the troubleshooting table in `TESTING.md`.
@@ -30,7 +30,7 @@ Your new database tables (approvals, permissions, activity log) are created auto
 
 ```bash
 localagent stop
-pipx install --force ./localaiagent-0.2.0-py3-none-any.whl
+pipx install --force ./localaiagent-0.2.1-py3-none-any.whl
 localagent start
 ```
 
@@ -43,6 +43,10 @@ localagent start
 ```
 
 0.1.x ignores the new tables, so your memories and history keep working.
+
+## What changed in 0.2.1
+
+- Fixes an empty **Connectors** tab (and other empty new tabs) after upgrading. The browser had kept the old cached script. The app now version-stamps its files, so this can't happen again. If you ever see an empty tab, reload with **Cmd+Shift+R**.
 
 ## What changed in 0.2.0
 
