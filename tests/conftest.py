@@ -48,3 +48,62 @@ def client(settings, home):
 
     with TestClient(create_app(settings, home)) as c:
         yield c
+
+
+class FakeRunner:
+    """Stands in for osascript: canned outputs per script, records every call."""
+
+    RS, US = "\x1e", "\x1f"
+
+    def __init__(self):
+        self.calls: list[tuple[str, list[str]]] = []
+        self.outputs = {
+            "calendar_list": f"Dentist{self.US}3600{self.US}7200{self.US}Main St{self.US}Home{self.US}false{self.RS}",
+            "calendar_create": f"Home{self.US}UID-1",
+            "reminders_list": f"Buy milk{self.US}{self.US}Reminders{self.RS}",
+            "reminders_create": "Reminders",
+            "notes_search": f"Trip ideas{self.US}Lisbon, Porto{self.RS}",
+            "notes_create": "Notes",
+            "mail_list": f"42{self.US}Lunch?{self.US}Sam <sam@example.com>{self.US}-600{self.US}false{self.US}Are you free{self.RS}",
+            "mail_read": f"Lunch?{self.US}Sam{self.US}-600{self.US}Are you free tomorrow?",
+            "mail_compose": "draft",
+            "contacts_find": f"Sam Lee{self.US}sam@example.com,{self.US}+1 555,{self.RS}",
+        }
+
+    async def run(self, name, args):
+        self.calls.append((name, list(args)))
+        return self.outputs.get(name, "")
+
+
+@pytest.fixture
+def fake_runner():
+    return FakeRunner()
+
+
+@pytest.fixture
+def files_home(tmp_path, monkeypatch):
+    """A fake home with Downloads/Desktop/Documents for the Files connector."""
+    home = tmp_path / "userhome"
+    for d in ("Downloads", "Desktop", "Documents"):
+        (home / d).mkdir(parents=True)
+    (home / "Downloads" / "old.dmg").write_text("x")
+    (home / "Downloads" / "lease.pdf").write_text("x")
+    monkeypatch.setenv("HOME", str(home))
+    return home
+
+
+@pytest.fixture
+def action_client(fake_ollama, home, files_home, fake_runner):
+    from fastapi.testclient import TestClient
+
+    from localagent.config import Settings, save_settings
+    from localagent.server import create_app
+
+    s = Settings(ollama_url=fake_ollama.url, confidence_threshold=1.0,  # always use the (deterministic) fake judge
+                 file_roots=",".join(str(files_home / d) for d in ("Downloads", "Desktop", "Documents")),
+                 documents_dir=str(files_home / "Documents" / "LocalAIAgent"))
+    save_settings(s, home)
+    with TestClient(create_app(s, home, runner=fake_runner)) as c:
+        c.runner = fake_runner
+        c.files_home = files_home
+        yield c

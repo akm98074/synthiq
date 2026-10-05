@@ -105,6 +105,12 @@ class Store:
     def close(self) -> None:
         self.db.close()
 
+    def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
+        return self._exec(sql, params)
+
+    def query(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+        return self._query(sql, params)
+
     def _exec(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
             cur = self.db.execute(sql, params)

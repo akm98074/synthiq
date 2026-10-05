@@ -51,6 +51,18 @@ class Settings:
     memory_top_k: int = 5
     memory_min_similarity: float = 0.35
 
+    # Connectors (Step 2). macOS ones use AppleScript and ask for permission on first use.
+    enable_calendar: bool = True
+    enable_reminders: bool = True
+    enable_notes: bool = True
+    enable_mail: bool = True
+    enable_contacts: bool = True
+    enable_files: bool = True
+    enable_documents: bool = True
+    file_roots: str = "~/Downloads,~/Desktop,~/Documents"
+    documents_dir: str = "~/Documents/LocalAIAgent"
+    max_tool_steps: int = 5
+
     def update(self, values: dict) -> "Settings":
         known = {f.name: f.type for f in fields(self)}
         for key, value in values.items():
@@ -58,7 +70,7 @@ class Settings:
                 continue
             current = getattr(self, key)
             if isinstance(current, bool):
-                value = bool(value)
+                value = value if isinstance(value, bool) else str(value).lower() in ("1", "true", "yes", "on")
             elif isinstance(current, int):
                 value = int(value)
             elif isinstance(current, float):
@@ -70,6 +82,8 @@ class Settings:
             raise ValueError(f"decision_backend must be one of {DECISION_BACKENDS}")
         if not 0.0 <= self.confidence_threshold <= 1.0:
             raise ValueError("confidence_threshold must be between 0 and 1")
+        if not 1 <= self.max_tool_steps <= 20:
+            raise ValueError("max_tool_steps must be between 1 and 20")
         return self
 
     def to_dict(self) -> dict:

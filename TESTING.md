@@ -1,77 +1,70 @@
-# Testing Step 1 (v0.1.2) on your Mac
+# Testing Step 2 (v0.2.0) on your Mac: connectors and approvals
 
-Allow about 30 minutes, most of it downloading models.
+To upgrade first, follow `UPGRADING.md` (it takes about 2 minutes, and your memories are kept). This checklist takes about 20 minutes.
 
-## 1. Install
-
-Put all the downloaded files in one folder, open Terminal in that folder (`cd ~/Downloads` or wherever they are), and run the installer **without `sudo`**. Homebrew asks for your password itself if it needs it.
+## 0. Install / upgrade
 
 ```bash
-bash install.sh localaiagent-0.1.2-py3-none-any.whl
-localagent doctor        # every line should be ✅ (platform may be ✅ or ⚠️)
-localagent start         # opens http://127.0.0.1:8765
+bash install.sh localaiagent-0.2.0-py3-none-any.whl     # no sudo
+localagent start
+localagent version                                     # 0.2.0
 ```
-
-If anything fails here, please send the full terminal output.
 
 ### If the install fails
 
 | You see | Fix |
 |---|---|
-| `./install.sh: command not found` or `permission denied` | Downloads lose their "executable" flag. Use `bash install.sh …` instead of `./install.sh`. |
+| `./install.sh: command not found` or `permission denied` | Use `bash install.sh …` instead of `./install.sh`. |
 | `Please don't run this with sudo` | Run it again without `sudo`. |
 | `Homebrew is required` | Install it from https://brew.sh, open a new Terminal window, re-run. |
-| `localagent: command not found` after installing | Run `~/.local/bin/localagent start` now; to fix it for good run `pipx ensurepath && source ~/.zshrc` (or open a new Terminal window). |
-| `Ollama didn't start` | Open the Ollama app, or run `ollama serve` in another Terminal window, then re-run the installer. |
+| `localagent: command not found` | Run `~/.local/bin/localagent start`; to fix it for good: `pipx ensurepath && source ~/.zshrc`. |
+| `Ollama didn't start` | Open the Ollama app (or `ollama serve` in another window), re-run. |
 
-## 2. Chat and decisions
+## 1. Give permissions (once)
 
-Under each message you send, chips show the **intent**, its **confidence**, the **backend** (`prototype` or `prototype+slm` if it escalated) and the **latency**. Amber chips mean low confidence.
+Open the **Connectors** tab and press **Test** on each Apple app. macOS asks _"Terminal wants access to control …"_; click **Allow**.
+Each test should then show a green result (for example "Found 2 event(s)").
 
-Try these and note whether the intent looks right:
+If you clicked "Don't Allow" by mistake, go to **System Settings → Privacy & Security → Automation → Terminal** and switch the app on.
 
-- `hey, how's it going?` → chit-chat
-- `why do onions make you cry?` → quick answer
-- `draft a short apology email for missing the meeting` → task
-- `remind me to call mom at 6pm` → schedule (it should say it can't set reminders yet)
-- `clean up my downloads folder` → computer action (it should say it can't act yet)
+## 2. Things that run on their own (read / draft)
 
-## 3. Memory
+In **Chat**, try these. You should see grey "✓ …" chips under the reply, and no approval card.
 
-1. Send: `I'm vegetarian and I prefer window seats on flights`. You should see "remembered: …" chips.
-2. Send: `what do you know about me?`. It should mention both facts.
-3. Send: `suggest a dinner for tonight`. It should take the vegetarian preference into account.
-4. Open **Memory**: edit one fact, then **Forget** the other. Check that the identity file at the bottom updates.
-5. Ask `what do you know about me?` again. The forgotten fact must not appear.
+- `what's on my calendar today?` (then `…this week?`)
+- `what reminders do I have?`
+- `any unread email?`, then `read the first one`
+- `find the newest PDF in my Downloads`
+- `search my notes for travel`
+- `what's Sam's email address?` (use a real contact name)
+- `make a pdf packing list for a beach weekend`. It saves to `~/Documents/LocalAIAgent/` and Finder opens.
+- `make a spreadsheet of a monthly budget for rent, food, transport`
+- `draft an email to <your own address> saying the test worked`. A Mail compose window opens; nothing is sent.
 
-## 4. Teach it
+## 3. Things that ask first (write / danger)
 
-1. Open **Decisions**. Find a message whose intent was wrong (or use "Try a message" with something ambiguous like `ship it`).
-2. Pick the right label and press **Save correction**.
-3. Try a similar message. It should now lean towards your label.
+- `remind me to call mom tomorrow at 6pm`. An **orange "write"** card appears. Pick **Just this once**, then **Approve**, and check that the reminder is in Reminders.
+- `add a calendar event "Test" tomorrow at 3pm`. Approve it with **Until the agent restarts**. Ask for a second event; it should **not** ask again.
+- **Approvals → Standing permissions**: **Revoke** that permission, ask again, and the card comes back.
+- `send an email to <your own address> with subject Hello`: **Decline**. Nothing is sent, and the agent acknowledges it.
+- Put a junk file in Downloads, then `move <file name> from Downloads to the trash`. A **red "danger"** card appears, and it only offers "Just this once". Approve it, and the file is in the Trash (use Finder to put it back).
 
-## 5. The Phase-0 gate
+## 4. Activity log
 
-```bash
-localagent eval decision                       # default hybrid backend
-localagent eval decision --backend prototype   # fastest path only
-localagent eval decision --backend slm         # SLM judge only (slow)
-```
+Open **Activity**. Every action, approval and refusal above is listed, and the banner says **"Audit chain intact"**.
 
-Please send the three summary tables. The target is intent accuracy ≥ 90% and ECE ≤ 0.05 with p95 latency under 50 ms for the prototype backend. If it misses, Step 2 starts by improving the decision layer, for example with a stronger embedding model (`localagent setup --embed-model nomic-embed-text`), more examples, or temperature calibration.
+## 5. Feedback to send
 
-## 6. Models and settings
+1. Install/upgrade problems (terminal output).
+2. Connector **Test** results: which apps worked and which didn't (copy the error text).
+3. For each prompt above: did it pick the right tool? Right dates/times? Any made-up results?
+4. Approval cards: clear enough? Were the scopes understandable?
+5. Speed: how long until the first tool chip appears, and until the final answer.
+6. Anything it should have done on its own or asked about, but didn't (or the reverse).
 
-- **Models**: check what's loaded and the RAM. Press **Unload** and watch memory drop.
-- **Settings**: rename the agent and change its tone, then chat. Optionally switch the chat model to `qwen3:8b` if you have 24 GB+ (`ollama pull qwen3:8b` first).
-
-## Feedback to send
-
-1. Install problems, if any (with terminal output).
-2. The `eval decision` tables.
-3. Messages where the intent was wrong, and how often it escalated.
-4. Reply speed: time to first word for short and long answers.
-5. Memory: did it save the right things? Too much, too little?
-6. Anything you'd change before Step 2 (connectors and approvals).
+Known limits in this step:
+- Recurring calendar events only show their first occurrence (an AppleScript limit).
+- Mail search looks at the unified Inbox only.
+- Calendar searches over very large calendars can take a few seconds.
 
 Logs: `~/Library/Application Support/LocalAIAgent/server.log`

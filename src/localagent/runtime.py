@@ -11,14 +11,23 @@ from .decide.systemone import SystemOneClient
 from .llm.ollama import OllamaClient
 from .memory import identity
 from .memory.store import Store
+from .connectors.applescript import AppleScriptRunner
+from .policy.engine import Audit, Policy
+from .tools.registry import build_tools, connector_status
 
 
 class Runtime:
-    def __init__(self, settings: Settings, base: Path | None = None):
+    def __init__(self, settings: Settings, base: Path | None = None, runner=None):
         self.base = base or data_dir()
+        self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
         self.store = Store(self.base / "localagent.db")
         seed_store(self.store)
+        self.runner = runner or AppleScriptRunner()
+        self.mac_available = runner is not None or AppleScriptRunner.available()
+        self.policy = Policy(self.store)
+        self.audit = Audit(self.store)
+        self.build_tools()
         self.identity_path = self.base / "identity" / "about-me.md"
         self.ollama = OllamaClient(settings.ollama_url)
         self._build_decision_layer()
@@ -36,6 +45,12 @@ class Runtime:
             self.store, self.prototype, self.judge, self.systemone,
             backend=s.decision_backend, threshold=s.confidence_threshold,
         )
+
+    def build_tools(self) -> None:
+        self.tools = build_tools(self.settings, self.runner, self.mac_available)
+
+    def connectors(self) -> list[dict]:
+        return connector_status(self.settings, self.mac_available, self.tools)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         return await self.ollama.embed(self.settings.embed_model, texts)
@@ -60,6 +75,7 @@ class Runtime:
             await self.ollama.aclose()
             self.ollama = OllamaClient(self.settings.ollama_url)
         self._build_decision_layer()
+        self.build_tools()
         return self.settings
 
     async def aclose(self) -> None:

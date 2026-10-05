@@ -77,6 +77,23 @@ class OllamaClient:
         except json.JSONDecodeError as exc:
             raise OllamaError(f"Model returned invalid JSON: {content[:200]}") from exc
 
+    async def chat_tools(
+        self, model: str, messages: list[dict], tools: list[dict], temperature: float = 0.2
+    ) -> dict:
+        """One non-streaming chat turn with native tool calling. Returns the message dict."""
+        data = await self._post(
+            "/api/chat",
+            {
+                "model": model,
+                "messages": messages,
+                "tools": tools,
+                "stream": False,
+                "think": False,
+                "options": {"temperature": temperature},
+            },
+        )
+        return data.get("message", {})
+
     async def chat_stream(
         self, model: str, messages: list[dict], temperature: float = 0.6
     ) -> AsyncIterator[str]:

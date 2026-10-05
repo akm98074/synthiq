@@ -134,3 +134,19 @@ input, select {
   .msg { max-width: 95%; }
   .probs { grid-template-columns: 100px 1fr 40px; }
 }
+
+/* step 2: approvals, tools, badges */
+:root { --t-read: #2e7d32; --t-draft: #1565c0; --t-write: #b26a00; --t-danger: #c62828; }
+@media (prefers-color-scheme: dark) { :root { --t-read: #74c47a; --t-draft: #7fb2ef; --t-write: #e0a54a; --t-danger: #ef7b7b; } }
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.badge.tier-read { color: var(--t-read); } .badge.tier-draft { color: var(--t-draft); }
+.badge.tier-write { color: var(--t-write); } .badge.tier-danger { color: var(--t-danger); }
+.chip.tool { background: var(--surface-2); color: var(--text); }
+.approval { margin-top: 8px; border: 1px solid var(--border); border-left: 4px solid var(--t-write);
+  border-radius: var(--radius); padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.approval.tier-danger { border-left-color: var(--t-danger); }
+.approval-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.approval pre, .card pre { margin: 6px 0 0; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.approval-actions { flex-wrap: wrap; }
+.count { background: var(--t-danger); color: #fff; border-radius: 999px; font-size: 11px; padding: 0 6px; margin-left: 2px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }

@@ -39,7 +39,8 @@ let questions = [];
 let settings = {};
 
 /* ── tabs ─────────────────────────────────────────────────────────────── */
-const loaders = { decisions: loadDecisions, memory: loadMemory, models: loadModels, settings: loadSettings };
+const loaders = { decisions: loadDecisions, memory: loadMemory, models: loadModels, settings: loadSettings,
+  approvals: loadApprovals, activity: loadActivity, connectors: loadConnectors };
 document.querySelectorAll(".tab").forEach((btn) =>
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
@@ -77,8 +78,8 @@ function addMessage(role, text, decision) {
 }
 
 function showEmpty() {
-  const tries = ["I'm vegetarian and I prefer window seats", "What do you know about me?",
-                 "Draft a short thank-you note to my neighbor", "Remind me to call mom at 6pm"];
+  const tries = ["I'm vegetarian and I prefer window seats", "What's on my calendar today?",
+                 "Remind me to call mom at 6pm", "What's the newest file in my Downloads?"];
   messagesEl.append(el("div", { class: "empty" },
     el("h2", {}, `Hi, I'm ${settings.agent_name || "your agent"}.`),
     el("p", {}, "I run entirely on this Mac. Tell me about yourself and I'll remember it; every message shows how I decided to handle it."),
@@ -93,6 +94,104 @@ async function loadHistory() {
   for (const m of msgs) addMessage(m.role, m.content, m.decision);
 }
 
+const TIER_LABEL = { read: "reads", draft: "creates", write: "changes", danger: "deletes / irreversible" };
+
+async function readSSE(res, onEvent) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+      if (chunk.startsWith("data: ")) onEvent(JSON.parse(chunk.slice(6)));
+    }
+  }
+}
+
+function approvalCard(ap, onDecided) {
+  const scope = el("select", { "aria-label": "Approval scope" },
+    ap.allowed_scopes.map((sc) => el("option", { value: sc.id }, sc.label)));
+  const approve = el("button", { class: "primary" }, "Approve");
+  const decline = el("button", { class: "secondary" }, "Decline");
+  const status = el("span", { class: "muted" });
+  const card = el("div", { class: `approval tier-${ap.tier}` },
+    el("div", { class: "approval-head" },
+      el("span", { class: `badge tier-${ap.tier}` }, `${ap.tier} · ${TIER_LABEL[ap.tier] || ""}`),
+      el("strong", {}, ap.summary)),
+    el("details", {}, el("summary", {}, "Details"),
+      el("pre", {}, `${ap.tool}\n${JSON.stringify(ap.args, null, 2)}`)),
+    el("div", { class: "row approval-actions" }, scope, approve, decline, status));
+  const go = async (yes) => {
+    approve.disabled = decline.disabled = scope.disabled = true;
+    status.textContent = yes ? "Approved" : "Declined";
+    await onDecided(ap, yes, scope.value);
+  };
+  approve.addEventListener("click", () => go(true));
+  decline.addEventListener("click", () => go(false));
+  if (ap.status && ap.status !== "pending") {
+    approve.disabled = decline.disabled = scope.disabled = true;
+    status.textContent = ap.status;
+  }
+  return card;
+}
+
+async function decideApproval(ap, yes, scope) {
+  const bot = addMessage("assistant", "…");
+  const res = await fetch(`/api/approvals/${ap.id}/decide`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ approve: yes, scope }),
+  });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).detail || msg; } catch (_) {}
+    bot.bubble.textContent = "(not run)";
+    bot.node.append(el("div", { class: "error" }, msg));
+    return;
+  }
+  await streamInto(res, bot, null);
+  refreshPendingBadge();
+}
+
+function handleEvent(ev, ctx) {
+  const { bot, user } = ctx;
+  if (ev.type === "decision" && user) user.meta.append(...decisionChips(ev.decision));
+  else if (ev.type === "memory_saved")
+    bot.meta.append(el("span", { class: "chip mem", title: "Saved to memory" },
+      `${ev.updated ? "updated" : "remembered"}: ${ev.memory.text}`));
+  else if (ev.type === "recalled")
+    bot.meta.append(el("span", { class: "chip mem", title: ev.memories.map((m) => m.text).join("\n") },
+      `recalled ${ev.memories.length} memor${ev.memories.length === 1 ? "y" : "ies"}`));
+  else if (ev.type === "tool_start")
+    bot.meta.append(el("span", { class: "chip tool", title: ev.tool }, `${ev.summary}…`));
+  else if (ev.type === "tool_result")
+    bot.meta.append(el("span", { class: `chip tool ${ev.ok ? "" : "low"}`, title: ev.tool },
+      `${ev.ok ? "✓" : "✗"} ${ev.display}`));
+  else if (ev.type === "approval_required") {
+    ctx.paused = true;
+    bot.node.insertBefore(approvalCard(ev.approval, decideApproval), bot.meta);
+    refreshPendingBadge();
+  } else if (ev.type === "token") {
+    ctx.got += ev.text; bot.bubble.textContent = ctx.got;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  } else if (ev.type === "error") bot.node.append(el("div", { class: "error" }, ev.message));
+  else if (ev.type === "done" && ev.model) bot.meta.append(el("span", { class: "chip" }, ev.model));
+}
+
+async function streamInto(res, bot, user) {
+  const ctx = { bot, user, got: "", paused: false };
+  try {
+    await readSSE(res, (ev) => handleEvent(ev, ctx));
+  } catch (err) {
+    bot.node.append(el("div", { class: "error" }, String(err.message || err)));
+  }
+  if (!ctx.got) bot.bubble.textContent = ctx.paused ? "I need your OK before I do this:" : "(no reply)";
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
 let sending = false;
 async function send() {
   const text = input.value.trim();
@@ -103,42 +202,16 @@ async function send() {
   autosize();
   const user = addMessage("user", text);
   const bot = addMessage("assistant", "…");
-  let got = "";
   try {
     const res = await fetch("/api/chat", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
     });
     if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buf.indexOf("\n\n")) >= 0) {
-        const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
-        if (!chunk.startsWith("data: ")) continue;
-        const ev = JSON.parse(chunk.slice(6));
-        if (ev.type === "decision") user.meta.append(...decisionChips(ev.decision));
-        else if (ev.type === "memory_saved")
-          bot.meta.append(el("span", { class: "chip mem", title: "Saved to memory" },
-            `${ev.updated ? "updated" : "remembered"}: ${ev.memory.text}`));
-        else if (ev.type === "recalled")
-          bot.meta.append(el("span", { class: "chip mem", title: ev.memories.map((m) => m.text).join("\n") },
-            `recalled ${ev.memories.length} memor${ev.memories.length === 1 ? "y" : "ies"}`));
-        else if (ev.type === "token") {
-          got += ev.text; bot.bubble.textContent = got;
-          messagesEl.scrollTop = messagesEl.scrollHeight;
-        } else if (ev.type === "error") bot.node.append(el("div", { class: "error" }, ev.message));
-        else if (ev.type === "done" && ev.model) bot.meta.append(el("span", { class: "chip" }, ev.model));
-      }
-    }
+    await streamInto(res, bot, user);
   } catch (err) {
+    bot.bubble.textContent = "(no reply)";
     bot.node.append(el("div", { class: "error" }, String(err.message || err)));
   } finally {
-    if (!got) bot.bubble.textContent = "(no reply)";
     sending = false;
     $("#send").disabled = false;
     input.focus();
@@ -327,6 +400,97 @@ $("#settings-form").addEventListener("submit", async (e) => {
   setTimeout(() => ($("#settings-status").textContent = ""), 3000);
 });
 
+/* ── approvals ────────────────────────────────────────────────────────── */
+async function refreshPendingBadge() {
+  try {
+    const pending = await api("/api/approvals?status=pending");
+    const b = $("#pending-badge");
+    b.textContent = pending.length;
+    b.classList.toggle("hidden", !pending.length);
+  } catch (_) {}
+}
+
+async function loadApprovals() {
+  const [pending, history, grants] = await Promise.all([
+    api("/api/approvals?status=pending"), api("/api/approvals?limit=50"), api("/api/grants")]);
+  $("#approvals-pending").replaceChildren(...(pending.length
+    ? pending.map((ap) => approvalCard(ap, async (a, yes, scope) => {
+        document.querySelector("button[data-tab=chat]").click();
+        await decideApproval(a, yes, scope);
+        refreshPendingBadge();
+      }))
+    : [el("p", { class: "muted" }, "Nothing is waiting for you.")]));
+  $("#grants").replaceChildren(...(grants.length ? grants.map((g) => el("div", { class: "card card-row" },
+      el("span", {}, el("strong", {}, g.tool), " · ", g.label,
+        g.expires_at ? ` (until ${new Date(g.expires_at * 1000).toLocaleTimeString()})` : ""),
+      el("button", { class: "ghost", onclick: async () => { await api(`/api/grants/${g.id}`, { method: "DELETE" }); loadApprovals(); } }, "Revoke")))
+    : [el("p", { class: "muted" }, "No standing permissions. Every change asks first.")]));
+  const done = history.filter((a) => a.status !== "pending");
+  $("#approvals-history").replaceChildren(...(done.length ? done.map((a) => el("div", { class: "card card-row" },
+      el("span", {}, el("span", { class: `badge tier-${a.tier}` }, a.tier), " ", a.summary),
+      el("span", { class: `status-${a.status === "approved" ? "ok" : a.status === "denied" ? "fail" : "warn"}` },
+        a.status + (a.scope && a.scope !== "once" ? ` (${a.scope})` : ""))))
+    : [el("p", { class: "muted" }, "No decisions yet.")]));
+  refreshPendingBadge();
+}
+
+/* ── activity (audit log) ─────────────────────────────────────────────── */
+async function loadActivity() {
+  const [rows, v] = await Promise.all([api("/api/audit?limit=200"), api("/api/audit/verify")]);
+  const banner = $("#audit-verify");
+  banner.className = `card ${v.ok ? "status-ok" : "status-fail"}`;
+  banner.textContent = v.ok
+    ? `Audit chain intact: ${v.count} entr${v.count === 1 ? "y" : "ies"}, each sealed with the previous entry's hash.`
+    : `Audit chain BROKEN at entry ${v.broken_at}: the log was modified outside the app.`;
+  $("#audit-list").replaceChildren(...(rows.length ? rows.map((r) => el("div", { class: "card" },
+      el("div", { class: "card-row" },
+        el("span", {}, el("strong", {}, r.kind.replaceAll("_", " ")), r.tool ? ` · ${r.tool}` : "",
+          r.tier ? " " : "", r.tier ? el("span", { class: `badge tier-${r.tier}` }, r.tier) : ""),
+        el("span", { class: "muted" }, new Date(r.ts * 1000).toLocaleString())),
+      r.detail ? el("div", { class: "muted" }, `${r.outcome ? r.outcome + " · " : ""}${r.detail}`) : null,
+      r.args ? el("details", {}, el("summary", {}, "Arguments"), el("pre", {}, JSON.stringify(r.args, null, 2))) : null))
+    : [el("p", { class: "muted" }, "Nothing has happened yet.")]));
+}
+
+/* ── connectors ───────────────────────────────────────────────────────── */
+async function loadConnectors() {
+  const cons = await api("/api/connectors");
+  if (!settings.file_roots) settings = await api("/api/settings");
+  $("#connector-list").replaceChildren(...cons.map((c) => {
+    const toggle = el("input", { type: "checkbox", "aria-label": `Enable ${c.name}` });
+    toggle.checked = c.enabled;
+    toggle.disabled = !c.available;
+    toggle.addEventListener("change", async () => {
+      settings = await api("/api/settings", { method: "PUT", body: { [c.setting]: toggle.checked } });
+      loadConnectors();
+    });
+    const result = el("span", { class: "muted" });
+    const test = c.testable && c.active ? el("button", { class: "ghost", onclick: async () => {
+      test.disabled = true; result.className = "muted"; result.textContent = "Testing… (allow the macOS prompt if one appears)";
+      try {
+        const r = await api(`/api/connectors/${c.id}/test`, { method: "POST" });
+        result.className = r.ok ? "status-ok" : "status-fail"; result.textContent = r.message;
+      } catch (err) { result.className = "status-fail"; result.textContent = err.message; }
+      test.disabled = false;
+    } }, "Test") : null;
+    return el("div", { class: "card" },
+      el("div", { class: "card-row" },
+        el("label", { class: "row" }, toggle, el("strong", {}, c.name)),
+        el("div", { class: "row" }, c.note ? el("span", { class: "status-warn" }, c.note) : null, test)),
+      el("div", { class: "muted" }, c.about),
+      c.tools.length ? el("div", { class: "meta" }, c.tools.map((t) =>
+        el("span", { class: `badge tier-${t.tier}`, title: TIER_LABEL[t.tier] }, `${t.name} · ${t.tier}`))) : null,
+      result);
+  }));
+  $("#file-roots").value = settings.file_roots || "";
+}
+
+$("#roots-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  settings = await api("/api/settings", { method: "PUT", body: { file_roots: $("#file-roots").value } });
+  loadConnectors();
+});
+
 /* ── boot ─────────────────────────────────────────────────────────────── */
 async function boot() {
   try {
@@ -335,6 +499,7 @@ async function boot() {
     document.title = `${settings.agent_name} · LocalAIAgent`;
   } catch (_) {}
   await loadHistory();
+  refreshPendingBadge();
   try {
     const checks = await api("/api/doctor");
     const failing = checks.filter((c) => c.status === "fail");

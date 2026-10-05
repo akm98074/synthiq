@@ -6,16 +6,20 @@ Yields events consumed by the HTTP layer as server-sent events:
   {"type": "recalled", "memories": [...]}
   {"type": "token", "text": "..."}
   {"type": "error", "message": "..."}
+  {"type": "tool_start" | "tool_result" | "approval_required", ...}   (action intents)
   {"type": "done", "message_id": int, "model": str}
 """
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING, AsyncIterator
 
 from ..llm.ollama import OllamaError
 from ..memory.store import MEMORY_KINDS
 from ..persona import system_prompt
+from ..tools.registry import candidates
+from .actions import ACTION_INTENTS, ActionRun, tools_prompt
 
 if TYPE_CHECKING:
     from ..runtime import Runtime
@@ -86,6 +90,22 @@ async def remember(rt: "Runtime", text: str, source_message_id: int | None) -> l
     return saved
 
 
+# Pure writing tasks ("draft a toast") and general questions stream straight from the
+# model; tasks and questions only go through the tool loop when they mention something a
+# connector can touch ("any unread email?", "newest PDF in Downloads").
+TOOL_HINTS = re.compile(
+    r"\b(calendar|meeting|event|remind|reminders?|notes?|mail|e-?mail|inbox|send|files?|folders?|"
+    r"downloads?|desktop|documents?|pdf|spreadsheet|excel|xlsx|contacts?|phone number|save)\b",
+    re.IGNORECASE,
+)
+
+
+def wants_tools(intent: str, text: str) -> bool:
+    if intent in ("schedule", "computer_action"):
+        return True
+    return intent in (*ACTION_INTENTS, "quick_answer") and bool(TOOL_HINTS.search(text))
+
+
 def pick_model(rt: "Runtime", intent: str, complexity: int) -> str:
     s = rt.settings
     if intent in ("chit_chat", "memory_write") and complexity <= 2:
@@ -126,10 +146,24 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
     if memories:
         yield {"type": "recalled", "memories": [m.to_dict() for m in memories]}
 
+    past = [{"role": m["role"], "content": m["content"]} for m in history
+            if m["role"] in ("user", "assistant")]
+
+    tools = candidates(rt.tools, intent) if wants_tools(intent, text) else []
+    if tools:
+        messages = [{"role": "system",
+                     "content": system_prompt(s, "task", memories, with_tools=True) + "\n\n" + tools_prompt()}]
+        messages += past + [{"role": "user", "content": text}]
+        run = ActionRun(rt, user_msg_id, tools, messages, s.chat_model)
+        async for event in run.start():
+            yield event
+        msg_id = rt.store.add_message("assistant", run.final_text, decision.id) if run.final_text else None
+        yield {"type": "done", "message_id": msg_id, "model": s.chat_model, "paused": run.paused}
+        return
+
     model = pick_model(rt, intent, complexity)
     messages = [{"role": "system", "content": system_prompt(s, intent, memories)}]
-    messages += [{"role": m["role"], "content": m["content"]} for m in history
-                 if m["role"] in ("user", "assistant")]
+    messages += past
     messages.append({"role": "user", "content": text})
 
     reply: list[str] = []
@@ -142,3 +176,16 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
     full = "".join(reply).strip()
     msg_id = rt.store.add_message("assistant", full, decision.id) if full else None
     yield {"type": "done", "message_id": msg_id, "model": model}
+
+
+async def resume_after_decision(rt: "Runtime", approval: dict, approved: bool) -> AsyncIterator[dict]:
+    """Continue a paused action run once the user approved or declined."""
+    state = approval.get("state")
+    if not state:
+        yield {"type": "error", "message": "This request can no longer be resumed."}
+        return
+    run = ActionRun.from_state(rt, approval["task_id"], state)
+    async for event in run.resume(approval, approved):
+        yield event
+    msg_id = rt.store.add_message("assistant", run.final_text) if run.final_text else None
+    yield {"type": "done", "message_id": msg_id, "model": run.model, "paused": run.paused}

@@ -12,6 +12,9 @@
     <div class="brand"><span class="dot" id="status-dot" title="checking"></span><span id="agent-name">LocalAIAgent</span></div>
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="chat">Chat</button>
+      <button class="tab" data-tab="approvals">Approvals <span id="pending-badge" class="count hidden">0</span></button>
+      <button class="tab" data-tab="activity">Activity</button>
+      <button class="tab" data-tab="connectors">Connectors</button>
       <button class="tab" data-tab="decisions">Decisions</button>
       <button class="tab" data-tab="memory">Memory</button>
       <button class="tab" data-tab="models">Models</button>
@@ -30,6 +33,44 @@
         <button type="submit" id="send" class="primary">Send</button>
       </form>
       <div class="composer-foot"><button class="link" id="clear-chat">Clear conversation</button><span>Everything stays on this Mac.</span></div>
+    </section>
+
+    <!-- Approvals -->
+    <section id="tab-approvals" class="panel">
+      <div class="panel-head">
+        <h2>Approvals</h2>
+        <p class="muted">Anything that changes, sends or deletes waits here for you. Reading and drafting run on their own and show up in Activity.</p>
+      </div>
+      <h3>Waiting for you</h3>
+      <div id="approvals-pending" class="list"></div>
+      <h3>Standing permissions</h3>
+      <div id="grants" class="list"></div>
+      <h3>History</h3>
+      <div id="approvals-history" class="list"></div>
+    </section>
+
+    <!-- Activity -->
+    <section id="tab-activity" class="panel">
+      <div class="panel-head">
+        <h2>Activity</h2>
+        <p class="muted">Every action the agent took, asked for, or was refused. The log is hash-chained, so edits made outside the app are detected.</p>
+      </div>
+      <div id="audit-verify" class="card"></div>
+      <div id="audit-list" class="list" style="margin-top:8px"></div>
+    </section>
+
+    <!-- Connectors -->
+    <section id="tab-connectors" class="panel">
+      <div class="panel-head">
+        <h2>Connectors</h2>
+        <p class="muted">What the agent can reach on this Mac. The first use of each Apple app shows a macOS permission prompt; press Test to answer it now.</p>
+      </div>
+      <div id="connector-list" class="list"></div>
+      <h3>Folders the Files connector may use</h3>
+      <form id="roots-form" class="inline-form">
+        <input id="file-roots" placeholder="~/Downloads,~/Desktop,~/Documents">
+        <button class="secondary">Save</button>
+      </form>
     </section>
 
     <!-- Decisions -->

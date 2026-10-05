@@ -15,7 +15,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import __version__
-from .agent.chat import handle_turn
+from .agent.chat import handle_turn, resume_after_decision
+from .policy.engine import ApprovalError
+from .tools.base import ToolError
+from .tools.registry import TEST_CALLS
 from .config import Settings, data_dir, load_settings
 from .decide.questions import STANDARD
 from .doctor import run_checks
@@ -51,6 +54,11 @@ class ModelIn(BaseModel):
     model: str
 
 
+class DecisionIn(BaseModel):
+    approve: bool
+    scope: str = "once"
+
+
 def sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
@@ -64,13 +72,13 @@ async def _warm_up(rt: Runtime) -> None:
         log.info("Warm-up skipped: %s", exc)
 
 
-def create_app(settings: Settings | None = None, base: Path | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, base: Path | None = None, runner=None) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.rt = Runtime(settings, base)
+        app.state.rt = Runtime(settings, base, runner=runner)
         warm = asyncio.create_task(_warm_up(app.state.rt))
         yield
         warm.cancel()
@@ -228,6 +236,85 @@ def create_app(settings: Settings | None = None, base: Path | None = None) -> Fa
             except OllamaError as exc:
                 yield sse({"status": "error", "error": str(exc)})
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    # ── connectors and tools ──────────────────────────────────────────────
+    @app.get("/api/connectors")
+    async def connectors() -> list[dict]:
+        return rt().connectors()
+
+    @app.post("/api/connectors/{connector_id}/test")
+    async def test_connector(connector_id: str) -> dict:
+        r = rt()
+        call = TEST_CALLS.get(connector_id)
+        if call is None:
+            raise HTTPException(404, "Nothing to test for this connector")
+        name, args = call
+        tool = r.tools.get(name)
+        if tool is None:
+            raise HTTPException(400, "Connector is disabled or unavailable on this computer")
+        try:
+            result = await tool.run(args)
+        except ToolError as exc:
+            r.audit.append("connector_test", name, tool.tier, args, "error", str(exc))
+            return {"ok": False, "message": str(exc)}
+        r.audit.append("connector_test", name, tool.tier, args, "ok", result.display)
+        return {"ok": True, "message": result.display}
+
+    @app.get("/api/tools")
+    async def tools() -> list[dict]:
+        return [{"name": t.name, "connector": t.connector, "tier": t.tier,
+                 "description": t.description, "intents": list(t.intents)} for t in rt().tools.values()]
+
+    # ── approvals, grants, audit ──────────────────────────────────────────
+    @app.get("/api/approvals")
+    async def approvals(status: str | None = None, limit: int = 100) -> list[dict]:
+        return rt().policy.list(status, limit)
+
+    @app.post("/api/approvals/{approval_id}/decide")
+    async def decide_approval(approval_id: int, body: DecisionIn) -> StreamingResponse:
+        r = rt()
+        try:
+            ap = r.policy.decide(approval_id, body.approve, body.scope)
+        except KeyError as exc:
+            raise HTTPException(404, "Approval not found") from exc
+        except ApprovalError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        r.audit.append("approval_" + ap["status"], ap["tool"], ap["tier"], ap["args"],
+                       ap["status"], f"scope={ap['scope']}" if ap["scope"] else None,
+                       ap["id"], ap["task_id"])
+
+        async def stream():
+            yield sse({"type": "approval_decided", "approval": {k: v for k, v in ap.items() if k != "state"}})
+            try:
+                async for event in resume_after_decision(r, ap, body.approve):
+                    yield sse(event)
+            except Exception as exc:  # noqa: BLE001
+                log.exception("resume failed")
+                yield sse({"type": "error", "message": f"{exc.__class__.__name__}: {exc}"})
+                yield sse({"type": "done", "message_id": None, "model": None})
+
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache"})
+
+    @app.get("/api/grants")
+    async def grants() -> list[dict]:
+        return rt().policy.active_grants()
+
+    @app.delete("/api/grants/{grant_id}")
+    async def revoke_grant(grant_id: int) -> dict:
+        r = rt()
+        if not r.policy.revoke(grant_id):
+            raise HTTPException(404, "Grant not found")
+        r.audit.append("grant_revoked", detail=f"grant {grant_id}")
+        return {"ok": True}
+
+    @app.get("/api/audit")
+    async def audit(limit: int = 200) -> list[dict]:
+        return rt().audit.list(limit)
+
+    @app.get("/api/audit/verify")
+    async def audit_verify() -> dict:
+        return rt().audit.verify()
 
     # ── settings ──────────────────────────────────────────────────────────
     @app.get("/api/settings")

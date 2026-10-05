@@ -2,7 +2,7 @@
 # LocalAIAgent installer for macOS (Apple Silicon).
 #
 # Run it WITHOUT sudo, from the folder containing the downloaded files:
-#   bash install.sh localaiagent-0.1.2-py3-none-any.whl
+#   bash install.sh localaiagent-0.2.0-py3-none-any.whl
 set -euo pipefail
 ORIG_PATH="$PATH"  # the PATH of the Terminal window that ran this script
 
@@ -23,7 +23,7 @@ find_wheel() {
 WHEEL="${1:-$(find_wheel)}"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "Can't find the localaiagent .whl file.
        Put install.sh and the .whl in the same folder, cd into it, and run:
-         bash install.sh localaiagent-0.1.2-py3-none-any.whl"
+         bash install.sh localaiagent-0.2.0-py3-none-any.whl"
 WHEEL="$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")"
 
 [ "$(uname -s)" = "Darwin" ] || warn "this installer targets macOS; continuing anyway."
@@ -59,6 +59,15 @@ if ! curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
   done
   curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1 \
     || die "Ollama didn't start. Open the Ollama app (or run 'ollama serve' in another window) and re-run."
+fi
+
+# Upgrading: stop a running agent first so the new version starts cleanly.
+# Your data (~/Library/Application Support/LocalAIAgent) is kept.
+EXISTING="$(command -v localagent 2>/dev/null || true)"
+[ -n "$EXISTING" ] || { [ -x "$HOME/.local/bin/localagent" ] && EXISTING="$HOME/.local/bin/localagent"; } || true
+if [ -n "$EXISTING" ]; then
+  say "Found an existing install ($("$EXISTING" version 2>/dev/null || echo unknown)); stopping it if running"
+  "$EXISTING" stop >/dev/null 2>&1 || true
 fi
 
 say "Installing LocalAIAgent from $(basename "$WHEEL")"

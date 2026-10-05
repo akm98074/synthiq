@@ -1,0 +1,187 @@
+"""The action loop: the model calls tools, the policy engine gates them.
+
+  model ──tool call──► validate args ──► policy ──auto──► run tool ──► result back to model
+                                            └─needs approval──► pause; the UI shows an approval
+                                                card and the loop resumes after the user decides.
+
+Everything that runs, or is approved or denied, goes into the audit log.
+"""
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime
+from typing import TYPE_CHECKING, AsyncIterator
+
+from ..llm.ollama import OllamaError, strip_think
+from ..tools.base import Tool, ToolError, ToolResult, validate_args
+
+if TYPE_CHECKING:
+    from ..runtime import Runtime
+
+log = logging.getLogger(__name__)
+
+ACTION_INTENTS = {"task", "schedule", "computer_action"}
+
+GUIDE = """You can act on the user's computer with the tools provided.
+- Today is {today}. Write dates/times as ISO local time, e.g. {example}.
+- Use read tools freely to look things up before answering. Never invent results.
+- To change something (create, send, move, delete), just call the tool. The app itself asks the user
+  for approval when needed - do not ask for confirmation in text first.
+- Prefer mail_draft over mail_send unless the user clearly asked to send. Look up email addresses
+  with contacts_find; never guess them.
+- If a tool returns an error, fix the arguments and retry once, or explain the problem.
+- When done, reply briefly with what you did or found."""
+
+
+def tools_prompt() -> str:
+    now = datetime.now()
+    return GUIDE.format(today=now.strftime("%A %d %B %Y, %H:%M"),
+                        example=now.replace(hour=15, minute=0).strftime("%Y-%m-%dT%H:%M"))
+
+
+def _parse_args(raw) -> dict:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            val = json.loads(raw)
+            return val if isinstance(val, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+class ActionRun:
+    def __init__(self, rt: "Runtime", task_id: int, tools: list[Tool], messages: list[dict],
+                 model: str, step: int = 0):
+        self.rt = rt
+        self.task_id = task_id
+        self.tools = {t.name: t for t in tools}
+        self.messages = messages
+        self.model = model
+        self.step = step
+        self.final_text = ""
+        self.paused = False
+
+    # ── persistence of a paused run (stored with the approval) ───────────
+    def state(self, pending_calls: list[dict]) -> dict:
+        return {"messages": self.messages, "pending_calls": pending_calls, "step": self.step,
+                "tools": list(self.tools), "model": self.model}
+
+    @classmethod
+    def from_state(cls, rt: "Runtime", task_id: int, state: dict) -> "ActionRun":
+        tools = [rt.tools[n] for n in state["tools"] if n in rt.tools]
+        return cls(rt, task_id, tools, state["messages"], state["model"], state["step"])
+
+    # ── execution ─────────────────────────────────────────────────────────
+    async def execute(self, tool: Tool, args: dict, approval_id: int | None = None) -> ToolResult:
+        try:
+            result = await tool.run(args)
+        except ToolError as exc:
+            result = ToolResult(f"Error: {exc}", str(exc), ok=False)
+        except Exception as exc:  # noqa: BLE001 - report any tool crash to the model
+            log.exception("tool %s crashed", tool.name)
+            result = ToolResult(f"Error: {exc.__class__.__name__}: {exc}", f"{tool.name} failed", ok=False)
+        self.rt.audit.append("tool_call", tool.name, tool.tier, args,
+                             "ok" if result.ok else "error", result.display,
+                             approval_id, self.task_id)
+        return result
+
+    def _tool_message(self, name: str, content: str) -> None:
+        self.messages.append({"role": "tool", "tool_name": name, "content": content})
+
+    async def _process(self, calls: list[dict]) -> AsyncIterator[dict]:
+        for idx, call in enumerate(calls):
+            fn = call.get("function", {})
+            name = fn.get("name", "")
+            tool = self.tools.get(name)
+            if tool is None:
+                self._tool_message(name, f"Error: unknown tool '{name}'.")
+                continue
+            try:
+                args = validate_args(tool.parameters, _parse_args(fn.get("arguments")))
+            except ToolError as exc:
+                self._tool_message(name, f"Error: {exc}")
+                yield {"type": "tool_result", "tool": name, "tier": tool.tier, "ok": False,
+                       "display": f"{name}: {exc}", "args": fn.get("arguments")}
+                continue
+            if self.rt.policy.needs_approval(tool, self.task_id):
+                ap = self.rt.policy.request(tool, args, self.task_id, self.state(calls[idx + 1:]))
+                self.rt.audit.append("approval_requested", tool.name, tool.tier, args,
+                                     "pending", ap["summary"], ap["id"], self.task_id)
+                self.paused = True
+                ap.pop("state", None)
+                yield {"type": "approval_required", "approval": ap}
+                return
+            yield {"type": "tool_start", "tool": name, "tier": tool.tier, "summary": tool.summary(args)}
+            result = await self.execute(tool, args)
+            self._tool_message(name, result.content)
+            yield {"type": "tool_result", "tool": name, "tier": tool.tier, "ok": result.ok,
+                   "display": result.display, "data": result.data}
+
+    async def _loop(self) -> AsyncIterator[dict]:
+        specs = [t.spec() for t in self.tools.values()]
+        max_steps = self.rt.settings.max_tool_steps
+        while self.step < max_steps:
+            self.step += 1
+            try:
+                msg = await self.rt.ollama.chat_tools(self.model, self.messages, specs)
+            except OllamaError as exc:
+                hint = (" This model may not support tool calling; try qwen3:4b or qwen3:8b."
+                        if "does not support tools" in str(exc) else "")
+                yield {"type": "error", "message": f"{exc}{hint}"}
+                return
+            calls = msg.get("tool_calls") or []
+            content = strip_think(msg.get("content") or "")
+            if not calls:
+                if content:
+                    self.final_text = content
+                    yield {"type": "token", "text": content}
+                    return
+                break
+            self.messages.append({"role": "assistant", "content": msg.get("content") or "",
+                                  "tool_calls": calls})
+            async for ev in self._process(calls):
+                yield ev
+            if self.paused:
+                return
+        # Out of steps (or an empty reply): ask for a plain final answer.
+        self.messages.append({"role": "user", "content": "Now reply to me briefly with the outcome."})
+        parts: list[str] = []
+        try:
+            async for piece in self.rt.ollama.chat_stream(self.model, self.messages):
+                parts.append(piece)
+                yield {"type": "token", "text": piece}
+        except OllamaError as exc:
+            yield {"type": "error", "message": str(exc)}
+        self.final_text = "".join(parts).strip()
+
+    async def start(self) -> AsyncIterator[dict]:
+        async for ev in self._loop():
+            yield ev
+
+    async def resume(self, approval: dict, approved: bool) -> AsyncIterator[dict]:
+        tool = self.tools.get(approval["tool"])
+        if tool is None:
+            yield {"type": "error", "message": f"The {approval['tool']} tool is no longer enabled."}
+            return
+        if approved:
+            yield {"type": "tool_start", "tool": tool.name, "tier": tool.tier, "summary": approval["summary"]}
+            result = await self.execute(tool, approval["args"], approval["id"])
+            self._tool_message(tool.name, result.content)
+            yield {"type": "tool_result", "tool": tool.name, "tier": tool.tier, "ok": result.ok,
+                   "display": result.display, "data": result.data}
+        else:
+            self._tool_message(tool.name, "The user declined this action. Do not retry it; "
+                                          "acknowledge briefly and offer an alternative if useful.")
+            yield {"type": "tool_result", "tool": tool.name, "tier": tool.tier, "ok": False,
+                   "display": "Declined by you", "data": None}
+        pending = (approval.get("state") or {}).get("pending_calls") or []
+        if pending:
+            async for ev in self._process(pending):
+                yield ev
+            if self.paused:
+                return
+        async for ev in self._loop():
+            yield ev

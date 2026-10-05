@@ -46,7 +46,7 @@ def judge(text: str, schema: dict) -> dict:
         intent = "memory_query"
     elif t.startswith(("i'm", "i am", "my ", "remember", "i prefer", "i like")):
         intent = "memory_write"
-    elif any(w in t for w in ("open", "delete", "send", "book")):
+    elif any(w in t for w in ("open", "delete", "send", "book", "trash", "move", "downloads")):
         intent = "computer_action"
     elif any(w in t for w in ("write", "draft", "plan", "make")):
         intent = "task"
@@ -64,6 +64,27 @@ def judge(text: str, schema: dict) -> dict:
         elif enum:
             out[name] = enum[min(1, len(enum) - 1)]
     return out
+
+
+def pick_tool(text: str, tool_names: set[str]):
+    """Very small rule-based stand-in for a tool-calling model."""
+    t = text.lower()
+    words = text.split()
+    rules = [
+        ("trash", "files_trash", lambda: {"paths": [w for w in words if "." in w][-1:]}),
+        ("move", "files_move", lambda: {"paths": [w for w in words if "." in w][:1], "destination": "Downloads/Archive"}),
+        ("pdf", "documents_create_pdf", lambda: {"title": "Packing list", "content": "# Packing\n- socks\n- “passport”"}),
+        ("spreadsheet", "documents_create_spreadsheet", lambda: {"title": "Budget", "csv": "item,cost\nrent,1200\nfood,300.5"}),
+        ("send", "mail_send", lambda: {"to": "sam@example.com", "subject": "Hi", "body": "Hello"}),
+        ("draft", "mail_draft", lambda: {"to": "sam@example.com", "subject": "Hi", "body": "Hello"}),
+        ("remind", "reminders_create", lambda: {"title": "call mom", "due": "2030-01-01T18:00"}),
+        ("calendar", "calendar_list_events", lambda: {"start": "2030-01-01", "end": "2030-01-02"}),
+        ("downloads", "files_list", lambda: {"folder": "Downloads"}),
+    ]
+    for kw, name, args in rules:
+        if kw in t and name in tool_names:
+            return name, args()
+    return None
 
 
 def create_fake_app() -> FastAPI:
@@ -120,6 +141,20 @@ def create_fake_app() -> FastAPI:
         app.state.calls.append(("chat", model))
         last = body["messages"][-1]["content"]
         schema = body.get("format")
+        if body.get("tools"):
+            names = {tl["function"]["name"] for tl in body["tools"]}
+            app.state.calls.append(("tools", sorted(names)))
+            last_msg = body["messages"][-1]
+            if last_msg["role"] == "tool":
+                content = "Done: " + last_msg["content"].splitlines()[0]
+                return {"model": model, "message": {"role": "assistant", "content": content}, "done": True}
+            picked = pick_tool(last_msg["content"], names)
+            if picked is None:
+                return {"model": model, "message": {"role": "assistant", "content": "No tool needed."}, "done": True}
+            name, args = picked
+            return {"model": model, "done": True, "message": {
+                "role": "assistant", "content": "",
+                "tool_calls": [{"function": {"name": name, "arguments": args}}]}}
         if isinstance(schema, dict):
             props = schema.get("properties", {})
             if "facts" in props:
