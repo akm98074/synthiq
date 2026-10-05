@@ -73,9 +73,10 @@ h3 { font-size: 16px; margin: 20px 0 8px; }
 .msg { max-width: 85%; }
 .msg.user { align-self: flex-end; }
 .bubble { padding: 10px 14px; border-radius: var(--radius); white-space: pre-wrap; word-wrap: break-word; }
+.msg.assistant .bubble { white-space: normal; }
 .msg.user .bubble { background: var(--user-bubble); color: var(--user-text); border-bottom-right-radius: 4px; }
 .msg.assistant .bubble { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
-.meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 12px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 12px; align-items: flex-start; }
 .msg.user .meta { justify-content: flex-end; }
 .chip { background: var(--chip); color: var(--chip-text); padding: 2px 8px; border-radius: 999px; }
 .chip.low { background: color-mix(in srgb, var(--warn) 20%, var(--surface)); color: var(--warn); }
@@ -179,3 +180,19 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .composer-foot { gap: 10px; align-items: center; }
 .conv { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
 .settings label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+
+/* 0.4.1: markdown in replies, expandable tool results */
+.bubble ul, .bubble ol { margin: 4px 0; padding-left: 22px; }
+.bubble li { margin: 2px 0; }
+.bubble code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+  background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
+.bubble .md-h { font-weight: 650; margin-top: 6px; }
+.bubble .md-gap { height: 8px; }
+.tool-data { display: inline-block; max-width: 100%; }
+.tool-data > summary { list-style: none; cursor: pointer; display: inline-block; }
+.tool-data > summary::-webkit-details-marker { display: none; }
+.tool-data > summary::after { content: " ▾"; color: var(--muted); }
+.tool-data[open] > summary::after { content: " ▴"; }
+.tool-data ul { margin: 6px 0 2px; padding: 8px 10px 8px 26px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; font-size: 13px; max-height: 320px; overflow: auto; }
+.tool-data li { margin: 3px 0; }

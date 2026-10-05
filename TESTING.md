@@ -1,4 +1,4 @@
-# Testing Steps 3 + 4 (v0.4.0): proactivity and voice
+# Testing Steps 3 + 4 (v0.4.1): proactivity and voice
 
 Upgrade first with `UPGRADING.md` (about 10 minutes, mostly the speech-model download). This checklist takes about 25 minutes.
 
@@ -12,6 +12,12 @@ Upgrade first with `UPGRADING.md` (about 10 minutes, mostly the speech-model dow
 | "Microphone blocked" | Allow the mic for `127.0.0.1:8765` in your browser's site settings (see `UPGRADING.md` step 5). |
 | No notifications | **System Settings → Notifications → Script Editor → Allow notifications**. Also check quiet hours in Settings. |
 | Calendar/Mail errors in a job | Same fix as before: **Privacy & Security → Automation → Terminal**. Then start the agent from Terminal. |
+
+## 0. Calendar completeness (new in 0.4.1)
+
+1. **Connectors → Calendar → Test**. Allow full calendar access, and check that it says "via EventKit".
+2. In Chat, ask `What's on my calendar this week?`
+3. Click the "✓ Found N event(s)" chip and compare the list with Calendar's week view. Repeating meetings, invitations and events that appear in both your Gmail and Outlook calendars should all be there.
 
 ## A. Proactivity (Nudges tab)
 
@@ -50,6 +56,7 @@ Upgrade first with `UPGRADING.md` (about 10 minutes, mostly the speech-model dow
 5. Any dropped or failed jobs (in **Nudges**, the job card shows "last: … (error)" or "(deferred)").
 
 Known limits:
+- Calendar needs **Full Access** (Privacy & Security → Calendars → Terminal) for complete results, including repeating events; otherwise it falls back to AppleScript and says so.
 - Proactivity only runs while the Mac is awake and the agent is running; missed jobs run once when it's back.
 - There's no always-listening wake word ("Hey Ari") yet. Use conversation mode instead.
 - The overnight review waits until the Mac is plugged in.

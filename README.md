@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Steps 3 + 4 (v0.4.0) — proactivity and voice
+## Status: Steps 3 + 4 (v0.4.1) — proactivity and voice
 
 | Included | Comes later |
 |---|---|
@@ -20,17 +20,19 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.4.0-py3-none-any.whl   # installs pipx + Ollama via Homebrew, pulls models
-localagent start                                     # opens http://127.0.0.1:8765
+bash install.sh localaiagent-0.4.1-py3-none-any.whl
+localagent start
 ```
+
+The installer adds pipx and Ollama with Homebrew and downloads the models. The app opens at http://127.0.0.1:8765.
 
 Manual install:
 
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.4.0-py3-none-any.whl
-localagent setup     # downloads qwen3:4b, qwen3:1.7b, all-minilm (~4 GB)
+pipx install ./localaiagent-0.4.1-py3-none-any.whl
+localagent setup
 localagent start
 ```
 
@@ -76,7 +78,7 @@ Apple apps are driven with bundled AppleScripts run through `osascript`. Argumen
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-pytest                                   # uses a fake Ollama server, no models needed
+pytest
 python tests/fake_ollama.py --port 11500 # run the fake server for UI work
-python -m build                          # → dist/localaiagent-*.whl
+python -m build
 ```

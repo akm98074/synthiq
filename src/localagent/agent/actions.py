@@ -13,7 +13,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, AsyncIterator
 
-from ..llm.ollama import OllamaError, strip_think
+from ..llm.ollama import RESET, OllamaError, strip_think
 from ..tools.base import Tool, ToolError, ToolResult, validate_args
 
 if TYPE_CHECKING:
@@ -31,7 +31,9 @@ GUIDE = """You can act on the user's computer with the tools provided.
 - Prefer mail_draft over mail_send unless the user clearly asked to send. Look up email addresses
   with contacts_find; never guess them.
 - If a tool returns an error, fix the arguments and retry once, or explain the problem.
-- When done, reply briefly with what you did or found."""
+- When you list items a tool returned (events, reminders, emails, files), include every item:
+  never drop, merge or summarise away entries, even near-duplicates from different calendars.
+- When done, reply with what you did or found."""
 
 
 def tools_prompt() -> str:
@@ -151,6 +153,12 @@ class ActionRun:
         parts: list[str] = []
         try:
             async for piece in self.rt.ollama.chat_stream(self.model, self.messages):
+                if RESET in piece:
+                    parts.clear()
+                    yield {"type": "reset"}
+                    piece = piece.split(RESET)[-1]
+                    if not piece:
+                        continue
                 parts.append(piece)
                 yield {"type": "token", "text": piece}
         except OllamaError as exc:

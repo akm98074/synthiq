@@ -2,6 +2,29 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.4.0 to 0.4.1 (complete calendars and cleaner replies)
+
+1. Put the new files in one folder, open Terminal there, and run (no `sudo`):
+
+   ```bash
+   bash install.sh localaiagent-0.4.1-py3-none-any.whl
+   localagent start
+   localagent version
+   ```
+
+   The last line should print `0.4.1`. The models are already downloaded, so this takes a minute.
+2. Open **Connectors** and press **Test** on **Calendar**. macOS asks _"Terminal would like full access to your calendars"_; click **Allow**.
+   The test should then say "Found N event(s) **via EventKit**".
+3. If no prompt appears, or the test still says "via AppleScript": open **System Settings → Privacy & Security → Calendars**, set **Terminal** to **Full Access**, then run `localagent stop` and `localagent start` from Terminal.
+
+### What changed in 0.4.1
+
+- **Complete calendars.** Calendar now reads through Apple's EventKit, so **repeating meetings**, invitations you haven't answered, and every account in Calendar (Gmail, Outlook/Exchange, iCloud) are included. Events that appear in two calendars are listed twice and labelled with the calendar they came from.
+  - If full calendar access isn't allowed, the agent falls back to the old method and says that repeating events may be missing.
+  - **Settings → Connectors → Calendar source** lets you force one method.
+- **See the full list yourself.** Click the "✓ Found N event(s)" chip under a reply to expand every item the tool returned. This works for calendar, reminders, mail and files.
+- **Cleaner replies.** No more stray reasoning text ending in `</think>`, and **bold** and bullet lists now render properly.
+
 ## From 0.2.x to 0.4.0 (Steps 3 + 4: proactivity and voice)
 
 Your memories, history, approvals, permissions and activity log are kept.
@@ -23,7 +46,7 @@ Your memories, history, approvals, permissions and activity log are kept.
 
    ```bash
    localagent start
-   localagent version      # 0.4.0
+   localagent version
    ```
 
    If a tab looks empty, press **Cmd+Shift+R** once.
@@ -78,7 +101,7 @@ localagent start
 
    ```bash
    localagent start
-   localagent version      # should print 0.2.1
+   localagent version
    ```
 
    If `localagent` isn't found, use `~/.local/bin/localagent start` and see the troubleshooting table in `TESTING.md`.

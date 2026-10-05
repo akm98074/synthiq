@@ -39,11 +39,11 @@ TEST_CALLS = {
 }
 
 
-def build_tools(settings: Settings, runner, mac_available: bool) -> dict[str, Tool]:
+def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None) -> dict[str, Tool]:
     tools: list[Tool] = []
     if mac_available:
         if settings.enable_calendar:
-            tools += calendar_tools(runner)
+            tools += calendar_tools(runner, eventkit, settings.calendar_backend)
         if settings.enable_reminders:
             tools += reminder_tools(runner)
         if settings.enable_notes:

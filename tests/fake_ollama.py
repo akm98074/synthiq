@@ -178,11 +178,16 @@ def create_fake_app() -> FastAPI:
         system = body["messages"][0]["content"] if body["messages"][0]["role"] == "system" else ""
         recalled = [l[2:] for l in system.splitlines() if l.startswith("- (")]
         reply = f"Fake reply from {model}."
+        if "markdown" in last.lower():
+            # Qwen3-style leak: reasoning with an orphan closing tag, then a markdown answer.
+            reply = ("Okay, the user wants a list. Let me think about formatting carefully. " * 6
+                     + "\n</think>\n\n**Bold** answer:\n- first item\n- second item")
         if recalled:
             reply += " I remember: " + "; ".join(recalled)
 
         async def gen():
-            pieces = ["<think>hidden", " reasoning</think>"] + [w + " " for w in reply.split()]
+            pieces = (["<think>hidden", " reasoning</think>"] if "</think>" not in reply else []) + \
+                [w + " " for w in reply.split(" ")]
             for p in pieces:
                 yield json.dumps({"message": {"role": "assistant", "content": p}, "done": False}) + "\n"
                 await asyncio.sleep(0)

@@ -70,9 +70,80 @@ function decisionChips(d) {
   return chips;
 }
 
+/* Minimal, safe markdown: everything is HTML-escaped first, then a few patterns
+   (bold, italic, code, headings, lists) are turned into tags. */
+function md(text) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s).,!?:;]|$)/g, "$1<em>$2</em>");
+  const out = [];
+  let list = null;
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of String(text).split("\n")) {
+    const line = raw.trimEnd();
+    let m;
+    if ((m = line.match(/^\s*[-*•]\s+(.*)$/))) {
+      if (list !== "ul") { close(); out.push("<ul>"); list = "ul"; }
+      out.push(`<li>${inline(m[1])}</li>`);
+    } else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+      if (list !== "ol") { close(); out.push("<ol>"); list = "ol"; }
+      out.push(`<li>${inline(m[1])}</li>`);
+    } else if ((m = line.match(/^#{1,6}\s+(.*)$/))) {
+      close(); out.push(`<div class="md-h">${inline(m[1])}</div>`);
+    } else if (!line.trim()) {
+      close(); out.push('<div class="md-gap"></div>');
+    } else {
+      close(); out.push(`<div>${inline(line)}</div>`);
+    }
+  }
+  close();
+  return out.join("");
+}
+
+function setBubble(bubble, role, text) {
+  if (role === "assistant") bubble.innerHTML = md(text);
+  else bubble.textContent = text;
+}
+
+function fmtItemTime(start, end, allDay) {
+  const d = new Date(start);
+  const day = d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+  if (allDay) return `${day} (all day)`;
+  const t = (x) => new Date(x).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${day} ${t(start)}${end ? "–" + t(end) : ""}`;
+}
+
+function itemText(it) {
+  if (it.title && it.start) {
+    const tags = [it.recurring && "repeats", it.status === "pending" && "invitation",
+                  it.status === "declined" && "declined", it.status === "tentative" && "tentative"].filter(Boolean);
+    const cal = [it.calendar, it.account].filter(Boolean).join(" · ");
+    return `${fmtItemTime(it.start, it.end, it.all_day)}  ${it.title}${it.location ? " @ " + it.location : ""}`
+      + (tags.length ? ` (${tags.join(", ")})` : "") + (cal ? `  [${cal}]` : "");
+  }
+  if (it.subject !== undefined) return `${it.received ? fmtItemTime(it.received) + "  " : ""}${it.from}: ${it.subject}`;
+  if (it.title !== undefined) return `${it.title}${it.due ? " (due " + fmtItemTime(it.due) + ")" : ""}${it.list ? "  [" + it.list + "]" : ""}`;
+  if (it.path) return it.path;
+  if (it.name) return `${it.name}${it.emails?.length ? " · " + it.emails.join(", ") : ""}${it.phones?.length ? " · " + it.phones.join(", ") : ""}`;
+  return JSON.stringify(it);
+}
+
+function toolResultView(ev) {
+  const label = `${ev.ok ? "✓" : "✗"} ${ev.display}`;
+  if (!Array.isArray(ev.data) || !ev.data.length) {
+    return el("span", { class: `chip tool ${ev.ok ? "" : "low"}`, title: ev.tool }, label);
+  }
+  return el("details", { class: "tool-data" },
+    el("summary", { class: "chip tool", title: `${ev.tool}: click to see every item` }, label),
+    el("ul", {}, ev.data.map((it) => el("li", {}, itemText(it)))));
+}
+
 function addMessage(role, text, decision) {
   $(".empty")?.remove();
-  const bubble = el("div", { class: "bubble" }, text);
+  const bubble = el("div", { class: "bubble" });
+  setBubble(bubble, role, text);
   const meta = el("div", { class: "meta" });
   if (decision) meta.append(...decisionChips(decision));
   const node = el("div", { class: `msg ${role}` }, bubble, meta);
@@ -172,14 +243,15 @@ function handleEvent(ev, ctx) {
   else if (ev.type === "tool_start")
     bot.meta.append(el("span", { class: "chip tool", title: ev.tool }, `${ev.summary}…`));
   else if (ev.type === "tool_result")
-    bot.meta.append(el("span", { class: `chip tool ${ev.ok ? "" : "low"}`, title: ev.tool },
-      `${ev.ok ? "✓" : "✗"} ${ev.display}`));
+    bot.meta.append(toolResultView(ev));
   else if (ev.type === "approval_required") {
     ctx.paused = true;
     bot.node.insertBefore(approvalCard(ev.approval, decideApproval), bot.meta);
     refreshPendingBadge();
+  } else if (ev.type === "reset") {
+    ctx.got = ""; bot.bubble.textContent = "…";
   } else if (ev.type === "token") {
-    ctx.got += ev.text; bot.bubble.textContent = ctx.got;
+    ctx.got += ev.text; setBubble(bot.bubble, "assistant", ctx.got);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   } else if (ev.type === "error") bot.node.append(el("div", { class: "error" }, ev.message));
   else if (ev.type === "done" && ev.model) bot.meta.append(el("span", { class: "chip" }, ev.model));

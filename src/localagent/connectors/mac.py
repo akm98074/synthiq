@@ -18,13 +18,28 @@ def _at(offset: str, now: datetime) -> datetime:
     return now + timedelta(seconds=float(offset))
 
 
-def calendar_tools(runner: Runner) -> list[Tool]:
-    async def list_events(a: dict) -> ToolResult:
+APPLESCRIPT_NOTE = ("Note: repeating events may be missing because this Mac is using the AppleScript "
+                    "fallback. Allow the agent full access to calendars for complete results.")
+
+
+def _event_line(e: dict) -> str:
+    when = (f"{e['start'][:10]} (all day)" if e.get("all_day")
+            else f"{e['start'].replace('T', ' ')}–{e['end'][11:]}")
+    tags = [t for t in (
+        "repeats" if e.get("recurring") else "",
+        "invitation, not answered yet" if e.get("status") == "pending" else "",
+        "you declined" if e.get("status") == "declined" else "",
+        "tentative" if e.get("status") == "tentative" else "",
+    ) if t]
+    where = f" @ {e['location']}" if e.get("location") else ""
+    cal = " · ".join(x for x in (e.get("calendar"), e.get("account")) if x)
+    return (f"- {when} {e['title']}{where}" + (f" ({', '.join(tags)})" if tags else "")
+            + (f" [{cal}]" if cal else ""))
+
+
+def calendar_tools(runner: Runner, eventkit=None, backend: str = "auto") -> list[Tool]:
+    async def applescript_events(start: datetime, end: datetime) -> list[dict]:
         now = datetime.now()
-        start = parse_when(a["start"]) if a.get("start") else now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = parse_when(a["end"], end_of_day=True) if a.get("end") else start + timedelta(days=1)
-        if end <= start:
-            raise ToolError("'end' must be after 'start'.")
         out = await runner.run("calendar_list", [str(offset_seconds(start, now)), str(offset_seconds(end, now))])
         events = []
         for rec in parse_records(out):
@@ -34,16 +49,47 @@ def calendar_tools(runner: Runner) -> list[Tool]:
             st, en = _at(so, now), _at(eo, now)
             events.append({"title": title, "start": st.isoformat(timespec="minutes"),
                            "end": en.isoformat(timespec="minutes"), "location": loc,
-                           "calendar": cal, "all_day": allday == "true"})
-        events.sort(key=lambda e: e["start"])
+                           "calendar": cal, "account": "", "all_day": allday == "true",
+                           "recurring": False, "status": None})
+        return events
+
+    async def fetch(start: datetime, end: datetime) -> tuple[list[dict], str]:
+        """Prefer EventKit (expands repeating events); fall back to AppleScript."""
+        if backend != "applescript" and eventkit is not None and eventkit.installed():
+            status = eventkit.authorization()
+            if status == "not_determined":
+                await eventkit.request_access()
+                status = eventkit.authorization()
+            if status == "authorized":
+                try:
+                    return await eventkit.list(start, end), "EventKit"
+                except Exception as exc:  # noqa: BLE001 - fall back rather than fail the request
+                    if backend == "eventkit":
+                        raise ToolError(f"EventKit failed: {exc}") from exc
+                    return await applescript_events(start, end), "AppleScript"
+            if backend == "eventkit":
+                from .eventkit import DENIED_HELP
+                raise ToolError(DENIED_HELP)
+        elif backend == "eventkit":
+            raise ToolError("The EventKit calendar add-on isn't installed. Re-run the installer, or "
+                            "pipx inject localaiagent pyobjc-framework-EventKit")
+        return await applescript_events(start, end), "AppleScript"
+
+    async def list_events(a: dict) -> ToolResult:
+        now = datetime.now()
+        start = parse_when(a["start"]) if a.get("start") else now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = parse_when(a["end"], end_of_day=True) if a.get("end") else start + timedelta(days=1)
+        if end <= start:
+            raise ToolError("'end' must be after 'start'.")
+        events, source = await fetch(start, end)
+        events.sort(key=lambda e: (e["start"], e["title"]))
         span = f"{fmt_dt(start)} – {fmt_dt(end)}"
+        note = f"\n{APPLESCRIPT_NOTE}" if source == "AppleScript" else ""
         if not events:
-            return ToolResult(f"No events between {span}.", f"No events ({span})", [])
-        lines = [f"- {e['start'].replace('T', ' ')}–{e['end'][11:]} {e['title']}"
-                 + (f" @ {e['location']}" if e["location"] else "") + f" [{e['calendar']}]"
-                 for e in events]
-        return ToolResult(f"Events between {span}:\n" + "\n".join(lines),
-                          f"Found {len(events)} event(s)", events)
+            return ToolResult(f"No events between {span}.{note}", f"No events ({span}) via {source}", [])
+        body = "\n".join(_event_line(e) for e in events)
+        return ToolResult(f"All {len(events)} events between {span} (list every one):\n{body}{note}",
+                          f"Found {len(events)} event(s) via {source}", events)
 
     async def create_event(a: dict) -> ToolResult:
         now = datetime.now()

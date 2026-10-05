@@ -162,6 +162,15 @@
           <label>Prototype temperature <input name="prototype_temperature" type="number" min="1" max="200" step="1"></label>
           <label>System-One server URL <input name="systemone_url"></label>
         </fieldset>
+        <fieldset><legend>Connectors</legend>
+          <label>Calendar source
+            <select name="calendar_backend">
+              <option value="auto">Automatic: EventKit when allowed, otherwise AppleScript</option>
+              <option value="eventkit">EventKit only (complete, includes repeating events)</option>
+              <option value="applescript">AppleScript only (may miss repeating events)</option>
+            </select>
+          </label>
+        </fieldset>
         <fieldset><legend>Proactivity</legend>
           <label class="check"><input type="checkbox" name="proactive_enabled"> Let the agent reach out on its own</label>
           <label>Morning brief at <input name="brief_time" type="time"></label>

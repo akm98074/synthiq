@@ -62,6 +62,7 @@ class Settings:
     file_roots: str = "~/Downloads,~/Desktop,~/Documents"
     documents_dir: str = "~/Documents/LocalAIAgent"
     max_tool_steps: int = 5
+    calendar_backend: str = "auto"   # auto | eventkit | applescript
 
     # Proactivity (Step 3)
     proactive_enabled: bool = True
@@ -105,6 +106,8 @@ class Settings:
         for name in ("brief_time", "dream_time", "quiet_start", "quiet_end"):
             if not _valid_hhmm(getattr(self, name)):
                 raise ValueError(f"{name} must be a time like 08:00")
+        if self.calendar_backend not in ("auto", "eventkit", "applescript"):
+            raise ValueError("calendar_backend must be auto, eventkit or applescript")
         if not 5 <= self.check_every_minutes <= 720:
             raise ValueError("check_every_minutes must be between 5 and 720")
         if not 80 <= self.tts_rate <= 400:

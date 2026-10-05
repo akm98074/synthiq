@@ -15,7 +15,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, AsyncIterator
 
-from ..llm.ollama import OllamaError
+from ..llm.ollama import RESET, OllamaError
 from ..memory.store import MEMORY_KINDS
 from ..persona import system_prompt
 from ..tools.registry import candidates
@@ -169,6 +169,12 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
     reply: list[str] = []
     try:
         async for piece in rt.ollama.chat_stream(model, messages):
+            if RESET in piece:
+                reply.clear()
+                yield {"type": "reset"}
+                piece = piece.split(RESET)[-1]
+                if not piece:
+                    continue
             reply.append(piece)
             yield {"type": "token", "text": piece}
     except OllamaError as exc:

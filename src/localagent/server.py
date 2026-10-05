@@ -82,13 +82,13 @@ async def _warm_up(rt: Runtime) -> None:
 
 
 def create_app(settings: Settings | None = None, base: Path | None = None, runner=None,
-               stt=None, tts=None, scheduler: bool = True) -> FastAPI:
+               stt=None, tts=None, scheduler: bool = True, eventkit=None) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.rt = Runtime(settings, base, runner=runner, stt=stt, tts=tts)
+        app.state.rt = Runtime(settings, base, runner=runner, stt=stt, tts=tts, eventkit=eventkit)
         tasks = [asyncio.create_task(_warm_up(app.state.rt))]
         if scheduler:
             tasks.append(asyncio.create_task(app.state.rt.scheduler.loop()))

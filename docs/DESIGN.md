@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.4.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.4.1 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -187,6 +187,8 @@ user text
   → "done"
 ```
 
+Reasoning text the model leaks (`<think>…</think>`, or a stray closing `</think>` with no opening tag, which Qwen3 sometimes emits) is removed. When streamed text turns out to have been reasoning, a `reset` event clears it from the bubble. Replies are rendered with a minimal markdown renderer that escapes HTML first.
+
 Approving or declining resumes a paused run from its saved state (`/api/approvals/{id}/decide`, streamed): the tool runs, or the model is told it was declined, and the loop continues.
 
 ---
@@ -195,7 +197,7 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 
 | Connector | Tools (tier) | Mechanism |
 |---|---|---|
-| Calendar | `calendar_list_events` (read), `calendar_create_event` (write) | AppleScript |
+| Calendar | `calendar_list_events` (read), `calendar_create_event` (write) | Listing: **EventKit** (pyobjc; expands repeating events, includes every account, invitation status) with an AppleScript fallback that's labelled as possibly incomplete. Creating: AppleScript |
 | Reminders | `reminders_list` (read), `reminders_create` (write) | AppleScript |
 | Notes | `notes_search` (read), `notes_create` (draft) | AppleScript |
 | Mail | `mail_list`, `mail_followups`, `mail_read` (read), `mail_draft` (draft), `mail_send` (write) | AppleScript |
@@ -204,6 +206,7 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
 
 - **AppleScript safety:** the scripts are bundled files in `connectors/scripts/` and run with `osascript -`. All arguments are passed as **argv**, never pasted into script text, so model or user text can't inject AppleScript.
+- **EventKit:** reads the calendar store directly with `predicateForEventsWithStartDate_endDate_calendars_`, which expands repeating events. Access is requested once per process ("Full Access", attributed to Terminal); if access is denied or EventKit errors, listing falls back to AppleScript with a note. Setting: `calendar_backend` = auto, eventkit or applescript.
 - **Results** come back as records separated by ASCII control characters, and are parsed into structured data for the UI plus text for the model.
 - **Dates:** times cross the boundary as offsets in seconds from "now", which avoids locale-dependent date parsing.
 - **Files:** every path is resolved and checked to be inside `file_roots` (default `~/Downloads`, `~/Desktop`, `~/Documents`). Trash moves files to `~/.Trash`, so they can be recovered.
@@ -313,6 +316,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 | `prototype_temperature` | 30 | Softmax sharpness of the prototype classifier |
 | `memory_top_k` / `memory_min_similarity` | 5 / 0.35 | Recall breadth and threshold |
 | `max_tool_steps` | 5 | Tool-loop iterations per turn |
+| `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `file_roots` | ~/Downloads, ~/Desktop, ~/Documents | Files connector boundary |
 | `brief_time` / `dream_time` / `check_every_minutes` | 08:00 / 03:00 / 30 | Proactive schedule |
 | `quiet_start` / `quiet_end` / `max_nudges_per_day` | 22:00 / 07:30 / 6 | Interruption policy |
@@ -322,7 +326,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 56 pytest tests run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 69 pytest tests run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.
@@ -334,7 +338,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 
 Known limits:
 - The decision percentages aren't calibrated probabilities (see 4.8).
-- Recurring calendar events show only their first occurrence (an AppleScript limit).
+- Without calendar Full Access, the AppleScript fallback can miss repeating events. The tool says so in its result.
 - Mail search covers the Inbox only.
 - Proactivity runs only while the Mac is awake and the agent is running.
 - Notifications are attributed to Script Editor.

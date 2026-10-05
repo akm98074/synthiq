@@ -133,6 +133,9 @@ class OllamaClient:
                         yield out
                     if chunk.get("done"):
                         break
+                rest = filt.flush() + filt.tail()
+                if rest:
+                    yield rest
         except httpx.HTTPError as exc:
             raise OllamaError(f"Cannot reach Ollama at {self.base_url}: {exc}") from exc
 
@@ -158,7 +161,13 @@ class OllamaClient:
 
 
 def strip_think(text: str) -> str:
-    """Remove <think>...</think> blocks some reasoning models emit."""
+    """Remove <think>...</think> blocks some reasoning models emit.
+
+    Qwen3 sometimes emits reasoning that ends with </think> but has no opening tag;
+    in that case everything up to the last orphan </think> is reasoning.
+    """
+    if "</think>" in text and "<think>" not in text.split("</think>")[0]:
+        text = text.rsplit("</think>", 1)[1]
     while "<think>" in text:
         start = text.index("<think>")
         end = text.find("</think>", start)
@@ -169,14 +178,47 @@ def strip_think(text: str) -> str:
     return text.strip()
 
 
+RESET = "\x00RESET\x00"   # emitted when already-streamed text turns out to be reasoning
+
+
 class ThinkFilter:
-    """Streaming filter that drops <think>...</think> spans across chunk boundaries."""
+    """Streaming filter that drops reasoning text.
+
+    Handles <think>...</think> spans across chunk boundaries, and also an orphan
+    </think> near the start (reasoning without an opening tag): the first
+    HOLD_CHARS characters are buffered until it's clear which case applies.
+    """
+
+    HOLD_CHARS = 240
 
     def __init__(self) -> None:
         self._buf = ""
         self._inside = False
+        self._head = ""        # buffered start of the stream
+        self._head_done = False
 
     def feed(self, piece: str) -> str:
+        if not self._head_done:
+            self._head += piece
+            if "</think>" in self._head:
+                before, _, after = self._head.rpartition("</think>")
+                if "<think>" not in before:
+                    self._head_done = True
+                    return self._feed(after.lstrip("\n"))
+            if "<think>" in self._head or len(self._head) >= self.HOLD_CHARS:
+                self._head_done = True
+                return self._feed(self._head)
+            return ""
+        return self._feed(piece)
+
+    def flush(self) -> str:
+        """Call at end of stream: releases a short buffered head that had no reasoning."""
+        if not self._head_done:
+            self._head_done = True
+            return self._feed(self._head)
+        return ""
+
+    def _feed(self, piece: str) -> str:
         self._buf += piece
         out: list[str] = []
         while self._buf:
@@ -190,11 +232,19 @@ class ThinkFilter:
                 self._inside = False
             else:
                 start = self._buf.find("<think>")
+                close = self._buf.find("</think>")
+                if close != -1 and (start == -1 or close < start):
+                    # Orphan </think> after text was already released: that text was
+                    # reasoning. Tell the consumer to discard what it showed so far.
+                    self._buf = self._buf[close + len("</think>"):].lstrip("\n")
+                    out = [RESET]
+                    continue
                 if start == -1:
-                    # hold back a possible partial "<think" prefix
+                    # hold back a possible partial "<think" / "</think" prefix
                     safe = len(self._buf)
-                    for i in range(1, min(7, len(self._buf)) + 1):
-                        if "<think>".startswith(self._buf[-i:]):
+                    for i in range(1, min(8, len(self._buf)) + 1):
+                        tail = self._buf[-i:]
+                        if "<think>".startswith(tail) or "</think>".startswith(tail):
                             safe = len(self._buf) - i
                             break
                     out.append(self._buf[:safe])
@@ -204,6 +254,12 @@ class ThinkFilter:
                 self._buf = self._buf[start + len("<think>"):]
                 self._inside = True
         return "".join(out)
+
+    def tail(self) -> str:
+        """Anything held back at the very end (a partial-tag lookalike)."""
+        rest = "" if self._inside else self._buf
+        self._buf = ""
+        return rest
 
 
 def model_present(name: str, installed: list[dict[str, Any]]) -> bool:

@@ -14,6 +14,7 @@ from .llm.ollama import OllamaClient
 from .memory import identity
 from .memory.store import Store
 from .connectors.applescript import AppleScriptRunner
+from .connectors.eventkit import EventKitCalendar
 from .policy.engine import Audit, Policy
 from .tools.registry import build_tools, connector_status
 from .proactive.nudges import Nudges
@@ -24,7 +25,7 @@ from .voice.tts import SayTTS
 
 class Runtime:
     def __init__(self, settings: Settings, base: Path | None = None, runner=None,
-                 stt=None, tts=None, clock: Callable[[], float] = time.time):
+                 stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None):
         self.base = base or data_dir()
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
@@ -32,6 +33,10 @@ class Runtime:
         seed_store(self.store)
         self.runner = runner or AppleScriptRunner()
         self.mac_available = runner is not None or AppleScriptRunner.available()
+        # Real EventKit only when the real AppleScript runner is in use (never in tests
+        # that inject a fake runner, which would otherwise read the machine's calendars).
+        self.eventkit = eventkit if eventkit is not None else (
+            EventKitCalendar() if runner is None and AppleScriptRunner.available() else None)
         self.policy = Policy(self.store)
         self.audit = Audit(self.store)
         self.build_tools()
@@ -70,7 +75,7 @@ class Runtime:
         )
 
     def build_tools(self) -> None:
-        self.tools = build_tools(self.settings, self.runner, self.mac_available)
+        self.tools = build_tools(self.settings, self.runner, self.mac_available, self.eventkit)
 
     def connectors(self) -> list[dict]:
         return connector_status(self.settings, self.mac_available, self.tools)
