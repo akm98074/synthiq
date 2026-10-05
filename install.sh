@@ -2,8 +2,9 @@
 # LocalAIAgent installer for macOS (Apple Silicon).
 #
 # Run it WITHOUT sudo, from the folder containing the downloaded files:
-#   bash install.sh localaiagent-0.1.1-py3-none-any.whl
+#   bash install.sh localaiagent-0.1.2-py3-none-any.whl
 set -euo pipefail
+ORIG_PATH="$PATH"  # the PATH of the Terminal window that ran this script
 
 say()  { printf "\033[1;32m==>\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33mNote:\033[0m %s\n" "$*"; }
@@ -22,7 +23,7 @@ find_wheel() {
 WHEEL="${1:-$(find_wheel)}"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "Can't find the localaiagent .whl file.
        Put install.sh and the .whl in the same folder, cd into it, and run:
-         bash install.sh localaiagent-0.1.1-py3-none-any.whl"
+         bash install.sh localaiagent-0.1.2-py3-none-any.whl"
 WHEEL="$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")"
 
 [ "$(uname -s)" = "Darwin" ] || warn "this installer targets macOS; continuing anyway."
@@ -63,18 +64,33 @@ fi
 say "Installing LocalAIAgent from $(basename "$WHEEL")"
 pipx install --force "$WHEEL"
 
+# pipx puts the command in its bin dir (usually ~/.local/bin), which is often not
+# on PATH in the Terminal window that ran this script. Use the full path here and
+# link it into Homebrew's bin dir, which is already on PATH everywhere.
+BIN_DIR="$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || true)"
+[ -n "$BIN_DIR" ] || BIN_DIR="$HOME/.local/bin"
+AGENT="$BIN_DIR/localagent"
+[ -x "$AGENT" ] || die "pipx finished but $AGENT is missing. Please send the output above."
+
+BREW_BIN="$(brew --prefix)/bin"
+LINK="$BREW_BIN/localagent"
+if [ -L "$LINK" ] || [ ! -e "$LINK" ]; then
+  ln -sf "$AGENT" "$LINK" 2>/dev/null && say "Linked $LINK -> $AGENT" \
+    || warn "couldn't link into $BREW_BIN; use the full path below."
+else
+  warn "$LINK exists and isn't a link; leaving it alone."
+fi
+
 say "Downloading local models (about 4 GB the first time)"
-localagent setup
+"$AGENT" setup
 
 say "Checking everything"
-localagent doctor || true
+"$AGENT" doctor || true
 
-cat <<'EOF'
-
-Done. Start the agent with:
-
-    localagent start
-
-If your shell says "localagent: command not found", open a new Terminal window
-(pipx just added ~/.local/bin to your PATH) and try again.
-EOF
+echo
+if PATH="$ORIG_PATH" command -v localagent >/dev/null 2>&1; then
+  say "Done. Start the agent with:  localagent start"
+else
+  say "Done. Start the agent with:  $AGENT start"
+  echo "    To make plain 'localagent' work, run:  pipx ensurepath && source ~/.zshrc"
+fi

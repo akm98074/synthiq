@@ -1,4 +1,4 @@
-# Testing Step 1 (v0.1.1) on your Mac
+# Testing Step 1 (v0.1.2) on your Mac
 
 Allow about 30 minutes, most of it downloading models.
 
@@ -7,7 +7,7 @@ Allow about 30 minutes, most of it downloading models.
 Put all the downloaded files in one folder, open Terminal in that folder (`cd ~/Downloads` or wherever they are), and run the installer **without `sudo`**. Homebrew asks for your password itself if it needs it.
 
 ```bash
-bash install.sh localaiagent-0.1.1-py3-none-any.whl
+bash install.sh localaiagent-0.1.2-py3-none-any.whl
 localagent doctor        # every line should be ✅ (platform may be ✅ or ⚠️)
 localagent start         # opens http://127.0.0.1:8765
 ```
@@ -21,7 +21,7 @@ If anything fails here, please send the full terminal output.
 | `./install.sh: command not found` or `permission denied` | Downloads lose their "executable" flag. Use `bash install.sh …` instead of `./install.sh`. |
 | `Please don't run this with sudo` | Run it again without `sudo`. |
 | `Homebrew is required` | Install it from https://brew.sh, open a new Terminal window, re-run. |
-| `localagent: command not found` after installing | Open a new Terminal window (pipx just updated your PATH), or run `~/.local/bin/localagent start`. |
+| `localagent: command not found` after installing | Run `~/.local/bin/localagent start` now; to fix it for good run `pipx ensurepath && source ~/.zshrc` (or open a new Terminal window). |
 | `Ollama didn't start` | Open the Ollama app, or run `ollama serve` in another Terminal window, then re-run the installer. |
 
 ## 2. Chat and decisions
