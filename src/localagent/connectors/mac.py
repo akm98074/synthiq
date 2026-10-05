@@ -197,6 +197,26 @@ def mail_tools(runner: Runner) -> list[Tool]:
         return ToolResult(f"Opened a draft '{a['subject']}' to {to} in Mail for the user to review and send.",
                           f"Draft opened in Mail: {a['subject']}", {"to": to, "status": result})
 
+    async def followups(a: dict) -> ToolResult:
+        now = datetime.now()
+        out = await runner.run("mail_followups", [str(a.get("min_days", 1)), str(a.get("max_days", 7)),
+                                                  str(a.get("limit", 15))])
+        msgs = []
+        for rec in parse_records(out):
+            if len(rec) < 5:
+                continue
+            mid, subj, sender, recv, snippet = rec[:5]
+            received = _at(recv, now)
+            msgs.append({"id": mid, "subject": subj, "from": sender,
+                         "received": received.isoformat(timespec="minutes"),
+                         "days_ago": max(0, (now - received).days),
+                         "snippet": " ".join(snippet.split())[:200]})
+        if not msgs:
+            return ToolResult("No unreplied messages in that window.", "Nothing waiting on a reply", [])
+        lines = [f"- [id {m['id']}] {m['days_ago']}d ago from {m['from']}: {m['subject']}" for m in msgs]
+        return ToolResult("Inbox messages you haven't replied to:\n" + "\n".join(lines),
+                          f"{len(msgs)} message(s) without a reply", msgs)
+
     params = obj({"to": s("Recipient email address(es), comma-separated"),
                   "subject": s("Subject line"), "body": s("Plain-text body")}, ["to", "subject", "body"])
     return [
@@ -205,6 +225,12 @@ def mail_tools(runner: Runner) -> list[Tool]:
                   "limit": i("Max messages (default 10)"),
                   "unread_only": {"type": "boolean", "description": "Only unread messages"}}),
              "read", "mail", list_mail, lambda a: "Look at your inbox",
+             ("task", "computer_action", "quick_answer", "schedule")),
+        Tool("mail_followups", "List inbox messages the user has not replied to (default: 1-7 days old).",
+             obj({"min_days": i("Received at least this many days ago (default 1)"),
+                  "max_days": i("Received at most this many days ago (default 7)"),
+                  "limit": i("Max messages (default 15)")}),
+             "read", "mail", followups, lambda a: "Check for emails waiting on your reply",
              ("task", "computer_action", "quick_answer", "schedule")),
         Tool("mail_read", "Read one inbox message in full by its id (from mail_list).",
              obj({"id": i("Message id from mail_list")}, ["id"]),

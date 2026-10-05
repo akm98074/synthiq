@@ -61,6 +61,11 @@ def judge(text: str, schema: dict) -> dict:
             out[name] = intent
         elif name == "needs_memory_write":
             out[name] = "yes" if intent == "memory_write" else "no"
+        elif name == "should_nudge":
+            boring = ("newsletter", "sale", "noreply", "no-reply", "digest", "receipt", "focus time")
+            out[name] = "no" if any(b in t for b in boring) else "yes"
+        elif name == "urgency":
+            out[name] = "4"
         elif enum:
             out[name] = enum[min(1, len(enum) - 1)]
     return out
@@ -157,7 +162,10 @@ def create_fake_app() -> FastAPI:
                 "tool_calls": [{"function": {"name": name, "arguments": args}}]}}
         if isinstance(schema, dict):
             props = schema.get("properties", {})
-            if "facts" in props:
+            if "same" in props:
+                a = last.split("A:", 1)[1].split("\n", 1)[0].strip()
+                content = json.dumps({"same": True, "merged": a})
+            elif "facts" in props:
                 msg = last.rsplit("Message:", 1)[-1].strip()
                 facts = [{"text": msg, "kind": "preference" if "prefer" in msg.lower() else "fact"}] \
                     if msg.lower().startswith(("i'm", "i am", "my ", "remember", "i prefer", "i like")) else []

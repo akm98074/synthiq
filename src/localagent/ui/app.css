@@ -150,3 +150,32 @@ input, select {
 .approval-actions { flex-wrap: wrap; }
 .count { background: var(--t-danger); color: #fff; border-radius: 999px; font-size: 11px; padding: 0 6px; margin-left: 2px; }
 details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+
+/* step 3: nudges */
+.jobs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+.card.job { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.nudge { border-left: 4px solid var(--border); }
+.nudge.kind-followup, .nudge.kind-reminder { border-left-color: var(--t-write); }
+.nudge.kind-event { border-left-color: var(--t-draft); }
+.nudge.kind-brief { border-left-color: var(--accent); }
+.nudge-body { white-space: pre-wrap; margin-top: 6px; }
+.nudge-actions { margin-top: 8px; flex-wrap: wrap; }
+.urgency { color: var(--t-write); font-size: 10px; letter-spacing: 1px; margin-left: 6px; }
+.small { font-size: 12px; }
+.badge:not([class*="tier-"]) { color: var(--muted); }
+
+/* step 4: voice */
+.mic { width: 42px; height: 42px; flex: none; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); display: grid; place-items: center; cursor: pointer; touch-action: none; }
+.mic.recording { background: var(--t-danger); color: #fff; border-color: transparent; animation: pulse 1.2s infinite; }
+.mic.speaking { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+.mic.unavailable { opacity: .5; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--t-danger) 50%, transparent); }
+  100% { box-shadow: 0 0 0 12px transparent; } }
+@media (prefers-reduced-motion: reduce) { .mic.recording { animation: none; } }
+.voice-status { flex: 1; text-align: center; min-height: 1em; }
+.voice-status.error { color: var(--fail); }
+.voice-status.listening, .voice-status.speaking { color: var(--accent); }
+.composer-foot { gap: 10px; align-items: center; }
+.conv { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+.settings label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }

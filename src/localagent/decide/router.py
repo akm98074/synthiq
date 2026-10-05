@@ -44,16 +44,20 @@ class DecisionRouter:
         self.threshold = threshold
         self.questions = questions or STANDARD
 
-    def _needs_escalation(self, answers: dict[str, Answer]) -> bool:
-        for name in GATING:
+    def _needs_escalation(self, answers: dict[str, Answer], gating=GATING) -> bool:
+        for name in gating:
             ans = answers.get(name)
             if ans is None or ans.confidence < self.threshold:
                 return True
         return False
 
     async def decide(
-        self, text: str, context: str = "", log_it: bool = True, backend: str | None = None
+        self, text: str, context: str = "", log_it: bool = True, backend: str | None = None,
+        questions: list[Question] | None = None, gating: tuple[str, ...] | None = None,
     ) -> Decision:
+        """Answer `questions` (default: the standard chat set) about `text`."""
+        qs = questions or self.questions
+        gate = gating or GATING
         backend = backend or self.backend
         start = time.perf_counter()
         notes: list[str] = []
@@ -64,32 +68,32 @@ class DecisionRouter:
         if backend == "systemone":
             if self.systemone is not None:
                 try:
-                    answers = await self.systemone.decide(text, self.questions)
+                    answers = await self.systemone.decide(text, qs)
                 except Exception as exc:  # noqa: BLE001 - fall back on any failure
                     notes.append(f"systemone failed ({exc.__class__.__name__}); fell back to hybrid")
             # Fill gaps / low-confidence answers with the built-in hybrid path.
-            backend = "hybrid" if (not answers or self._needs_escalation(answers)) else "done"
+            backend = "hybrid" if (not answers or self._needs_escalation(answers, gate)) else "done"
             used = "systemone" if answers else "prototype"
 
         if backend in ("hybrid", "prototype"):
-            proto = await self.prototype.decide(text, self.questions)
+            proto = await self.prototype.decide(text, qs)
             for k, v in proto.items():
                 answers.setdefault(k, v)
             if used not in ("systemone",):
                 used = "prototype"
-            if backend == "hybrid" and self._needs_escalation(answers):
+            if backend == "hybrid" and self._needs_escalation(answers, gate):
                 try:
-                    judged = await self.judge.decide(text, self.questions, context, prior=answers)
+                    judged = await self.judge.decide(text, qs, context, prior=answers)
                     answers.update(judged)
                     escalated = True
                     used = f"{used}+slm"
                 except Exception as exc:  # noqa: BLE001
                     notes.append(f"slm escalation failed: {exc}")
         elif backend == "slm":
-            answers = await self.judge.decide(text, self.questions, context)
+            answers = await self.judge.decide(text, qs, context)
             used = "slm"
 
-        for q in self.questions:
+        for q in qs:
             if q.name not in answers:
                 answers[q.name] = _uniform(q)
                 notes.append(f"{q.name}: no answer, used uniform prior")

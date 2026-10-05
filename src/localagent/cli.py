@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -73,6 +74,7 @@ def setup(
     chat_model: Optional[str] = typer.Option(None, help="Ollama tag for the main chat model."),
     fast_model: Optional[str] = typer.Option(None, help="Ollama tag for the fast/judge model."),
     embed_model: Optional[str] = typer.Option(None, help="Ollama tag for the embedding model."),
+    voice: bool = typer.Option(False, "--voice", help="Also download the speech-to-text model (~1.6 GB)."),
 ) -> None:
     """Write the config and download the local models."""
     s = load_settings()
@@ -111,7 +113,28 @@ def setup(
 
     if pull and not asyncio.run(_pull()):
         raise typer.Exit(1)
+    if voice:
+        _setup_voice(s.stt_model)
     typer.secho("Setup complete. Run `localagent start`.", fg="green")
+
+
+def _setup_voice(model: str) -> None:
+    from .voice.stt import MLXWhisper
+
+    stt = MLXWhisper(model)
+    ok, reason = stt.status()
+    if not ok:
+        typer.secho(reason, fg="yellow")
+        return
+    typer.echo(f"Downloading speech model {model} (first time only, ~1.6 GB) ...")
+    import numpy as np
+
+    try:
+        asyncio.run(stt.transcribe(np.zeros(16000, dtype=np.float32)))
+    except Exception as exc:  # noqa: BLE001 - surface any download/runtime problem
+        typer.secho(f"Speech model setup failed: {exc}", fg="red")
+        raise typer.Exit(1)
+    typer.secho("Speech model ready.", fg="green")
 
 
 @app.command()
@@ -130,8 +153,8 @@ def start(
         return
 
     pid = _running_pid()
-    if pid and _healthy(url):
-        typer.echo(f"Already running (pid {pid}) at {url}")
+    if _healthy(url):
+        typer.echo(f"Already running at {url}" + (f" (pid {pid})" if pid else " (started at login)"))
     else:
         log = open(_log_file(), "a")
         proc = subprocess.Popen(
@@ -160,7 +183,10 @@ def stop() -> None:
     """Stop the background agent."""
     pid = _running_pid()
     if not pid:
-        typer.echo("Not running.")
+        if plist_path().exists() and _healthy(_url()):
+            typer.echo("The agent was started at login. Use `localagent autostart off` to stop it.")
+        else:
+            typer.echo("Not running.")
         return
     os.kill(pid, signal.SIGTERM)
     for _ in range(50):
@@ -178,10 +204,11 @@ def status() -> None:
     """Show whether the agent is running."""
     pid = _running_pid()
     url = _url()
-    if pid and _healthy(url):
-        typer.echo(f"Running (pid {pid}) at {url}")
+    if _healthy(url):
+        typer.echo(f"Running at {url}" + (f" (pid {pid})" if pid else " (started at login)"))
     else:
         typer.echo("Not running.")
+    typer.echo(f"Autostart: {'on' if plist_path().exists() else 'off'}")
     typer.echo(f"Data: {data_dir()}")
 
 
@@ -195,6 +222,64 @@ def doctor() -> None:
         typer.echo(f"{ICONS[c['status']]} {c['name']:<16} {c['detail']}")
     if any(c["status"] == "fail" for c in checks):
         raise typer.Exit(1)
+
+
+LAUNCH_LABEL = "com.localaiagent.agent"
+
+
+def plist_path() -> Path:
+    return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCH_LABEL}.plist"
+
+
+def plist_xml(python: str, log_file: Path, home: str | None = None) -> str:
+    env = (f"""
+  <key>EnvironmentVariables</key>
+  <dict><key>LOCALAGENT_HOME</key><string>{home}</string></dict>""" if home else "")
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>{LAUNCH_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array><string>{python}</string><string>-m</string><string>localagent.server</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>StandardOutPath</key><string>{log_file}</string>
+  <key>StandardErrorPath</key><string>{log_file}</string>{env}
+</dict>
+</plist>
+"""
+
+
+@app.command()
+def autostart(action: str = typer.Argument("status", help="on | off | status")) -> None:
+    """Start the agent automatically when you log in (optional)."""
+    path = plist_path()
+    uid = os.getuid()
+    launchctl = shutil.which("launchctl")
+    if action == "on":
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(plist_xml(sys.executable, _log_file(), os.environ.get("LOCALAGENT_HOME")))
+        if launchctl:
+            if _running_pid():
+                stop()
+            subprocess.run([launchctl, "bootout", f"gui/{uid}", str(path)], capture_output=True)
+            subprocess.run([launchctl, "bootstrap", f"gui/{uid}", str(path)], capture_output=True)
+        typer.secho(f"Autostart on ({path}). The agent now starts when you log in.", fg="green")
+        typer.echo("Note: macOS treats the auto-started agent as a different app from Terminal, so\n"
+                   "Calendar/Contacts/Mail may ask for permission again (or need switching on under\n"
+                   "System Settings > Privacy & Security > Automation). Run `localagent autostart off`\n"
+                   "to go back to starting it from Terminal.")
+    elif action == "off":
+        if launchctl and path.exists():
+            subprocess.run([launchctl, "bootout", f"gui/{uid}", str(path)], capture_output=True)
+        path.unlink(missing_ok=True)
+        typer.echo("Autostart off. Start the agent with `localagent start`.")
+    elif action == "status":
+        typer.echo(f"Autostart is {'on' if path.exists() else 'off'}.")
+    else:
+        typer.secho("Use: localagent autostart on|off|status", fg="red")
+        raise typer.Exit(2)
 
 
 @eval_app.command("decision")

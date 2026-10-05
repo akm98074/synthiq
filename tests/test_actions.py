@@ -118,7 +118,7 @@ def test_audit_chain_verifies_and_detects_tampering(action_client):
 def test_connectors_endpoint_and_test_button(action_client):
     cons = {c["id"]: c for c in action_client.get("/api/connectors").json()}
     assert cons["calendar"]["active"] and cons["files"]["active"]
-    assert {t["name"] for t in cons["mail"]["tools"]} == {"mail_list", "mail_read", "mail_draft", "mail_send"}
+    assert {t["name"] for t in cons["mail"]["tools"]} == {"mail_list", "mail_followups", "mail_read", "mail_draft", "mail_send"}
     r = action_client.post("/api/connectors/calendar/test").json()
     assert r["ok"] and "event" in r["message"]
     action_client.put("/api/settings", json={"enable_mail": False})

@@ -34,3 +34,20 @@ STANDARD: list[Question] = [INTENT, NEEDS_MEMORY_WRITE, COMPLEXITY]
 GATING = ("intent", "needs_memory_write")
 
 BY_NAME = {q.name: q for q in STANDARD}
+
+
+# ── Proactive triage: "is this worth interrupting the user for?" ──────────
+SHOULD_NUDGE = noul(
+    "should_nudge",
+    "Is this item worth interrupting the user about now (needs their reply or action soon)?",
+)
+
+URGENCY = score(
+    "urgency",
+    "How urgent is it for the user?",
+    ["can wait for weeks", "this week", "in the next day or two", "today", "right now"],
+)
+
+NUDGE_QUESTIONS: list[Question] = [SHOULD_NUDGE, URGENCY]
+NUDGE_GATING = ("should_nudge",)
+BY_NAME.update({q.name: q for q in NUDGE_QUESTIONS})

@@ -12,6 +12,7 @@
     <div class="brand"><span class="dot" id="status-dot" title="checking"></span><span id="agent-name">LocalAIAgent</span></div>
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="chat">Chat</button>
+      <button class="tab" data-tab="nudges">Nudges <span id="nudge-badge" class="count hidden">0</span></button>
       <button class="tab" data-tab="approvals">Approvals <span id="pending-badge" class="count hidden">0</span></button>
       <button class="tab" data-tab="activity">Activity</button>
       <button class="tab" data-tab="connectors">Connectors</button>
@@ -29,10 +30,27 @@
     <section id="tab-chat" class="panel active">
       <div id="messages" class="messages" aria-live="polite"></div>
       <form id="composer" class="composer">
+        <button type="button" id="mic" class="mic" aria-label="Talk" title="Hold to talk, or click to start/stop">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+        </button>
         <textarea id="input" rows="1" placeholder="Message your agent… (Enter to send, Shift+Enter for a new line)"></textarea>
         <button type="submit" id="send" class="primary">Send</button>
       </form>
-      <div class="composer-foot"><button class="link" id="clear-chat">Clear conversation</button><span>Everything stays on this Mac.</span></div>
+      <div class="composer-foot">
+        <button class="link" id="clear-chat">Clear conversation</button>
+        <span id="voice-status" class="voice-status" role="status"></span>
+        <label class="conv"><input type="checkbox" id="conversation"> Conversation mode</label>
+      </div>
+    </section>
+
+    <!-- Nudges -->
+    <section id="tab-nudges" class="panel">
+      <div class="panel-head">
+        <h2>Nudges</h2>
+        <p class="muted">What your agent noticed on its own: your morning brief, upcoming events, overdue reminders, emails waiting on a reply, and the overnight memory review. It only interrupts outside quiet hours, up to your daily limit.</p>
+      </div>
+      <div id="job-list" class="jobs"></div>
+      <div id="nudge-list" class="list"></div>
     </section>
 
     <!-- Approvals -->
@@ -144,11 +162,35 @@
           <label>Prototype temperature <input name="prototype_temperature" type="number" min="1" max="200" step="1"></label>
           <label>System-One server URL <input name="systemone_url"></label>
         </fieldset>
+        <fieldset><legend>Proactivity</legend>
+          <label class="check"><input type="checkbox" name="proactive_enabled"> Let the agent reach out on its own</label>
+          <label>Morning brief at <input name="brief_time" type="time"></label>
+          <label>Check calendar, reminders and email every (minutes) <input name="check_every_minutes" type="number" min="5" max="720"></label>
+          <label>Quiet hours from <input name="quiet_start" type="time"></label>
+          <label>Quiet hours until <input name="quiet_end" type="time"></label>
+          <label>Most interruptions per day <input name="max_nudges_per_day" type="number" min="0" max="50"></label>
+          <label>Flag unreplied emails up to (days old) <input name="followup_days" type="number" min="1" max="30"></label>
+          <label>Overnight memory review at <input name="dream_time" type="time"></label>
+          <label class="check"><input type="checkbox" name="notify_macos"> Show macOS notifications</label>
+        </fieldset>
+        <fieldset><legend>Voice</legend>
+          <label class="check"><input type="checkbox" name="voice_enabled"> Enable voice</label>
+          <label class="check"><input type="checkbox" name="speak_replies"> Speak replies to voice messages</label>
+          <label>Speech-to-text model <input name="stt_model" list="stt-models"></label>
+          <datalist id="stt-models">
+            <option value="mlx-community/whisper-large-v3-turbo">
+            <option value="mlx-community/whisper-small-mlx">
+            <option value="mlx-community/whisper-base.en-mlx">
+          </datalist>
+          <label>Voice <select name="tts_voice" id="tts-voice"><option value="">System default</option></select></label>
+          <label>Speaking rate (words per minute) <input name="tts_rate" type="number" min="80" max="400"></label>
+        </fieldset>
         <div class="row"><button class="primary">Save</button><span id="settings-status" class="muted"></span></div>
       </form>
     </section>
   </main>
 
   <script src="/ui/app.js"></script>
+  <script src="/ui/voice.js"></script>
 </body>
 </html>

@@ -1,70 +1,58 @@
-# Testing Step 2 (v0.2.0) on your Mac: connectors and approvals
+# Testing Steps 3 + 4 (v0.4.0): proactivity and voice
 
-To upgrade first, follow `UPGRADING.md` (it takes about 2 minutes, and your memories are kept). This checklist takes about 20 minutes.
+Upgrade first with `UPGRADING.md` (about 10 minutes, mostly the speech-model download). This checklist takes about 25 minutes.
 
-## 0. Install / upgrade
-
-```bash
-bash install.sh localaiagent-0.2.1-py3-none-any.whl     # no sudo
-localagent start
-localagent version                                     # 0.2.0
-```
-
-### If the install fails
+### If something fails
 
 | You see | Fix |
 |---|---|
-| `./install.sh: command not found` or `permission denied` | Use `bash install.sh …` instead of `./install.sh`. |
-| `Please don't run this with sudo` | Run it again without `sudo`. |
-| `Homebrew is required` | Install it from https://brew.sh, open a new Terminal window, re-run. |
 | `localagent: command not found` | Run `~/.local/bin/localagent start`; to fix it for good: `pipx ensurepath && source ~/.zshrc`. |
-| `Ollama didn't start` | Open the Ollama app (or `ollama serve` in another window), re-run. |
+| A tab is empty | Press **Cmd+Shift+R**. |
+| Mic button greyed out, with a tooltip about the "voice add-on" | `pipx inject localaiagent mlx-whisper`, then `localagent setup --no-pull --voice`, then restart. |
+| "Microphone blocked" | Allow the mic for `127.0.0.1:8765` in your browser's site settings (see `UPGRADING.md` step 5). |
+| No notifications | **System Settings → Notifications → Script Editor → Allow notifications**. Also check quiet hours in Settings. |
+| Calendar/Mail errors in a job | Same fix as before: **Privacy & Security → Automation → Terminal**. Then start the agent from Terminal. |
 
-## 1. Give permissions (once)
+## A. Proactivity (Nudges tab)
 
-Open the **Connectors** tab and press **Test** on each Apple app. macOS asks _"Terminal wants access to control …"_; click **Allow**.
-Each test should then show a green result (for example "Found 2 event(s)").
+1. Open **Nudges** and press **Run now** on **Morning brief**.
+   - Expected: a "☀️ Your brief for …" card with 4–8 lines about *your* real day, and the same brief in **Chat**.
+   - Check: does it mention only real events, reminders and emails? Nothing made up?
+2. Setup for the next step: in Reminders, create a reminder due **10 minutes ago** (for example "Test overdue"). In Calendar, create an event starting in **30 minutes**.
+   Press **Run now** on **Check calendar, reminders and email**.
+   - Expected: a ⏰ card for the reminder and a 📅 card for the event. A **macOS notification** appears, unless it's quiet hours.
+   - Also expected: ✉️ "Reply to …" cards for real emails from the last 7 days that you haven't answered. Newsletters and receipts should be skipped.
+3. Open **Decisions**. Each candidate email appears with **should nudge** (yes/no) and **urgency**. Correct a wrong one; the next check learns from it.
+4. Press **Run now** again. There should be **no duplicates**.
+5. On one card, press **Snooze 1 h**, then **Dismiss** another. Press **Ask about this** on a ✉️ card, and send it with e.g. "draft a reply saying yes".
+6. Press **Run now** on **Overnight memory review**. A 🌙 card says what it learned and merged. Check **Memory** for duplicates.
+7. In **Settings → Proactivity**, set quiet hours to cover *now* and run the check again: cards still appear, but no notification. Set it back afterwards.
+8. Leave the agent running for a while (or overnight). The check runs every 30 min, and the brief arrives at 08:00.
 
-If you clicked "Don't Allow" by mistake, go to **System Settings → Privacy & Security → Automation → Terminal** and switch the app on.
+## B. Voice (Chat tab)
 
-## 2. Things that run on their own (read / draft)
+1. **Hold the mic button**, say _"What's on my calendar today?"_, and release.
+   - Expected: "Transcribing…", then your words appear as a message, the agent checks your calendar, and **reads the answer aloud**.
+2. **Click the mic** (don't hold), say _"Remind me to stretch in ten minutes"_, and click again.
+   - Expected: an approval card, and it says _"I need your OK on screen…"_. Approve by clicking.
+3. **Space bar:** click on an empty part of the page, hold Space, say _"Any emails I haven't replied to?"_, then release.
+4. **Conversation mode:** tick it, press the mic once, and ask _"What's the weather like for a picnic?"_; pause about a second.
+   - Expected: it answers aloud and then **listens again by itself**. Ask a follow-up the same way.
+   - While it's speaking, **click the mic** to interrupt.
+5. **Settings → Voice:** pick another voice (for example _Samantha_ or _Daniel_) and a faster rate, then save and try again.
 
-In **Chat**, try these. You should see grey "✓ …" chips under the reply, and no approval card.
+## Please send back
 
-- `what's on my calendar today?` (then `…this week?`)
-- `what reminders do I have?`
-- `any unread email?`, then `read the first one`
-- `find the newest PDF in my Downloads`
-- `search my notes for travel`
-- `what's Sam's email address?` (use a real contact name)
-- `make a pdf packing list for a beach weekend`. It saves to `~/Documents/LocalAIAgent/` and Finder opens.
-- `make a spreadsheet of a monthly budget for rent, food, transport`
-- `draft an email to <your own address> saying the test worked`. A Mail compose window opens; nothing is sent.
+1. Install or upgrade output, if anything failed.
+2. **Brief:** was it accurate? Too long or too short?
+3. **Nudges:** which were right, which were noise, and which did it miss? Did notifications appear? Were there duplicates?
+4. **Voice:** time from releasing the mic to the text appearing; transcription accuracy (accent, background noise); voice quality; whether conversation mode feels natural.
+5. Any dropped or failed jobs (in **Nudges**, the job card shows "last: … (error)" or "(deferred)").
 
-## 3. Things that ask first (write / danger)
-
-- `remind me to call mom tomorrow at 6pm`. An **orange "write"** card appears. Pick **Just this once**, then **Approve**, and check that the reminder is in Reminders.
-- `add a calendar event "Test" tomorrow at 3pm`. Approve it with **Until the agent restarts**. Ask for a second event; it should **not** ask again.
-- **Approvals → Standing permissions**: **Revoke** that permission, ask again, and the card comes back.
-- `send an email to <your own address> with subject Hello`: **Decline**. Nothing is sent, and the agent acknowledges it.
-- Put a junk file in Downloads, then `move <file name> from Downloads to the trash`. A **red "danger"** card appears, and it only offers "Just this once". Approve it, and the file is in the Trash (use Finder to put it back).
-
-## 4. Activity log
-
-Open **Activity**. Every action, approval and refusal above is listed, and the banner says **"Audit chain intact"**.
-
-## 5. Feedback to send
-
-1. Install/upgrade problems (terminal output).
-2. Connector **Test** results: which apps worked and which didn't (copy the error text).
-3. For each prompt above: did it pick the right tool? Right dates/times? Any made-up results?
-4. Approval cards: clear enough? Were the scopes understandable?
-5. Speed: how long until the first tool chip appears, and until the final answer.
-6. Anything it should have done on its own or asked about, but didn't (or the reverse).
-
-Known limits in this step:
-- Recurring calendar events only show their first occurrence (an AppleScript limit).
-- Mail search looks at the unified Inbox only.
-- Calendar searches over very large calendars can take a few seconds.
+Known limits:
+- Proactivity only runs while the Mac is awake and the agent is running; missed jobs run once when it's back.
+- There's no always-listening wake word ("Hey Ari") yet. Use conversation mode instead.
+- The overnight review waits until the Mac is plugged in.
+- Notifications appear as "Script Editor".
 
 Logs: `~/Library/Application Support/LocalAIAgent/server.log`

@@ -4,21 +4,23 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 2 (v0.2.0) — connectors and approvals
+## Status: Steps 3 + 4 (v0.4.0) — proactivity and voice
 
 | Included | Comes later |
 |---|---|
-| Chat with streaming replies | Proactive nudges, nightly "dream" job (Step 3) |
-| Decision layer (intent, memorable?, complexity) with probabilities, latency and an eval harness | Voice (Step 4) |
-| Persistent memory, `about-me.md` identity file, edit and forget | Browser and Mac app actions (Step 5) |
-| **Connectors**: Calendar, Reminders, Notes, Mail, Contacts, Files, Documents (PDF/Excel) | Telegram / iMessage (Step 6) |
+| Chat with streaming replies | Browser and Mac app actions (Step 5) |
+| Decision layer (intent, memorable?, complexity; should-nudge, urgency) with probabilities and an eval harness | Telegram / iMessage (Step 6) |
+| Persistent memory, `about-me.md` identity file, edit and forget | Agent-to-agent, avatar, Windows/Linux (Step 7) |
+| **Connectors**: Calendar, Reminders, Notes, Mail, Contacts, Files, Documents (PDF/Excel) | |
 | **Approvals** with risk tiers and scopes; hash-chained **Activity** log | |
+| **Proactivity**: morning brief, nudges (events, reminders, unreplied mail), quiet hours, overnight memory review | |
+| **Voice**: push-to-talk, conversation mode, on-device Whisper, spoken replies | |
 | Learning from your corrections; model manager; persona settings | |
 
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.2.1-py3-none-any.whl   # installs pipx + Ollama via Homebrew, pulls models
+bash install.sh localaiagent-0.4.0-py3-none-any.whl   # installs pipx + Ollama via Homebrew, pulls models
 localagent start                                     # opens http://127.0.0.1:8765
 ```
 
@@ -27,7 +29,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.2.1-py3-none-any.whl
+pipx install ./localaiagent-0.4.0-py3-none-any.whl
 localagent setup     # downloads qwen3:4b, qwen3:1.7b, all-minilm (~4 GB)
 localagent start
 ```
@@ -40,6 +42,8 @@ localagent start
 | `localagent start [-f] [--no-open]` | Start in the background (or foreground) and open the UI |
 | `localagent stop` / `status` | Manage the background server |
 | `localagent doctor` | Check Ollama, models, RAM, data directory |
+| `localagent setup --voice` | Download the speech-recognition model |
+| `localagent autostart on\|off\|status` | Start the agent at login (optional) |
 | `localagent eval decision [--file my.jsonl] [--backend hybrid\|prototype\|slm\|systemone]` | Phase-0 gate: accuracy, macro-F1, calibration (ECE), latency |
 
 Data lives in `~/Library/Application Support/LocalAIAgent/` (database, `identity/about-me.md`, config, logs, eval reports). The server binds to `127.0.0.1` only.

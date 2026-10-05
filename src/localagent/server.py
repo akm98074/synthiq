@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from importlib import resources
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -19,8 +19,9 @@ from .agent.chat import handle_turn, resume_after_decision
 from .policy.engine import ApprovalError
 from .tools.base import ToolError
 from .tools.registry import TEST_CALLS
+from .voice.stt import AudioError, read_wav
 from .config import Settings, data_dir, load_settings
-from .decide.questions import STANDARD
+from .decide.questions import BY_NAME
 from .doctor import run_checks
 from .llm import models as model_mgr
 from .llm.ollama import OllamaError
@@ -54,6 +55,14 @@ class ModelIn(BaseModel):
     model: str
 
 
+class SnoozeIn(BaseModel):
+    hours: float = 1.0
+
+
+class SpeakIn(BaseModel):
+    text: str
+
+
 class DecisionIn(BaseModel):
     approve: bool
     scope: str = "once"
@@ -72,16 +81,21 @@ async def _warm_up(rt: Runtime) -> None:
         log.info("Warm-up skipped: %s", exc)
 
 
-def create_app(settings: Settings | None = None, base: Path | None = None, runner=None) -> FastAPI:
+def create_app(settings: Settings | None = None, base: Path | None = None, runner=None,
+               stt=None, tts=None, scheduler: bool = True) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.rt = Runtime(settings, base, runner=runner)
-        warm = asyncio.create_task(_warm_up(app.state.rt))
+        app.state.rt = Runtime(settings, base, runner=runner, stt=stt, tts=tts)
+        tasks = [asyncio.create_task(_warm_up(app.state.rt))]
+        if scheduler:
+            tasks.append(asyncio.create_task(app.state.rt.scheduler.loop()))
         yield
-        warm.cancel()
+        for t in tasks:
+            t.cancel()
+        await app.state.rt.tts.stop()
         await app.state.rt.aclose()
 
     app = FastAPI(title="LocalAIAgent", version=__version__, lifespan=lifespan)
@@ -104,7 +118,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
     @app.get("/", include_in_schema=False)
     async def index() -> HTMLResponse:
         html = (UI_DIR / "index.html").read_text()
-        for asset in ("/ui/app.js", "/ui/app.css"):
+        for asset in ("/ui/app.js", "/ui/voice.js", "/ui/app.css"):
             html = html.replace(f'"{asset}"', f'"{asset}?v={__version__}"')
         return HTMLResponse(html)
 
@@ -120,7 +134,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
     @app.get("/api/questions")
     async def questions() -> list[dict]:
         return [{"name": q.name, "kind": q.kind, "prompt": q.prompt, "options": q.options}
-                for q in STANDARD]
+                for q in BY_NAME.values()]
 
     # ── chat ──────────────────────────────────────────────────────────────
     @app.post("/api/chat")
@@ -327,6 +341,84 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
     @app.get("/api/audit/verify")
     async def audit_verify() -> dict:
         return rt().audit.verify()
+
+    # ── proactivity: nudges and jobs ──────────────────────────────────────
+    @app.get("/api/nudges")
+    async def nudges(include_done: bool = False, limit: int = 100) -> dict:
+        n = rt().nudges
+        return {"items": n.list(include_done, limit), "new": n.count_new()}
+
+    @app.post("/api/nudges/{nudge_id}/dismiss")
+    async def dismiss_nudge(nudge_id: int) -> dict:
+        if not rt().nudges.dismiss(nudge_id):
+            raise HTTPException(404, "Nudge not found")
+        return {"ok": True}
+
+    @app.post("/api/nudges/{nudge_id}/snooze")
+    async def snooze_nudge(nudge_id: int, body: SnoozeIn) -> dict:
+        if not rt().nudges.snooze(nudge_id, body.hours):
+            raise HTTPException(404, "Nudge not found")
+        return {"ok": True}
+
+    @app.get("/api/jobs")
+    async def jobs() -> dict:
+        r = rt()
+        return {"enabled": r.scheduler.enabled, "jobs": r.scheduler.jobs()}
+
+    @app.post("/api/jobs/{name}/run")
+    async def run_job(name: str) -> dict:
+        try:
+            result = await rt().scheduler.run(name, manual=True)
+        except KeyError as exc:
+            raise HTTPException(404, "Unknown job") from exc
+        except OllamaError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return result
+
+    # ── voice ─────────────────────────────────────────────────────────────
+    @app.get("/api/voice/status")
+    async def voice_status() -> dict:
+        r = rt()
+        stt_ok, reason = r.stt.status()
+        return {
+            "enabled": r.settings.voice_enabled,
+            "stt": {"available": stt_ok, "reason": reason, "engine": r.stt.name,
+                    "model": getattr(r.stt, "model", None)},
+            "tts": {"available": r.tts.available(), "engine": r.tts.name,
+                    "voices": await r.tts.voices(), "speaking": r.tts.speaking},
+            "speak_replies": r.settings.speak_replies,
+        }
+
+    @app.post("/api/voice/transcribe")
+    async def transcribe(request: Request) -> dict:
+        r = rt()
+        data = await request.body()
+        if not data:
+            raise HTTPException(400, "No audio received")
+        try:
+            audio = read_wav(data)
+        except AudioError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        seconds = round(len(audio) / 16000, 2)
+        if seconds < 0.3:
+            return {"text": "", "seconds": seconds, "ms": 0}
+        try:
+            result = await r.stt.transcribe(audio)
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {**result, "seconds": seconds}
+
+    @app.post("/api/voice/speak")
+    async def speak(body: SpeakIn) -> dict:
+        r = rt()
+        if not r.tts.available():
+            raise HTTPException(503, "Speech output needs macOS (the 'say' command).")
+        finished = await r.tts.speak(body.text)
+        return {"ok": True, "finished": finished}
+
+    @app.post("/api/voice/stop")
+    async def stop_speaking() -> dict:
+        return {"stopped": await rt().tts.stop()}
 
     # ── settings ──────────────────────────────────────────────────────────
     @app.get("/api/settings")

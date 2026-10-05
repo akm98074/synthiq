@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS examples (
   created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_examples_q ON examples(question);
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 """
 
 MEMORY_KINDS = ("preference", "fact", "person", "place", "routine")
@@ -120,6 +124,25 @@ class Store:
     def _query(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
         with self._lock:
             return self.db.execute(sql, params).fetchall()
+
+    # ── small key/value state ─────────────────────────────────────────────
+    def meta_get(self, key: str) -> str | None:
+        rows = self._query("SELECT value FROM meta WHERE key=?", (key,))
+        return rows[0]["value"] if rows else None
+
+    def meta_set(self, key: str, value: str) -> None:
+        self._exec("INSERT INTO meta(key, value) VALUES (?, ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+    def user_messages_since(self, ts: float, limit: int = 60) -> list[str]:
+        rows = self._query("SELECT content FROM messages WHERE role='user' AND created_at > ? "
+                           "ORDER BY id DESC LIMIT ?", (ts, limit))
+        return [r["content"] for r in reversed(rows)]
+
+    def memory_vectors(self, embed_model: str) -> list[tuple[int, str, np.ndarray]]:
+        rows = self._query("SELECT id, text, embedding FROM memories WHERE embedding IS NOT NULL "
+                           "AND embed_model=? ORDER BY id", (embed_model,))
+        return [(r["id"], r["text"], from_blob(r["embedding"])) for r in rows]
 
     # ── messages ──────────────────────────────────────────────────────────
     def add_message(self, role: str, content: str, decision_id: int | None = None) -> int:
@@ -189,6 +212,10 @@ class Store:
         if source:
             return self._query("SELECT COUNT(*) c FROM examples WHERE source=?", (source,))[0]["c"]
         return self._query("SELECT COUNT(*) c FROM examples")[0]["c"]
+
+    def count_examples_for(self, question: str, source: str) -> int:
+        return self._query("SELECT COUNT(*) c FROM examples WHERE question=? AND source=?",
+                           (question, source))[0]["c"]
 
     def add_example(
         self,

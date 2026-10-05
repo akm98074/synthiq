@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "localaiagent"
-version = "0.2.1"
+version = "0.4.0"
 description = "Local-first personal AI agent: on-device SLMs via Ollama with a Jev-style decision layer"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+voice = ["mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'"]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "build>=1.2"]
 
 [project.scripts]

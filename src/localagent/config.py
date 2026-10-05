@@ -63,6 +63,24 @@ class Settings:
     documents_dir: str = "~/Documents/LocalAIAgent"
     max_tool_steps: int = 5
 
+    # Proactivity (Step 3)
+    proactive_enabled: bool = True
+    brief_time: str = "08:00"
+    dream_time: str = "03:00"
+    check_every_minutes: int = 30
+    quiet_start: str = "22:00"
+    quiet_end: str = "07:30"
+    max_nudges_per_day: int = 6
+    followup_days: int = 7
+    notify_macos: bool = True
+
+    # Voice (Step 4)
+    voice_enabled: bool = True
+    stt_model: str = "mlx-community/whisper-large-v3-turbo"
+    tts_voice: str = ""
+    tts_rate: int = 190
+    speak_replies: bool = True
+
     def update(self, values: dict) -> "Settings":
         known = {f.name: f.type for f in fields(self)}
         for key, value in values.items():
@@ -84,10 +102,25 @@ class Settings:
             raise ValueError("confidence_threshold must be between 0 and 1")
         if not 1 <= self.max_tool_steps <= 20:
             raise ValueError("max_tool_steps must be between 1 and 20")
+        for name in ("brief_time", "dream_time", "quiet_start", "quiet_end"):
+            if not _valid_hhmm(getattr(self, name)):
+                raise ValueError(f"{name} must be a time like 08:00")
+        if not 5 <= self.check_every_minutes <= 720:
+            raise ValueError("check_every_minutes must be between 5 and 720")
+        if not 80 <= self.tts_rate <= 400:
+            raise ValueError("tts_rate must be between 80 and 400")
         return self
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _valid_hhmm(value: str) -> bool:
+    try:
+        h, m = value.split(":")
+        return 0 <= int(h) < 24 and 0 <= int(m) < 60
+    except ValueError:
+        return False
 
 
 def config_path(base: Path | None = None) -> Path:

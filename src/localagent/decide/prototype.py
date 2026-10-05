@@ -37,16 +37,26 @@ def load_jsonl(name: str) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
+NUDGE_SEED_FILE = "nudge_seed.jsonl"
+NUDGE_COLUMNS = {
+    "nudge": ("should_nudge", lambda v: "yes" if v else "no"),
+    "urgency": ("urgency", lambda v: str(int(v))),
+}
+SEED_SETS = [(SEED_FILE, SEED_COLUMNS), (NUDGE_SEED_FILE, NUDGE_COLUMNS)]
+
+
 def seed_store(store: Store) -> int:
-    """Insert the shipped seed examples once. Returns the number inserted."""
-    if store.count_examples("seed"):
-        return 0
+    """Insert each shipped seed set once (also on upgrade). Returns rows inserted."""
     n = 0
-    for row in load_jsonl(SEED_FILE):
-        for column, (question, fmt) in SEED_COLUMNS.items():
-            if column in row:
-                store.add_example(question, fmt(row[column]), row["text"], source="seed")
-                n += 1
+    for filename, columns in SEED_SETS:
+        first_question = next(iter(columns.values()))[0]
+        if store.count_examples_for(first_question, "seed"):
+            continue
+        for row in load_jsonl(filename):
+            for column, (question, fmt) in columns.items():
+                if column in row:
+                    store.add_example(question, fmt(row[column]), row["text"], source="seed")
+                    n += 1
     return n
 
 

@@ -68,6 +68,9 @@ class FakeRunner:
             "mail_read": f"Lunch?{self.US}Sam{self.US}-600{self.US}Are you free tomorrow?",
             "mail_compose": "draft",
             "contacts_find": f"Sam Lee{self.US}sam@example.com,{self.US}+1 555,{self.RS}",
+            "mail_followups": (f"7{self.US}Can you review the deck?{self.US}Priya <priya@acme.com>{self.US}-172800{self.US}Need comments by Thursday{self.RS}"
+                               f"8{self.US}Weekly newsletter{self.US}News <newsletter@substack.com>{self.US}-86400{self.US}Top stories{self.RS}"),
+            "notify": "ok",
         }
 
     async def run(self, name, args):
@@ -106,4 +109,62 @@ def action_client(fake_ollama, home, files_home, fake_runner):
     with TestClient(create_app(s, home, runner=fake_runner)) as c:
         c.runner = fake_runner
         c.files_home = files_home
+        yield c
+
+
+class FakeSTT:
+    name = "fake-stt"
+    model = "fake-model"
+
+    def __init__(self, text="what's on my calendar today?"):
+        self.text = text
+        self.calls = []
+
+    @staticmethod
+    def status():
+        return True, ""
+
+    async def transcribe(self, audio):
+        self.calls.append(len(audio))
+        return {"text": self.text, "language": "en", "ms": 5}
+
+
+class FakeTTS:
+    name = "fake-tts"
+
+    def __init__(self):
+        self.spoken = []
+        self.stopped = 0
+        self.speaking = False
+
+    @staticmethod
+    def available():
+        return True
+
+    async def voices(self):
+        return ["Samantha", "Daniel"]
+
+    async def speak(self, text):
+        self.spoken.append(text)
+        return True
+
+    async def stop(self):
+        self.stopped += 1
+        return False
+
+
+@pytest.fixture
+def voice_client(fake_ollama, home, files_home, fake_runner):
+    from fastapi.testclient import TestClient
+
+    from localagent.config import Settings, save_settings
+    from localagent.server import create_app
+
+    s = Settings(ollama_url=fake_ollama.url, confidence_threshold=1.0, quiet_start="00:00", quiet_end="00:00",
+                 file_roots=",".join(str(files_home / d) for d in ("Downloads", "Desktop", "Documents")),
+                 documents_dir=str(files_home / "Documents" / "LocalAIAgent"))
+    save_settings(s, home)
+    stt, tts = FakeSTT(), FakeTTS()
+    with TestClient(create_app(s, home, runner=fake_runner, stt=stt, tts=tts, scheduler=False)) as c:
+        c.runner, c.stt, c.tts = fake_runner, stt, tts
         yield c

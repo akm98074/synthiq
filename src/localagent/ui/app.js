@@ -39,7 +39,7 @@ let questions = [];
 let settings = {};
 
 /* ── tabs ─────────────────────────────────────────────────────────────── */
-const loaders = { decisions: loadDecisions, memory: loadMemory, models: loadModels, settings: loadSettings,
+const loaders = { nudges: loadNudges, decisions: loadDecisions, memory: loadMemory, models: loadModels, settings: loadSettings,
   approvals: loadApprovals, activity: loadActivity, connectors: loadConnectors };
 document.querySelectorAll(".tab").forEach((btn) =>
   btn.addEventListener("click", () => {
@@ -194,12 +194,14 @@ async function streamInto(res, bot, user) {
   }
   if (!ctx.got) bot.bubble.textContent = ctx.paused ? "I need your OK before I do this:" : "(no reply)";
   messagesEl.scrollTop = messagesEl.scrollHeight;
+  return ctx;
 }
 
 let sending = false;
 async function send() {
   const text = input.value.trim();
-  if (!text || sending) return;
+  if (!text || sending) return null;
+  let result = null;
   sending = true;
   $("#send").disabled = true;
   input.value = "";
@@ -211,7 +213,8 @@ async function send() {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
     });
     if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    await streamInto(res, bot, user);
+    const ctx = await streamInto(res, bot, user);
+    result = { text: ctx.got, paused: ctx.paused };
   } catch (err) {
     bot.bubble.textContent = "(no reply)";
     bot.node.append(el("div", { class: "error" }, String(err.message || err)));
@@ -220,6 +223,7 @@ async function send() {
     $("#send").disabled = false;
     input.focus();
   }
+  return result;
 }
 
 function autosize() { input.style.height = "auto"; input.style.height = `${Math.min(input.scrollHeight, 200)}px`; }
@@ -388,21 +392,87 @@ async function pullModel(name, btn) {
 async function loadSettings() {
   settings = await api("/api/settings");
   const form = $("#settings-form");
-  for (const [k, v] of Object.entries(settings)) if (form.elements[k]) form.elements[k].value = v;
+  try {
+    const vs = await api("/api/voice/status");
+    $("#tts-voice").replaceChildren(el("option", { value: "" }, "System default"),
+      ...vs.tts.voices.map((v) => el("option", { value: v }, v)));
+  } catch (_) {}
+  for (const [k, v] of Object.entries(settings)) {
+    const f = form.elements[k];
+    if (!f) continue;
+    if (f.type === "checkbox") f.checked = Boolean(v); else f.value = v;
+  }
 }
 
 $("#settings-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.target;
   const values = {};
-  for (const k of Object.keys(settings)) if (form.elements[k]) values[k] = form.elements[k].value;
+  for (const k of Object.keys(settings)) {
+    const f = form.elements[k];
+    if (f) values[k] = f.type === "checkbox" ? f.checked : f.value;
+  }
   try {
     settings = await api("/api/settings", { method: "PUT", body: values });
     $("#settings-status").textContent = "Saved.";
     $("#agent-name").textContent = settings.agent_name;
+    window.loadVoiceStatus?.();
   } catch (err) { $("#settings-status").textContent = err.message; }
   setTimeout(() => ($("#settings-status").textContent = ""), 3000);
 });
+
+/* ── nudges ───────────────────────────────────────────────────────────── */
+const KIND_ICON = { brief: "☀️", event: "📅", reminder: "⏰", followup: "✉️", dream: "🌙" };
+
+async function refreshNudgeBadge() {
+  try {
+    const { new: n } = await api("/api/nudges?limit=50");
+    const b = $("#nudge-badge");
+    b.textContent = n;
+    b.classList.toggle("hidden", !n);
+  } catch (_) {}
+}
+
+function when(ts) {
+  const d = new Date(ts * 1000);
+  const today = new Date().toDateString() === d.toDateString();
+  return today ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+async function loadNudges() {
+  const [{ items }, jobs] = await Promise.all([api("/api/nudges"), api("/api/jobs")]);
+  $("#job-list").replaceChildren(
+    ...(jobs.enabled ? [] : [el("div", { class: "card status-warn" }, "The agent won't reach out on its own: proactivity is off in Settings.")]),
+    ...jobs.jobs.map((j) => {
+      const btn = el("button", { class: "ghost", onclick: async () => {
+        btn.disabled = true; btn.textContent = "Running…";
+        try { await api(`/api/jobs/${j.name}/run`, { method: "POST" }); }
+        catch (err) { alert(err.message); }
+        loadNudges(); refreshNudgeBadge();
+      } }, "Run now");
+      return el("div", { class: "card job" },
+        el("div", {}, el("strong", {}, j.title),
+          el("div", { class: "muted" }, `Next: ${j.next_run ? when(j.next_run) : "—"}`
+            + (j.last_run ? ` · last: ${when(j.last_run)} (${j.last_status})` : ""))),
+        btn);
+    }));
+  $("#nudge-list").replaceChildren(...(items.length ? items.map((n) => el("div", { class: `card nudge kind-${n.kind}` },
+      el("div", { class: "card-row" },
+        el("span", {}, `${KIND_ICON[n.kind] || "•"} `, el("strong", {}, n.title), " ",
+          el("span", { class: "badge" }, n.label),
+          n.kind !== "brief" && n.kind !== "dream" ? el("span", { class: "urgency", title: `urgency ${n.urgency}/5` }, "●".repeat(n.urgency)) : null),
+        el("span", { class: "muted" }, when(n.created_at))),
+      n.body ? el("div", { class: "nudge-body" }, n.body) : null,
+      n.data?.silent_reason ? el("div", { class: "muted small" }, `Not notified: ${n.data.silent_reason}`) : null,
+      el("div", { class: "row nudge-actions" },
+        el("button", { class: "ghost", onclick: () => {
+          input.value = `About "${n.title}" (${n.body.split("\n")[0]}): `;
+          document.querySelector("button[data-tab=chat]").click(); input.focus(); autosize();
+        } }, "Ask about this"),
+        el("button", { class: "ghost", onclick: async () => { await api(`/api/nudges/${n.id}/snooze`, { method: "POST", body: { hours: 1 } }); loadNudges(); refreshNudgeBadge(); } }, "Snooze 1 h"),
+        el("button", { class: "ghost", onclick: async () => { await api(`/api/nudges/${n.id}/dismiss`, { method: "POST" }); loadNudges(); refreshNudgeBadge(); } }, "Dismiss"))))
+    : [el("p", { class: "muted" }, "Nothing yet. Press Run now on a job above to try it.")]));
+}
 
 /* ── approvals ────────────────────────────────────────────────────────── */
 async function refreshPendingBadge() {
@@ -504,6 +574,8 @@ async function boot() {
   } catch (_) {}
   await loadHistory();
   refreshPendingBadge();
+  refreshNudgeBadge();
+  setInterval(() => { refreshNudgeBadge(); refreshPendingBadge(); }, 60000);
   try {
     const checks = await api("/api/doctor");
     const failing = checks.filter((c) => c.status === "fail");

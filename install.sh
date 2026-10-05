@@ -2,7 +2,7 @@
 # LocalAIAgent installer for macOS (Apple Silicon).
 #
 # Run it WITHOUT sudo, from the folder containing the downloaded files:
-#   bash install.sh localaiagent-0.2.1-py3-none-any.whl
+#   bash install.sh localaiagent-0.4.0-py3-none-any.whl
 set -euo pipefail
 ORIG_PATH="$PATH"  # the PATH of the Terminal window that ran this script
 
@@ -23,7 +23,7 @@ find_wheel() {
 WHEEL="${1:-$(find_wheel)}"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "Can't find the localaiagent .whl file.
        Put install.sh and the .whl in the same folder, cd into it, and run:
-         bash install.sh localaiagent-0.2.1-py3-none-any.whl"
+         bash install.sh localaiagent-0.4.0-py3-none-any.whl"
 WHEEL="$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")"
 
 [ "$(uname -s)" = "Darwin" ] || warn "this installer targets macOS; continuing anyway."
@@ -90,8 +90,18 @@ else
   warn "$LINK exists and isn't a link; leaving it alone."
 fi
 
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+  say "Adding the voice add-on (on-device speech recognition)"
+  pipx inject localaiagent "mlx-whisper>=0.4" || warn "voice add-on failed to install; text chat still works."
+fi
+
 say "Downloading local models (about 4 GB the first time)"
 "$AGENT" setup
+
+if [ "${LOCALAGENT_VOICE:-1}" != "0" ] && [ "$(uname -m)" = "arm64" ]; then
+  say "Downloading the speech model (about 1.6 GB the first time; skip with LOCALAGENT_VOICE=0)"
+  "$AGENT" setup --no-pull --voice || warn "speech model download failed; run 'localagent setup --voice' later."
+fi
 
 say "Checking everything"
 "$AGENT" doctor || true

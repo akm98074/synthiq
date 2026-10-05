@@ -1,7 +1,9 @@
 """Wires settings, storage, the model client and the decision layer together."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
+from typing import Callable
 
 from .config import Settings, data_dir, save_settings
 from .decide.prototype import PrototypeClassifier, seed_store
@@ -14,10 +16,15 @@ from .memory.store import Store
 from .connectors.applescript import AppleScriptRunner
 from .policy.engine import Audit, Policy
 from .tools.registry import build_tools, connector_status
+from .proactive.nudges import Nudges
+from .proactive.scheduler import Scheduler
+from .voice.stt import MLXWhisper
+from .voice.tts import SayTTS
 
 
 class Runtime:
-    def __init__(self, settings: Settings, base: Path | None = None, runner=None):
+    def __init__(self, settings: Settings, base: Path | None = None, runner=None,
+                 stt=None, tts=None, clock: Callable[[], float] = time.time):
         self.base = base or data_dir()
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
@@ -28,11 +35,27 @@ class Runtime:
         self.policy = Policy(self.store)
         self.audit = Audit(self.store)
         self.build_tools()
+        self.clock = clock
+        self.nudges = Nudges(self.store, settings,
+                             notifier=self.notify if self.mac_available else None, clock=clock)
+        self.scheduler = Scheduler(self.store, clock)
+        self.stt = stt or MLXWhisper(settings.stt_model)
+        self.tts = tts or SayTTS(settings.tts_voice, settings.tts_rate)
         self.identity_path = self.base / "identity" / "about-me.md"
         self.ollama = OllamaClient(settings.ollama_url)
         self._build_decision_layer()
         if not self.identity_path.exists():
             self.write_identity()
+        self.register_jobs()
+
+    def register_jobs(self) -> None:
+        from .proactive.jobs import job_specs  # local import: jobs imports the chat agent
+
+        self.scheduler.register(job_specs(self))
+        self.scheduler.enabled = self.settings.proactive_enabled
+
+    async def notify(self, title: str, subtitle: str, body: str) -> None:
+        await self.runner.run("notify", [title, body, subtitle])
 
     def _build_decision_layer(self) -> None:
         s = self.settings
@@ -76,6 +99,11 @@ class Runtime:
             self.ollama = OllamaClient(self.settings.ollama_url)
         self._build_decision_layer()
         self.build_tools()
+        self.register_jobs()
+        if hasattr(self.stt, "model"):
+            self.stt.model = self.settings.stt_model
+        if isinstance(self.tts, SayTTS):
+            self.tts.voice, self.tts.rate = self.settings.tts_voice, self.settings.tts_rate
         return self.settings
 
     async def aclose(self) -> None:
