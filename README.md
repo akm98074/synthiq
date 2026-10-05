@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How to test this step: [`TESTING.md`](TESTING.md).
 
-## Status: Step 1 (v0.1.0) — core
+## Status: Step 1 (v0.1.1) — core
 
 | Included | Comes later |
 |---|---|
@@ -18,7 +18,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-./install.sh localaiagent-0.1.0-py3-none-any.whl   # installs pipx + Ollama via Homebrew, pulls models
+bash install.sh localaiagent-0.1.1-py3-none-any.whl   # installs pipx + Ollama via Homebrew, pulls models
 localagent start                                     # opens http://127.0.0.1:8765
 ```
 
@@ -27,7 +27,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.1.0-py3-none-any.whl
+pipx install ./localaiagent-0.1.1-py3-none-any.whl
 localagent setup     # downloads qwen3:4b, qwen3:1.7b, all-minilm (~4 GB)
 localagent start
 ```
