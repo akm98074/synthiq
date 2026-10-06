@@ -479,6 +479,7 @@ async function pullModel(name, btn) {
 async function loadSettings() {
   settings = await api("/api/settings");
   loadChannelStatus();
+  document.querySelectorAll(".agent-name-inline").forEach((n) => { n.textContent = settings.agent_name; });
   const form = $("#settings-form");
   try {
     const vs = await api("/api/voice/status");

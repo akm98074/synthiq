@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.8.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.9.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -364,6 +364,21 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 
 ---
 
+### 10.1 Wake word (Step 7a, `voice/wake.py`, `ui/voice.js`)
+
+- **In the browser:** while "Hey <name>" is on, a second always-open mic stream runs a VAD. The noise floor is an exponential moving average, and "loud" means RMS above max(0.015, 3 × noise).
+  - It keeps one block of pre-roll and ends a burst after 450 ms of silence or 6 s total.
+  - Bursts with at least 250 ms of speech are sent as 16 kHz WAV to `POST /api/voice/wake`.
+  - Bursts are dropped while recording, working, speaking or checking, so it never wakes on its own replies.
+- **On the server:** bursts of 0.3–8 s are transcribed by `wake_model` (`mlx-community/whisper-tiny.en-mlx`). `match()` then requires the phrase at the start (one filler word allowed):
+  - **phrases:** a greeting from hey/hi/hello/ok/okay/yo plus the agent's name, the bare name, and extra phrases from settings;
+  - **greeting:** must be at least 0.6 similar;
+  - **name:** compared in a sound-alike form (`phon`: doubled letters collapsed, a leading h dropped, ie/ee/ey/y → i, so "Harry" ≈ "Ari"), at least 0.75 similar (0.9 for a bare name). "Hey Siri" and "Are you there" don't match.
+  - Words after the phrase are returned as the command.
+- **On a hit:** a chime, then the command is asked directly or conversation mode starts. Audio is never stored.
+
+---
+
 ## 11. Data and privacy
 
 | Data | Where | Leaves the Mac? |
@@ -403,13 +418,14 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 | `file_roots` | ~/Downloads, ~/Desktop, ~/Documents | Files connector boundary |
 | `brief_time` / `dream_time` / `check_every_minutes` | 08:00 / 03:00 / 30 | Proactive schedule |
 | `quiet_start` / `quiet_end` / `max_nudges_per_day` | 22:00 / 07:30 / 6 | Interruption policy |
+| `wake_word_enabled` / `wake_phrases` / `wake_model` | off / (none) / whisper-tiny.en | Wake word |
 | `stt_model` / `tts_voice` / `tts_rate` | whisper-large-v3-turbo / system / 190 | Voice |
 
 ---
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 133 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 148 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

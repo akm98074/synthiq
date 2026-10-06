@@ -83,14 +83,14 @@ async def _warm_up(rt: Runtime) -> None:
 
 def create_app(settings: Settings | None = None, base: Path | None = None, runner=None,
                stt=None, tts=None, scheduler: bool = True, eventkit=None, browser=None,
-               web_fetch=None) -> FastAPI:
+               web_fetch=None, wake_stt=None) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.rt = Runtime(settings, base, runner=runner, stt=stt, tts=tts, eventkit=eventkit,
-                               browser=browser, web_fetch=web_fetch)
+                               browser=browser, web_fetch=web_fetch, wake_stt=wake_stt)
         tasks = [asyncio.create_task(_warm_up(app.state.rt))]
         if scheduler:
             tasks.append(asyncio.create_task(app.state.rt.scheduler.loop()))
@@ -435,7 +435,31 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             "tts": {"available": r.tts.available(), "engine": r.tts.name,
                     "voices": await r.tts.voices(), "speaking": r.tts.speaking},
             "speak_replies": r.settings.speak_replies,
+            "wake": {"enabled": r.settings.wake_word_enabled,
+                     "phrase": f"Hey {r.settings.agent_name}"},
         }
+
+    @app.post("/api/voice/wake")
+    async def wake(request: Request) -> dict:
+        """Is this short burst of speech the wake phrase? Audio is never stored."""
+        from .voice.wake import match, wake_phrases
+
+        r = rt()
+        if not r.settings.wake_word_enabled:
+            raise HTTPException(409, "The wake word is off (Settings → Voice).")
+        try:
+            audio = read_wav(await request.body())
+        except AudioError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        seconds = len(audio) / 16000
+        if not 0.3 <= seconds <= 8:
+            return {"wake": False, "heard": "", "command": ""}
+        try:
+            result = await r.wake_stt.transcribe(audio)
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        woke, phrase, rest = match(result["text"], wake_phrases(r.settings.agent_name, r.settings.wake_phrases))
+        return {"wake": woke, "heard": result["text"] if woke else "", "command": rest, "ms": result.get("ms")}
 
     @app.post("/api/voice/transcribe")
     async def transcribe(request: Request) -> dict:

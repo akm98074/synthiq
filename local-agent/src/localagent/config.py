@@ -113,6 +113,9 @@ class Settings:
     tts_voice: str = ""
     tts_rate: int = 190
     speak_replies: bool = True
+    wake_word_enabled: bool = False     # "Hey <agent name>" while the app is open
+    wake_phrases: str = ""              # extra phrases, comma-separated
+    wake_model: str = "mlx-community/whisper-tiny.en-mlx"
 
     def update(self, values: dict) -> "Settings":
         known = {f.name: f.type for f in fields(self)}

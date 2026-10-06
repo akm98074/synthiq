@@ -116,6 +116,7 @@ def setup(
         raise typer.Exit(1)
     if voice:
         _setup_voice(s.stt_model)
+        _setup_voice(s.wake_model, "wake-word model (~75 MB)")
     if browser:
         _setup_browser()
     typer.secho("Setup complete. Run `localagent start`.", fg="green")
@@ -157,7 +158,7 @@ def _setup_browser() -> None:
     typer.secho(f"Browser works: {chrome_version(exe)} opened “{title}”.", fg="green")
 
 
-def _setup_voice(model: str) -> None:
+def _setup_voice(model: str, what: str = "speech model (first time only, ~1.6 GB)") -> None:
     from .voice.stt import MLXWhisper
 
     stt = MLXWhisper(model)
@@ -165,7 +166,7 @@ def _setup_voice(model: str) -> None:
     if not ok:
         typer.secho(reason, fg="yellow")
         return
-    typer.echo(f"Downloading speech model {model} (first time only, ~1.6 GB) ...")
+    typer.echo(f"Downloading {what}: {model} ...")
     import numpy as np
 
     try:
@@ -173,7 +174,7 @@ def _setup_voice(model: str) -> None:
     except Exception as exc:  # noqa: BLE001 - surface any download/runtime problem
         typer.secho(f"Speech model setup failed: {exc}", fg="red")
         raise typer.Exit(1)
-    typer.secho("Speech model ready.", fg="green")
+    typer.secho(f"Ready: {model}", fg="green")
 
 
 @app.command()

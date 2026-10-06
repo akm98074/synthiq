@@ -2,6 +2,24 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.8.0 to 0.9.0 (Step 7a: "Hey Ari" wake word)
+
+```bash
+bash install.sh localaiagent-0.9.0-py3-none-any.whl
+localagent start
+```
+
+The installer downloads the small wake-word model (about 75 MB) along with the speech model.
+
+Then, under the chat box, tick **Hey Ari** (or **Settings → Voice → Wake word**). If the browser asks, allow the microphone. The status line says _Listening for “Hey Ari”_.
+
+### What changed in 0.9.0
+
+- **Say "Hey Ari"** any time the app's page is open (it can be in the background). You hear a short chime, then say what you want; or say it in one go: "Hey Ari, what's on my calendar today?". The answer is spoken, and it goes back to listening for the wake phrase.
+- It follows your agent's name: rename the agent to Max and it's "Hey Max". You can add extra phrases in Settings.
+- **Private:** every short burst of speech is transcribed on your Mac by a tiny model and thrown away unless it starts with the wake phrase. Nothing is recorded or saved. It never wakes on its own spoken replies.
+- Untick **Hey Ari** to switch it off; the microphone is then released.
+
 ## From 0.7.2 to 0.8.0 (Step 6: text your agent from your iPhone)
 
 ```bash

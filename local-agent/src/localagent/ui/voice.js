@@ -6,7 +6,8 @@
 const micBtn = $("#mic");
 const voiceStatus = $("#voice-status");
 const convToggle = $("#conversation");
-const voice = { status: null, rec: null, pressAt: 0, speaking: false, clearTimer: null };
+const voice = { status: null, rec: null, pressAt: 0, speaking: false, clearTimer: null, busy: false };
+const wakeToggle = $("#wake");
 
 function setVoiceState(text, cls = "", sticky = false) {
   clearTimeout(voice.clearTimer);
@@ -24,6 +25,12 @@ async function loadVoiceStatus() {
   const enabled = Boolean(voice.status?.enabled);
   micBtn.classList.toggle("hidden", !enabled);
   convToggle.parentElement.classList.toggle("hidden", !enabled);
+  wakeToggle.parentElement.classList.toggle("hidden", !enabled);
+  if (voice.status?.wake) {
+    $("#wake-text").textContent = voice.status.wake.phrase;
+    wakeToggle.checked = voice.status.wake.enabled;
+    if (enabled && voice.status.wake.enabled && voice.status.stt.available) wake.start(); else wake.stop();
+  }
   if (enabled && !voice.status.stt.available) {
     micBtn.title = voice.status.stt.reason;
     micBtn.classList.add("unavailable");
@@ -132,6 +139,11 @@ async function finishListening(nothingHeard = false) {
   const rec = voice.rec;
   if (!rec) return;
   voice.rec = null;
+  voice.busy = true;
+  try { await finishTurn(rec, nothingHeard); } finally { voice.busy = false; }
+}
+
+async function finishTurn(rec, nothingHeard) {
   const wav = await rec.stop();
   if (nothingHeard || !rec.heard) {
     setVoiceState("Didn't hear anything.");
@@ -149,7 +161,11 @@ async function finishListening(nothingHeard = false) {
   }
   if (!result.text) { setVoiceState("Didn't catch that. Try again."); return; }
   setVoiceState(`Heard in ${(result.ms / 1000).toFixed(1)} s`);
-  input.value = result.text;
+  await askAndSpeak(result.text);
+}
+
+async function askAndSpeak(text) {
+  input.value = text;
   const out = await send();
   if (!out) return;
   if (!voice.status?.speak_replies || !voice.status?.tts.available) return;
@@ -195,5 +211,106 @@ convToggle.addEventListener("change", () => {
   if (!convToggle.checked) stopSpeaking();
 });
 try { convToggle.checked = localStorage.getItem("conversationMode") === "1"; } catch (_) {}
+
+/* ── wake word ──────────────────────────────────────────────────────────
+   While enabled, the mic stays open. Each short burst of speech (0.35–6 s) is sent to
+   /api/voice/wake; nothing is kept. Bursts are ignored while the agent is listening,
+   working or speaking, so it never wakes itself. */
+const wake = {
+  on: false, stream: null, ctx: null, node: null, inflight: false,
+  async start() {
+    if (this.on) return;
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+    } catch (err) {
+      setVoiceState(`Microphone blocked (${err.name || err.message}); the wake word needs it.`, "error", true);
+      return;
+    }
+    this.on = true;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = this.ctx.createMediaStreamSource(this.stream);
+    this.node = this.ctx.createScriptProcessor(4096, 1, 1);
+    const rate = this.ctx.sampleRate;
+    const blockMs = 4096 / rate * 1000;
+    let noise = 0.01, chunks = [], speechMs = 0, silenceMs = 0, preroll = [];
+    this.node.onaudioprocess = (e) => {
+      const d = new Float32Array(e.inputBuffer.getChannelData(0));
+      if (voice.rec || voice.busy || voice.speaking || sending || this.inflight) { chunks = []; speechMs = 0; return; }
+      let sum = 0;
+      for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+      const rms = Math.sqrt(sum / d.length);
+      const loud = rms > Math.max(0.015, noise * 3);
+      if (!loud && !chunks.length) {
+        noise = noise * 0.95 + rms * 0.05;              // track the room's background level
+        preroll = [d];                                  // keep the block before speech starts
+        return;
+      }
+      if (!chunks.length) chunks = [...preroll];
+      chunks.push(d);
+      if (loud) { speechMs += blockMs; silenceMs = 0; } else { silenceMs += blockMs; }
+      const total = chunks.length * blockMs;
+      if (silenceMs >= 450 || total >= 6000) {
+        const burst = chunks; const spoke = speechMs;
+        chunks = []; speechMs = 0; silenceMs = 0;
+        if (spoke >= 250) this.check(burst, rate);
+      }
+    };
+    src.connect(this.node);
+    this.node.connect(this.ctx.destination);
+    setVoiceState(`Listening for “${$("#wake-text").textContent}”`, "", true);
+  },
+  async stop() {
+    if (!this.on) return;
+    this.on = false;
+    try { this.node.disconnect(); } catch (_) {}
+    this.stream.getTracks().forEach((t) => t.stop());
+    await this.ctx.close();
+    if (voiceStatus.textContent.startsWith("Listening for")) setVoiceState("");
+  },
+  async check(burst, rate) {
+    this.inflight = true;
+    try {
+      const wav = encodeWav(downsample(burst, rate, 16000), 16000);
+      const r = await fetch("/api/voice/wake", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
+      const res = await r.json();
+      if (!r.ok || !res.wake) return;
+      chime();
+      document.body.classList.add("woke");
+      setTimeout(() => document.body.classList.remove("woke"), 1200);
+      if (res.command) {
+        voice.busy = true;
+        try { await askAndSpeak(res.command); } finally { voice.busy = false; }
+      } else {
+        await startListening(true);
+      }
+    } catch (_) {
+      /* a failed check just means "not woken" */
+    } finally {
+      this.inflight = false;
+      if (this.on && !voice.rec) setVoiceState(`Listening for “${$("#wake-text").textContent}”`, "", true);
+    }
+  },
+};
+window.wakeListener = wake;
+
+function chime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(660, ctx.currentTime);
+    o.frequency.setValueAtTime(880, ctx.currentTime + 0.09);
+    g.gain.setValueAtTime(0.15, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.3);
+    setTimeout(() => ctx.close(), 500);
+  } catch (_) {}
+}
+
+wakeToggle.addEventListener("change", async () => {
+  try {
+    await api("/api/settings", { method: "PUT", body: { wake_word_enabled: wakeToggle.checked } });
+  } catch (err) { setVoiceState(err.message, "error", true); }
+  await loadVoiceStatus();
+});
 
 loadVoiceStatus();

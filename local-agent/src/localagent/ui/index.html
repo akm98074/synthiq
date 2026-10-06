@@ -39,6 +39,7 @@
       <div class="composer-foot">
         <button class="link" id="clear-chat">Clear conversation</button>
         <span id="voice-status" class="voice-status" role="status"></span>
+        <label class="conv" id="wake-label" title="Say the wake phrase any time while this page is open"><input type="checkbox" id="wake"> <span id="wake-text">Hey Ari</span></label>
         <label class="conv"><input type="checkbox" id="conversation"> Conversation mode</label>
       </div>
     </section>
@@ -221,6 +222,8 @@
             <option value="mlx-community/whisper-base.en-mlx">
           </datalist>
           <label>Voice <select name="tts_voice" id="tts-voice"><option value="">System default</option></select></label>
+          <label class="check"><input type="checkbox" name="wake_word_enabled"> Wake word: say “Hey <span class="agent-name-inline">Ari</span>” any time this page is open</label>
+          <label>Extra wake phrases (optional, comma-separated) <input name="wake_phrases" placeholder="hey jarvis, computer"></label>
           <label>Speaking rate (words per minute) <input name="tts_rate" type="number" min="80" max="400"></label>
         </fieldset>
         <div class="row"><button class="primary">Save</button><span id="settings-status" class="muted"></span></div>

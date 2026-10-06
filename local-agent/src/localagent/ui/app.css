@@ -203,3 +203,6 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   cursor: zoom-in; background: var(--surface-2); }
 .tool-step.big { flex-basis: 100%; }
 .tool-step.big .shot { width: 100%; cursor: zoom-out; }
+
+/* 0.9.0: wake word */
+body.woke .mic { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent); }

@@ -29,7 +29,7 @@ from .voice.tts import SayTTS
 class Runtime:
     def __init__(self, settings: Settings, base: Path | None = None, runner=None,
                  stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None, browser=None,
-                 screen_capture=None, screen_ocr=None, screen_permission=None, web_fetch=None):
+                 screen_capture=None, screen_ocr=None, screen_permission=None, web_fetch=None, wake_stt=None):
         self.base = base or data_dir()
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
@@ -64,6 +64,7 @@ class Runtime:
         if self.mac_available:
             self.nudges.forwarders.append(self.imessage_channel.forward)
         self.stt = stt or MLXWhisper(settings.stt_model)
+        self.wake_stt = wake_stt or (stt if stt is not None else MLXWhisper(settings.wake_model))
         self.tts = tts or SayTTS(settings.tts_voice, settings.tts_rate)
         self.identity_path = self.base / "identity" / "about-me.md"
         self.ollama = OllamaClient(settings.ollama_url)
@@ -142,6 +143,8 @@ class Runtime:
         self.imessage_channel.store = message_sources(self.settings)[0]
         if hasattr(self.stt, "model"):
             self.stt.model = self.settings.stt_model
+        if isinstance(self.wake_stt, MLXWhisper) and self.wake_stt is not self.stt:
+            self.wake_stt.model = self.settings.wake_model
         self.screen.blocklist = {x.strip().lower() for x in self.settings.screen_blocklist.split(",") if x.strip()}
         self.screen.retention = self.settings.screen_retention_minutes * 60
         if not self.settings.screen_context_enabled:
