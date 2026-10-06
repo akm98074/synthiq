@@ -4,11 +4,11 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 5 complete (v0.7.2) — acting on the computer
+## Status: Step 6 (v0.8.0) — text your agent from your iPhone
 
 | Included | Comes later |
 |---|---|
-| Chat with streaming replies | Telegram / iMessage channel to talk to the agent from your phone (Step 6) |
+| Chat with streaming replies | Step 7: wake word, Gmail sign-in, cloud escalation, avatar, agent network, phone line, Windows/Linux |
 | Decision layer (intent, memorable?, complexity; should-nudge, urgency) with probabilities and an eval harness | Telegram / iMessage (Step 6) |
 | Persistent memory, `about-me.md` identity file, edit and forget | Agent-to-agent, avatar, Windows/Linux (Step 7) |
 | **Connectors**: Calendar, Reminders, Notes, Mail, Contacts, Files, Documents (PDF/Excel) | |
@@ -16,6 +16,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Proactivity**: morning brief, nudges (events, reminders, unreplied mail), quiet hours, overnight memory review | |
 | **Voice**: push-to-talk, conversation mode, on-device Whisper, spoken replies | |
 | **Messages**: read iMessage/SMS and WhatsApp, chats waiting on your reply, iMessage replies (approved), WhatsApp replies typed in for you | |
+| **iMessage channel**: text the agent from your iPhone, approve actions by replying "yes", get nudges and the brief as texts | |
 | **Prompt-injection guard** on mail, chat and web content | |
 | **Web look-ups**: prices, shops, restaurants, hours and news are searched (DuckDuckGo) and read from the source page, never answered from memory | |
 | **Browser**: the agent's own Chrome window; read pages, click, fill in, search. Submitting, booking or paying asks every time | |
@@ -28,7 +29,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.7.2-py3-none-any.whl
+bash install.sh localaiagent-0.8.0-py3-none-any.whl
 localagent start
 ```
 
@@ -39,7 +40,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.7.2-py3-none-any.whl
+pipx install ./localaiagent-0.8.0-py3-none-any.whl
 localagent setup
 localagent start
 ```
@@ -54,6 +55,7 @@ localagent start
 | `localagent doctor` | Check Ollama, models, RAM, data directory |
 | `localagent setup --voice` | Download the speech-recognition model |
 | `localagent setup --browser` | Start the agent's Chrome once and report whether it works |
+| `localagent channel test` | Send a test iMessage from the agent to your phone |
 | `localagent screen-access` | Ask macOS for Screen Recording permission (for screen context) |
 | `localagent skill new NAME` / `skill list` | Create a custom skill from a template / list skills and problems |
 | `localagent autostart on\|off\|status` | Start the agent at login (optional) |

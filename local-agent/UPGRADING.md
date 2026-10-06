@@ -2,6 +2,35 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.7.2 to 0.8.0 (Step 6: text your agent from your iPhone)
+
+```bash
+bash install.sh localaiagent-0.8.0-py3-none-any.whl
+localagent start
+```
+
+Then, in the app, open **Settings → Text me (iMessage)**:
+
+1. Tick **Let me talk to the agent by iMessage from my phone**.
+2. Leave **How** on **Text myself** (recommended).
+3. Enter **your own** phone number and/or Apple ID email, the ones your iPhone uses for iMessage. For example `+1 425 555 0100, me@icloud.com`.
+4. **Save**, then press **Send a test message**. A text from yourself starting with 🤖 should arrive on your iPhone.
+
+Now, on your iPhone, open the conversation **with yourself** (your own name or number) and text, for example, `Ari, what's on my calendar tomorrow?`. Start with the agent's name. The answer arrives in the same chat within a few seconds, starting with 🤖.
+
+This needs the Mac awake, the agent running, and the same Full Disk Access as the Messages connector (0.5.0).
+
+### What changed in 0.8.0
+
+- **Text your agent.** Anything you can type in the app works by text: questions, look-ups, reminders, emails, web tasks.
+- **Approve by replying.** When something needs your OK, the text says what, and you reply:
+  - `yes` (just this once), `yes 1h`, `always`, or `no`;
+  - danger actions (buying, deleting) take only `yes` or `no`.
+- **Nudges and the morning brief by text** (setting on by default). Quiet hours still apply.
+- **Only you.** Only messages you send to yourself starting with the agent's name are read. Messages from anyone else are never answered; they're noted in **Activity**.
+- **Alternative for a spare Mac:** give the agent its own Apple ID in Messages, then choose "The agent has its own Apple ID". You then text that Apple ID like a person.
+  - Messages holds only one Apple ID at a time, so don't do this on the Mac where you read your own chats.
+
 ## From 0.7.1 to 0.7.2 (the agent uses your real Google Chrome, and you can watch it)
 
 ```bash

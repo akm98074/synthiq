@@ -468,3 +468,23 @@ def screen_access() -> None:
                 "turn on Terminal, quit Terminal (Cmd+Q), reopen it, then run: localagent stop, localagent start",
                 fg="yellow")
     raise typer.Exit(1)
+
+
+channel_app = typer.Typer(help="Talk to the agent from your phone (iMessage).", no_args_is_help=True)
+app.add_typer(channel_app, name="channel")
+
+
+@channel_app.command("test")
+def channel_test() -> None:
+    """Send a test iMessage from the agent to your phone (the agent must be running)."""
+    try:
+        r = httpx.post(f"{_url()}/api/channels/imessage/test", timeout=60)
+    except httpx.HTTPError:
+        typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
+        raise typer.Exit(1)
+    data = r.json()
+    msg = data.get("message") or data.get("detail") or r.text
+    ok = r.status_code == 200 and data.get("ok")
+    typer.secho(msg, fg="green" if ok else "red")
+    if not ok:
+        raise typer.Exit(1)

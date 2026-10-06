@@ -57,6 +57,12 @@ class Runtime:
         self.nudges = Nudges(self.store, settings,
                              notifier=self.notify if self.mac_available else None, clock=clock)
         self.scheduler = Scheduler(self.store, clock)
+        from .channels.imessage import IMessageChannel
+        from .tools.registry import message_sources
+
+        self.imessage_channel = IMessageChannel(self, message_sources(settings)[0], self.runner)
+        if self.mac_available:
+            self.nudges.forwarders.append(self.imessage_channel.forward)
         self.stt = stt or MLXWhisper(settings.stt_model)
         self.tts = tts or SayTTS(settings.tts_voice, settings.tts_rate)
         self.identity_path = self.base / "identity" / "about-me.md"
@@ -131,6 +137,9 @@ class Runtime:
         self._build_decision_layer()
         self.build_tools()
         self.register_jobs()
+        from .tools.registry import message_sources
+
+        self.imessage_channel.store = message_sources(self.settings)[0]
         if hasattr(self.stt, "model"):
             self.stt.model = self.settings.stt_model
         self.screen.blocklist = {x.strip().lower() for x in self.settings.screen_blocklist.split(",") if x.strip()}

@@ -72,6 +72,12 @@ class Settings:
     whatsapp_db: str = "~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite"
     addressbook_dir: str = "~/Library/Application Support/AddressBook"
 
+    # iMessage channel (Step 6): talk to the agent from your phone
+    enable_imessage_channel: bool = False
+    imessage_channel_mode: str = "self"        # self (text yourself) | account (agent's own Apple ID)
+    imessage_owner_handles: str = ""           # your phone number(s) / Apple ID email(s), comma-separated
+    imessage_forward_nudges: bool = True
+
     # Browser and skills (Step 5b)
     enable_browser: bool = True
     browser_headless: bool = False     # show the window so you can watch and take over
@@ -132,6 +138,8 @@ class Settings:
         for name in ("brief_time", "dream_time", "quiet_start", "quiet_end"):
             if not _valid_hhmm(getattr(self, name)):
                 raise ValueError(f"{name} must be a time like 08:00")
+        if self.imessage_channel_mode not in ("account", "self"):
+            raise ValueError("imessage_channel_mode must be account or self")
         if self.calendar_backend not in ("auto", "eventkit", "applescript"):
             raise ValueError("calendar_backend must be auto, eventkit or applescript")
         if not 5 <= self.check_every_minutes <= 720:

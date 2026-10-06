@@ -94,6 +94,8 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         tasks = [asyncio.create_task(_warm_up(app.state.rt))]
         if scheduler:
             tasks.append(asyncio.create_task(app.state.rt.scheduler.loop()))
+            if app.state.rt.mac_available:
+                tasks.append(asyncio.create_task(app.state.rt.imessage_channel.loop()))
         yield
         for t in tasks:
             t.cancel()
@@ -287,6 +289,29 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             return {"ok": False, "message": str(exc)}
         r.audit.append("connector_test", name, tool.tier, args, "ok", result.display)
         return {"ok": True, "message": result.display}
+
+    @app.get("/api/channels")
+    async def channels() -> dict:
+        r = rt()
+        ch = r.imessage_channel
+        s = r.settings
+        return {"imessage": {"enabled": s.enable_imessage_channel, "mode": s.imessage_channel_mode,
+                             "owners": [h.strip() for h in s.imessage_owner_handles.split(",") if h.strip()],
+                             "status": ch.status if s.enable_imessage_channel else "off",
+                             "error": ch.last_error, "available": r.mac_available}}
+
+    @app.post("/api/channels/imessage/test")
+    async def channel_test() -> dict:
+        r = rt()
+        owners = [h.strip() for h in r.settings.imessage_owner_handles.split(",") if h.strip()]
+        if not owners:
+            raise HTTPException(400, "Add your phone number or Apple ID email first.")
+        try:
+            await r.imessage_channel.forward_test(owners[0])
+        except ToolError as exc:
+            return {"ok": False, "message": str(exc)}
+        r.audit.append("channel_test", "imessage", outcome="ok", detail=f"to {owners[0]}")
+        return {"ok": True, "message": f"Sent a test message to {owners[0]}."}
 
     @app.get("/api/screen")
     async def screen_status() -> dict:

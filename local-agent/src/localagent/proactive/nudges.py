@@ -56,6 +56,8 @@ class Nudges:
         self.settings = settings
         self.notifier = notifier
         self.clock = clock
+        # Extra places a nudge goes (e.g. the iMessage channel): async (kind, title, body) -> None
+        self.forwarders: list[Callable] = []
         store.db.executescript(SCHEMA)
         store.db.commit()
 
@@ -81,6 +83,14 @@ class Nudges:
             return False, "daily limit reached"
         return True, ""
 
+    def may_forward(self, kind: str) -> bool:
+        now = datetime.fromtimestamp(self.clock())
+        if kind == "dream":
+            return False
+        if kind in INTERRUPTING and in_quiet_hours(now, self.settings.quiet_start, self.settings.quiet_end):
+            return False
+        return True
+
     async def deliver(self, kind: str, key: str, title: str, body: str = "",
                       urgency: int = 2, data: dict | None = None) -> dict | None:
         """Store a nudge once per key; notify if allowed. Returns the nudge, or None if a duplicate."""
@@ -94,6 +104,12 @@ class Nudges:
                 notified = True
             except Exception as exc:  # noqa: BLE001 - a failed notification must not lose the nudge
                 reason = f"notification failed: {exc}"
+        if self.forwarders and self.may_forward(kind):
+            for forward in self.forwarders:
+                try:
+                    await forward(kind, title, body)
+                except Exception:  # noqa: BLE001 - a failed forward must not lose the nudge
+                    pass
         cur = self.store.execute(
             "INSERT INTO nudges(created_at, kind, key, title, body, urgency, notified, data)"
             " VALUES (?,?,?,?,?,?,?,?)",

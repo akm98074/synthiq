@@ -233,6 +233,35 @@ class IMessages:
     def thread(self, tid: int) -> dict | None:
         return next((t for t in self.threads(2000) if t["id"] == f"imessage:{tid}"), None)
 
+    def max_rowid(self) -> int:
+        db = self._db()
+        try:
+            return int(db.execute("SELECT COALESCE(MAX(ROWID), 0) FROM message").fetchone()[0])
+        finally:
+            db.close()
+
+    def new_since(self, rowid: int, limit: int = 50) -> list[dict]:
+        """Messages added after `rowid` (oldest first), with their chat, for the iMessage channel."""
+        db = self._db()
+        try:
+            body = "m.attributedBody" if "attributedBody" in columns(db, "message") else "NULL"
+            rows = db.execute(f"""
+                SELECT m.ROWID AS rowid, m.text, {body} AS attributedBody, m.is_from_me, m.date,
+                       h.id AS handle, c.ROWID AS cid, c.guid, c.chat_identifier, c.style
+                FROM message m
+                JOIN chat_message_join j ON j.message_id = m.ROWID
+                JOIN chat c ON c.ROWID = j.chat_id
+                LEFT JOIN handle h ON h.ROWID = m.handle_id
+                WHERE m.ROWID > ? ORDER BY m.ROWID LIMIT ?""", (rowid, limit)).fetchall()
+        except sqlite3.Error as exc:
+            raise SchemaChanged(f"Couldn't read the Messages database: {exc}") from exc
+        finally:
+            db.close()
+        return [{"rowid": r["rowid"], "text": (r["text"] or decode_attributed_body(r["attributedBody"])).strip(),
+                 "from_me": bool(r["is_from_me"]), "handle": r["handle"] or "", "chat_id": r["cid"],
+                 "guid": r["guid"], "chat_identifier": r["chat_identifier"] or "", "group": r["style"] == 43}
+                for r in rows]
+
     def messages(self, tid: int, limit: int) -> list[dict]:
         db = self._db()
         try:

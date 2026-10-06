@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.7.2 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.8.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -271,6 +271,20 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 
 ---
 
+### 6.1 iMessage channel (Step 6, `channels/imessage.py`)
+
+- **Loop:** a background task polls `chat.db` every 3 s through `IMessages.new_since(last_rowid)`. The last ROWID is kept in `meta` (`imessage_channel_last`), and the first start skips history.
+- **What counts as a message for the agent:**
+  - **self mode (default):** your own sent message (`is_from_me=1`) in the chat whose identifier is one of `imessage_owner_handles`, starting with the agent's name. The prefix is stripped. Duplicates within 2 minutes are dropped (a self-chat can log both copies). Anything starting with 🤖 (the agent's own replies) is ignored.
+  - **account mode:** incoming (`is_from_me=0`) one-to-one messages from an owner handle. Others are audited as `channel_ignored` (sender only, no content) and never answered.
+  - Group chats are never used, and there's a rate limit of 12 per minute.
+- **A turn:** the command runs through `handle_turn`. Tokens are collected, markdown is turned into plain text, and the reply is split at 1,500 characters and sent with `messages_send.applescript` to the same chat id.
+- **Approvals:** an `approval_required` event stores its id in `meta` (`imessage_channel_approval`) and adds "Needs your OK: <summary>. Reply …". The next owner message matching `yes [scope]`/`no` calls `Policy.decide` (danger forced to "once") and `resume_after_decision`.
+- **Forwarding:** `Nudges.forwarders` sends nudges and the brief (not the dream report) when `imessage_forward_nudges` is on, outside quiet hours for interrupting kinds.
+- **The one-Apple-ID limit:** Messages holds one Apple ID, so account mode suits a spare Mac. Self mode works on the user's own Mac alongside the Messages connector.
+
+---
+
 ## 7. Policy, approvals and audit
 
 - **Tiers (declared per tool, enforced by `policy/engine.py`):**
@@ -380,6 +394,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
 | `enable_web_search` | on | Web look-ups |
+| `enable_imessage_channel` / `imessage_channel_mode` / `imessage_owner_handles` / `imessage_forward_nudges` | off / self / (empty) / on | iMessage channel |
 | `enable_browser` / `browser_headless` / `browser_executable` | on / off / (installed Google Chrome) | Browser |
 | `browser_show_actions` / `browser_action_delay_ms` | on / 600 | Cursor, highlight and labels in the agent's window |
 | `enable_skills` / `skills_require_sandbox` | on / on | Custom skills |
@@ -394,7 +409,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 127 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 133 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

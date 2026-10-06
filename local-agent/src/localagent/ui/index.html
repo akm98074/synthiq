@@ -190,6 +190,19 @@
           <label>Overnight memory review at <input name="dream_time" type="time"></label>
           <label class="check"><input type="checkbox" name="notify_macos"> Show macOS notifications</label>
         </fieldset>
+        <fieldset><legend>Text me (iMessage)</legend>
+          <label class="check"><input type="checkbox" name="enable_imessage_channel"> Let me talk to the agent by iMessage from my phone</label>
+          <label>How
+            <select name="imessage_channel_mode">
+              <option value="self">Text myself, starting with the agent's name (recommended)</option>
+              <option value="account">The agent has its own Apple ID in Messages on this Mac (a spare Mac)</option>
+            </select>
+          </label>
+          <label>My phone number(s) or Apple ID email(s), comma-separated <input name="imessage_owner_handles" placeholder="+1 425 555 0100"></label>
+          <label class="check"><input type="checkbox" name="imessage_forward_nudges"> Also send me nudges and the morning brief by iMessage</label>
+          <div class="row" style="margin-top:10px"><button type="button" class="secondary" id="channel-test">Send a test message</button>
+            <span id="channel-status" class="muted small"></span></div>
+        </fieldset>
         <fieldset><legend>Screen context (off unless you turn it on)</legend>
           <label class="check"><input type="checkbox" name="screen_context_enabled"> Let the agent read the text on my screen</label>
           <label>Look every (minutes) <input name="screen_every_minutes" type="number" min="1" max="120"></label>

@@ -478,6 +478,7 @@ async function pullModel(name, btn) {
 /* ── settings ─────────────────────────────────────────────────────────── */
 async function loadSettings() {
   settings = await api("/api/settings");
+  loadChannelStatus();
   const form = $("#settings-form");
   try {
     const vs = await api("/api/voice/status");
@@ -663,6 +664,22 @@ $("#roots-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   settings = await api("/api/settings", { method: "PUT", body: { file_roots: $("#file-roots").value } });
   loadConnectors();
+});
+
+async function loadChannelStatus() {
+  try {
+    const c = (await api("/api/channels")).imessage;
+    $("#channel-status").textContent = !c.available ? "Needs macOS."
+      : !c.enabled ? "Off." : `Status: ${c.status}${c.error ? " — " + c.error : ""}`;
+  } catch (_) {}
+}
+
+$("#channel-test").addEventListener("click", async () => {
+  $("#channel-status").textContent = "Sending…";
+  try {
+    const r = await api("/api/channels/imessage/test", { method: "POST" });
+    $("#channel-status").textContent = r.message;
+  } catch (err) { $("#channel-status").textContent = err.message; }
 });
 
 $("#forget-screen").addEventListener("click", async () => {
