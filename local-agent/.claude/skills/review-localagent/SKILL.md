@@ -60,6 +60,7 @@ Review the change (default: `git diff` against the last release commit, plus unt
 - [ ] Wake word: never store audio; ignore bursts while the agent listens, works or speaks (no self-wake); the name must match by sound, not just loosely ("Hey Siri" must not wake "Ari").
 - [ ] Secrets (OAuth tokens, API keys) live only in `Vault` (Keychain, else a 0600 file); never in config.json, logs, audit, tool output or the UI after saving. Tests set `LOCALAGENT_NO_KEYRING`.
 - [ ] OAuth: PKCE + state, loopback redirect to the agent's own address, refresh before expiry, one forced refresh on 401, `invalid_grant` → forget and ask to reconnect.
+- [ ] Anything leaving the Mac for a model (cloud) goes through an approval that lists exactly what's sent; off by default; no tools in the cloud; the key stays in the vault. Use the official SDK, the current model id and `fallbacks="default"`, and handle `stop_reason == "refusal"`.
 - [ ] Skills: never run user scripts unsandboxed on macOS; network implies at least write tier; invalid SKILL.md files are reported, not half-loaded.
 
 - [ ] Mac UI actions: re-verify the element (role + name) before pressing, refuse password managers/System Settings/terminals, and give risky labels a higher tier through `risk(args)`. Unknown elements count as danger.

@@ -2,6 +2,31 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.10.0 to 0.11.0 (Step 7c: optional cloud model)
+
+```bash
+bash install.sh localaiagent-0.11.0-py3-none-any.whl
+localagent start
+```
+
+Nothing changes until you turn it on. To use it:
+
+1. Get an API key at https://console.anthropic.com (Settings → API keys). Usage is billed by Anthropic to you.
+2. In the app: **Settings → Cloud model (optional)**. Paste the key and press **Save key**; it goes into your Keychain. Tick **Allow asking the cloud model**, then **Save**.
+   - Or in Terminal: `localagent cloud-key`.
+
+### What changed in 0.11.0
+
+- Start a question with **"think harder"**, **"use the cloud"** or **"ask Claude"**, for example _"think harder: compare these two mortgage offers…"_. You'll see an approval card that names the cloud model and shows exactly what will be sent: your question, plus how many earlier messages and memories go with it.
+  - Approve **Just this once**, **For 1 hour**, and so on.
+  - Decline, and nothing leaves your Mac.
+- The answer streams back into the chat, marked **"(cloud)"**. The cloud model only answers: it can't use your calendar, mail, files or browser.
+- Settings:
+  - the model (default **Claude Opus 5.5**) and effort (default **high**);
+  - whether relevant memories are included (on);
+  - **Also offer it for the hardest questions** (off): asks to escalate when the agent rates a question as very hard.
+- If Anthropic's safety checks decline a question, the request is automatically retried on another Claude model that Anthropic picks (its "fallbacks" option). If that declines too, you're told.
+
 ## From 0.9.0 to 0.10.0 (Step 7b: Gmail sign-in)
 
 ```bash

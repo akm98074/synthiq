@@ -20,6 +20,7 @@ from ..memory.store import MEMORY_KINDS
 from ..persona import system_prompt
 from ..tools.registry import candidates
 from .actions import ACTION_INTENTS, ActionRun, tools_prompt
+from .cloud import build_request, cloud_tool, stream_answer, wants_cloud
 
 if TYPE_CHECKING:
     from ..runtime import Runtime
@@ -157,6 +158,22 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
     past = [{"role": m["role"], "content": m["content"]} for m in history
             if m["role"] in ("user", "assistant")]
 
+    if wants_cloud(rt, text, complexity):
+        req = build_request(rt, text, history, memories)
+        tool = cloud_tool(rt)
+        args = {k: req[k] for k in ("question", "memories", "history_turns")}
+        if rt.policy.needs_approval(tool, user_msg_id, args=args):
+            ap = rt.policy.request(tool, args, user_msg_id, {"kind": "cloud", "req": req})
+            rt.audit.append("approval_requested", tool.name, tool.tier, args, "pending", ap["summary"],
+                            ap["id"], user_msg_id)
+            ap.pop("state", None)
+            yield {"type": "approval_required", "approval": ap}
+            yield {"type": "done", "message_id": None, "model": s.chat_model, "paused": True}
+            return
+        async for event in _ask_cloud(rt, req, user_msg_id, None, decision.id):
+            yield event
+        return
+
     skill_words = tuple(t.name[6:].replace("_", " ") for t in rt.tools.values() if t.connector == "skills")
     web = "web_search" in rt.tools
     tools = candidates(rt.tools, intent) if wants_tools(intent, text, skill_words, web) else []
@@ -194,11 +211,43 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
     yield {"type": "done", "message_id": msg_id, "model": model}
 
 
+async def _ask_cloud(rt: "Runtime", req: dict, task_id: int, approval_id: int | None,
+                     decision_id: int | None) -> AsyncIterator[dict]:
+    model = rt.settings.cloud_model
+    args = {k: req[k] for k in ("question", "memories", "history_turns")}
+    yield {"type": "tool_start", "tool": "cloud_ask", "tier": "write",
+           "summary": f"Asking {model} in the cloud"}
+    parts: list[str] = []
+    failed = False
+    async for ev in stream_answer(rt, req):
+        if ev["type"] == "token":
+            parts.append(ev["text"])
+        else:
+            failed = True
+        yield ev
+    yield {"type": "tool_result", "tool": "cloud_ask", "tier": "write", "ok": not failed,
+           "display": f"Answered by {model} (cloud)" if not failed else "Cloud request failed", "data": None}
+    rt.audit.append("tool_call", "cloud_ask", "write", args, "error" if failed else "ok",
+                    f"{model}: {len(''.join(parts))} characters back", approval_id, task_id)
+    full = "".join(parts).strip()
+    msg_id = rt.store.add_message("assistant", full, decision_id) if full else None
+    yield {"type": "done", "message_id": msg_id, "model": f"{model} (cloud)", "cloud": True}
+
+
 async def resume_after_decision(rt: "Runtime", approval: dict, approved: bool) -> AsyncIterator[dict]:
     """Continue a paused action run once the user approved or declined."""
     state = approval.get("state")
     if not state:
         yield {"type": "error", "message": "This request can no longer be resumed."}
+        return
+    if state.get("kind") == "cloud":
+        if approved:
+            async for event in _ask_cloud(rt, state["req"], approval["task_id"], approval["id"], None):
+                yield event
+        else:
+            text = "OK, nothing was sent. Ask again without “think harder” for an answer from this Mac."
+            yield {"type": "token", "text": text}
+            yield {"type": "done", "message_id": rt.store.add_message("assistant", text), "model": None}
         return
     run = ActionRun.from_state(rt, approval["task_id"], state)
     async for event in run.resume(approval, approved):

@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.10.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.11.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -190,6 +190,19 @@ user text
 Reasoning text the model leaks (`<think>…</think>`, or a stray closing `</think>` with no opening tag, which Qwen3 sometimes emits) is removed. When streamed text turns out to have been reasoning, a `reset` event clears it from the bubble. Replies are rendered with a minimal markdown renderer that escapes HTML first.
 
 Approving or declining resumes a paused run from its saved state (`/api/approvals/{id}/decide`, streamed): the tool runs, or the model is told it was declined, and the loop continues.
+
+---
+
+### 5.1 Cloud escalation (Step 7c, `agent/cloud.py`)
+
+- **When:** `wants_cloud()` is true only when `cloud_enabled` is on, an Anthropic key is in the vault, and either the message asks for it ("think harder", "use the cloud", "ask Claude"…) or `cloud_auto_hard` is on and the decision layer rated complexity 5.
+- **What's sent:** `build_request()` makes the system prompt (persona plus the recalled memories if `cloud_send_memories`), up to six earlier turns (starting with a user turn), and the question with the trigger phrase removed. No tools or tool results, and nothing else from the Mac.
+- **Approval:** a pseudo-tool `cloud_ask` (write tier, never offered to the model) runs through `Policy.needs_approval`/`request`, so the usual scopes, grants and audit apply. The card's summary names the model and the question, plus the counts of memories and earlier messages. The paused request is stored as `{"kind": "cloud", "req": …}` and resumed by `resume_after_decision`.
+- **Call:** the official `anthropic` SDK (async), `client.beta.messages.stream(model=cloud_model, max_tokens=16000, output_config={"effort": cloud_effort}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")`.
+  - Thinking isn't sent, so it's adaptive by default on Claude Opus 5.5.
+  - A safety decline is retried server-side on the fallback model Anthropic picks for that refusal category. A remaining `stop_reason: "refusal"` is reported.
+  - Typed SDK errors (authentication, permission, rate limit, status, connection) become plain messages.
+- **Result:** the text is streamed as tokens, saved as the assistant message, and marked "(cloud)". The audit row records the counts, never the key.
 
 ---
 
@@ -398,6 +411,7 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 | Audio | In memory only, during transcription; never written to disk | No |
 | Calendar/Mail/Contacts content | Read on demand through the Apple apps; only what a tool returns is kept (in messages or the audit summary) | No |
 | Gmail | Read on demand from Google's Gmail API (it's your mail at Google); refresh token in the Keychain | Only the requests you make to Gmail |
+| Cloud questions (opt-in) | Sent to Anthropic only after approval: the question, up to 6 earlier messages, and (setting) recalled memories | **Yes**, exactly what the approval card lists |
 | Web search queries | Sent to DuckDuckGo (search words only, no account or cookies) | **Yes**, the query; turn off with `enable_web_search` |
 | Screen text (opt-in) | `screen_snapshots` table, deleted after 2 hours; screenshots are deleted immediately after OCR | No |
 | iMessage/WhatsApp history | Read on demand, read-only, from the apps' own databases; never copied in bulk | No (a sent iMessage goes through Apple, as if you sent it) |
@@ -419,6 +433,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
 | `enable_web_search` | on | Web look-ups |
+| `cloud_enabled` / `cloud_model` / `cloud_effort` / `cloud_send_memories` / `cloud_auto_hard` | off / claude-opus-5-5 / high / on / off | Cloud escalation; the API key is in the vault |
 | `enable_gmail` / `gmail_client_id` / `gmail_account` | on / (yours) / (set on sign-in) | Gmail; the secret and tokens are in the vault |
 | `enable_imessage_channel` / `imessage_channel_mode` / `imessage_owner_handles` / `imessage_forward_nudges` | off / self / (empty) / on | iMessage channel |
 | `enable_browser` / `browser_headless` / `browser_executable` | on / off / (installed Google Chrome) | Browser |
@@ -436,7 +451,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 151 pytest tests (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 154 pytest tests (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

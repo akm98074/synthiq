@@ -518,3 +518,21 @@ def gmail_login() -> None:
             return
     typer.secho("Didn't see the sign-in finish. Try again, or use Settings → Gmail in the app.", fg="yellow")
     raise typer.Exit(1)
+
+
+@app.command("cloud-key")
+def cloud_key() -> None:
+    """Save your Anthropic API key (in the Keychain) for the optional cloud model."""
+    import getpass
+
+    key = getpass.getpass("Anthropic API key (sk-ant-…, Enter to remove): ").strip()
+    try:
+        r = httpx.put(f"{_url()}/api/cloud/key", json={"key": key}, timeout=10)
+    except httpx.HTTPError:
+        typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
+        raise typer.Exit(1)
+    if r.status_code != 200:
+        typer.secho(r.json().get("detail", r.text), fg="red")
+        raise typer.Exit(1)
+    typer.secho("Key saved. Turn on Settings → Cloud model → Allow asking the cloud model." if key
+                else "Key removed.", fg="green")

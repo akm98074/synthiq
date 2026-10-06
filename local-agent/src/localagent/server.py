@@ -91,7 +91,7 @@ async def _warm_up(rt: Runtime) -> None:
 
 def create_app(settings: Settings | None = None, base: Path | None = None, runner=None,
                stt=None, tts=None, scheduler: bool = True, eventkit=None, browser=None,
-               web_fetch=None, wake_stt=None, vault=None, google=None) -> FastAPI:
+               web_fetch=None, wake_stt=None, vault=None, google=None, cloud_base_url=None) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
 
@@ -99,7 +99,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
     async def lifespan(app: FastAPI):
         app.state.rt = Runtime(settings, base, runner=runner, stt=stt, tts=tts, eventkit=eventkit,
                                browser=browser, web_fetch=web_fetch, wake_stt=wake_stt,
-                               vault=vault, google=google)
+                               vault=vault, google=google, cloud_base_url=cloud_base_url)
         tasks = [asyncio.create_task(_warm_up(app.state.rt))]
         if scheduler:
             tasks.append(asyncio.create_task(app.state.rt.scheduler.loop()))
@@ -298,6 +298,35 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             return {"ok": False, "message": str(exc)}
         r.audit.append("connector_test", name, tool.tier, args, "ok", result.display)
         return {"ok": True, "message": result.display}
+
+    # ── cloud key ─────────────────────────────────────────────────────────
+    @app.get("/api/cloud")
+    async def cloud_status() -> dict:
+        from .agent.cloud import KEY
+
+        r = rt()
+        try:
+            import anthropic  # noqa: F401
+            installed = True
+        except ImportError:
+            installed = False
+        return {"enabled": r.settings.cloud_enabled, "has_key": r.vault.has(KEY), "model": r.settings.cloud_model,
+                "installed": installed, "vault": r.vault.backend}
+
+    @app.put("/api/cloud/key")
+    async def cloud_key(body: dict) -> dict:
+        from .agent.cloud import KEY
+
+        r = rt()
+        key = str(body.get("key", "")).strip()
+        if not key:
+            r.vault.delete(KEY)
+        elif not key.startswith("sk-ant-"):
+            raise HTTPException(400, "That doesn't look like an Anthropic API key (it starts with sk-ant-).")
+        else:
+            r.vault.set(KEY, key)
+        r.audit.append("cloud_key_" + ("set" if key else "removed"), "cloud", outcome="ok")
+        return await cloud_status()
 
     # ── Gmail sign-in ─────────────────────────────────────────────────────
     @app.get("/api/gmail")

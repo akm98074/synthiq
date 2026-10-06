@@ -77,6 +77,13 @@ class Settings:
     gmail_client_id: str = ""
     gmail_account: str = ""
 
+    # Cloud escalation (Step 7c): off unless you add your own Anthropic API key and turn it on
+    cloud_enabled: bool = False
+    cloud_model: str = "claude-opus-5-5"
+    cloud_effort: str = "high"          # low | medium | high | xhigh | max
+    cloud_auto_hard: bool = False       # also offer it for the hardest questions (complexity 5)
+    cloud_send_memories: bool = True
+
     # iMessage channel (Step 6): talk to the agent from your phone
     enable_imessage_channel: bool = False
     imessage_channel_mode: str = "self"        # self (text yourself) | account (agent's own Apple ID)
@@ -146,6 +153,8 @@ class Settings:
         for name in ("brief_time", "dream_time", "quiet_start", "quiet_end"):
             if not _valid_hhmm(getattr(self, name)):
                 raise ValueError(f"{name} must be a time like 08:00")
+        if self.cloud_effort not in ("low", "medium", "high", "xhigh", "max"):
+            raise ValueError("cloud_effort must be low, medium, high, xhigh or max")
         if self.imessage_channel_mode not in ("account", "self"):
             raise ValueError("imessage_channel_mode must be account or self")
         if self.calendar_backend not in ("auto", "eventkit", "applescript"):

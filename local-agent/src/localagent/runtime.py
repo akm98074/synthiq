@@ -32,7 +32,7 @@ class Runtime:
     def __init__(self, settings: Settings, base: Path | None = None, runner=None,
                  stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None, browser=None,
                  screen_capture=None, screen_ocr=None, screen_permission=None, web_fetch=None, wake_stt=None,
-                 vault=None, google=None):
+                 vault=None, google=None, cloud_base_url=None):
         self.base = base or data_dir()
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
@@ -51,6 +51,7 @@ class Runtime:
         self.web_fetch = web_fetch
         self.vault = vault if vault is not None else Vault(self.base)
         self.google = google or GoogleEndpoints()
+        self.cloud_base_url = cloud_base_url      # tests point this at a fake API
         self.gmail = GmailClient(self.vault, self.google, settings.gmail_client_id)
         self.gmail_auth = GmailAuth(self.vault, self.google, settings.gmail_client_id)
         extra = {k: v for k, v in (("capture", screen_capture), ("ocr", screen_ocr),

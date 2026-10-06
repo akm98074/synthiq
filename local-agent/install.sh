@@ -2,7 +2,7 @@
 # LocalAIAgent installer for macOS (Apple Silicon).
 #
 # Run it WITHOUT sudo, from the folder containing the downloaded files:
-#   bash install.sh localaiagent-0.10.0-py3-none-any.whl
+#   bash install.sh localaiagent-0.11.0-py3-none-any.whl
 set -euo pipefail
 ORIG_PATH="$PATH"  # the PATH of the Terminal window that ran this script
 
@@ -23,7 +23,7 @@ find_wheel() {
 WHEEL="${1:-$(find_wheel)}"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "Can't find the localaiagent .whl file.
        Put install.sh and the .whl in the same folder, cd into it, and run:
-         bash install.sh localaiagent-0.10.0-py3-none-any.whl"
+         bash install.sh localaiagent-0.11.0-py3-none-any.whl"
 WHEEL="$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")"
 
 [ "$(uname -s)" = "Darwin" ] || warn "this installer targets macOS; continuing anyway."
@@ -96,6 +96,9 @@ if [ "$(uname -s)" = "Darwin" ]; then
   pipx inject localaiagent "pyobjc-framework-Vision>=10" "pyobjc-framework-Quartz>=10" \
     || warn "screen add-on failed; everything except screen context still works."
 fi
+
+say "Adding the cloud add-on (optional Claude escalation; unused until you add your own API key)"
+pipx inject localaiagent "anthropic>=1.10" || warn "cloud add-on failed; everything else still works."
 
 say "Adding the browser add-on (web tasks in the agent's own browser window)"
 if pipx inject localaiagent "playwright>=1.45"; then

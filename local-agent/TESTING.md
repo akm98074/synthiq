@@ -1,33 +1,30 @@
-# Testing Step 7b (v0.10.0): Gmail sign-in
+# Testing Step 7c (v0.11.0): optional cloud model
 
-Connect Gmail first with `UPGRADING.md` (about 5 minutes). This checklist takes about 10 minutes.
+Set it up with `UPGRADING.md` (2 minutes; needs an Anthropic API key). This checklist takes about 5 minutes and costs a few cents.
 
 ### If something fails
 
 | You see | Fix |
 |---|---|
-| "That doesn't look like a Google OAuth client ID" | Copy the **Client ID** (it ends with `.apps.googleusercontent.com`), not the project ID. |
-| Google: "Access blocked: … has not completed the Google verification process" | **Audience**: publish the app, or add your Gmail address under **Test users**. |
-| Google: "redirect_uri_mismatch" | The client must be type **Desktop app**, not Web. |
-| "Gmail error: Gmail API has not been used in project…" | Enable the **Gmail API** for that project (step 2). |
-| "…revoked or expired. Connect Gmail again" | Press **Save and connect Gmail** again. If it happens weekly, publish the app (step 4). |
+| "The cloud add-on isn't installed" | `pipx inject localaiagent anthropic`, then restart. |
+| "That doesn't look like an Anthropic API key" | Copy the whole key; it starts with `sk-ant-`. |
+| "Anthropic rejected the API key" | Make a new key in the Anthropic console and save it again. |
+| No approval card, just a normal answer | **Settings → Cloud model → Allow asking the cloud model** must be ticked and saved, and the message must start with "think harder", "use the cloud" or "ask Claude". |
 
 ## Checks
 
-1. **Connectors → Gmail → Test** should say "Found 1 Gmail message".
-2. `What are my unread emails in Gmail?` lists real unread mail; click the chip to see them all.
-3. `Read the latest email from <someone>` gives the full text.
-4. `Which Gmail emails haven't I replied to this week?` should list threads where they wrote last, without newsletters.
-5. `Draft a reply to <that email> saying thanks, I'll look tomorrow`. Check **Gmail → Drafts** (also on your phone): the draft is in the same thread.
-6. `Send an email to <your other address> saying test from Ari` shows an approval card. Approve; the email arrives.
-7. **Nudges → Run now** on the checks: Gmail threads waiting on you appear once each.
-8. Open **Keychain Access**, search "LocalAIAgent": the items are there. Search the agent's `config.json` for your secret; it must not be there.
-9. **Settings → Gmail → Disconnect**: the Gmail tools disappear from **Connectors**.
+1. `What's 17 × 23?` should get a normal local answer, no card.
+2. `Think harder: explain the difference between a Roth and a traditional IRA for someone in their 30s`
+   - Expected: an approval card, "Send to claude-opus-5-5 (Anthropic, cloud): …", that lists what goes along. Press **Decline**: "nothing was sent".
+3. Ask again and press **Approve → Just this once**. The answer streams in; the chips show "Answered by claude-opus-5-5 (cloud)".
+4. Approve one with **For 1 hour**, then ask another "think harder" question. It goes without a card.
+5. **Activity** shows each cloud request (what was asked, approved, answered). The API key isn't anywhere in it.
+6. Untick **Allow asking the cloud model**: "think harder" questions are answered locally again.
 
 ## Please send back
 
-1. Where did the Google set-up confuse you? (I'll improve the steps.)
-2. Were search results and follow-ups right?
-3. Did the draft land in the right thread?
+1. Was it clear what would be sent?
+2. Were the cloud answers worth it compared with the local ones?
+3. Should it offer the cloud on its own for hard questions?
 
 Logs: `~/Library/Application Support/LocalAIAgent/server.log`

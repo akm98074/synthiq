@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "localaiagent"
-version = "0.10.0"
+version = "0.11.0"
 description = "Local-first personal AI agent: on-device SLMs via Ollama with a Jev-style decision layer"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,7 +30,8 @@ mac = ["pyobjc-framework-EventKit>=10; sys_platform == 'darwin'",
        "pyobjc-framework-Vision>=10; sys_platform == 'darwin'",
        "pyobjc-framework-Quartz>=10; sys_platform == 'darwin'"]
 browser = ["playwright>=1.45"]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "build>=1.2"]
+cloud = ["anthropic>=1.10"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "build>=1.2", "anthropic>=1.10"]
 
 [project.scripts]
 localagent = "localagent.cli:app"

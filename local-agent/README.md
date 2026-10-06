@@ -4,11 +4,11 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 7b (v0.10.0) — Gmail sign-in
+## Status: Step 7c (v0.11.0) — optional cloud model
 
 | Included | Comes later |
 |---|---|
-| Chat with streaming replies | Step 7: cloud escalation, avatar, agent network, phone line, Windows/Linux |
+| Chat with streaming replies | Step 7: avatar, agent network, phone line, Windows/Linux |
 | Decision layer (intent, memorable?, complexity; should-nudge, urgency) with probabilities and an eval harness | Telegram / iMessage (Step 6) |
 | Persistent memory, `about-me.md` identity file, edit and forget | Agent-to-agent, avatar, Windows/Linux (Step 7) |
 | **Connectors**: Calendar, Reminders, Notes, Mail, Contacts, Files, Documents (PDF/Excel) | |
@@ -16,6 +16,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Proactivity**: morning brief, nudges (events, reminders, unreplied mail), quiet hours, overnight memory review | |
 | **Voice**: push-to-talk, conversation mode, on-device Whisper, spoken replies | |
 | **Messages**: read iMessage/SMS and WhatsApp, chats waiting on your reply, iMessage replies (approved), WhatsApp replies typed in for you | |
+| **Optional cloud model** (your own Anthropic key): "think harder" sends one question to Claude after you approve exactly what's sent | |
 | **Gmail** directly (sign in with Google): search, read, follow-ups, drafts, send; secrets in the Keychain | |
 | **Wake word**: say "Hey Ari, …" while the app is open | |
 | **iMessage channel**: text the agent from your iPhone, approve actions by replying "yes", get nudges and the brief as texts | |
@@ -31,7 +32,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.10.0-py3-none-any.whl
+bash install.sh localaiagent-0.11.0-py3-none-any.whl
 localagent start
 ```
 
@@ -42,7 +43,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.10.0-py3-none-any.whl
+pipx install ./localaiagent-0.11.0-py3-none-any.whl
 localagent setup
 localagent start
 ```
@@ -57,6 +58,7 @@ localagent start
 | `localagent doctor` | Check Ollama, models, RAM, data directory |
 | `localagent setup --voice` | Download the speech-recognition model |
 | `localagent setup --browser` | Start the agent's Chrome once and report whether it works |
+| `localagent cloud-key` | Save your Anthropic API key (Keychain) for the optional cloud model |
 | `localagent gmail-login` | Connect Gmail (asks for your Google OAuth client, then opens Google's sign-in) |
 | `localagent channel test` | Send a test iMessage from the agent to your phone |
 | `localagent screen-access` | Ask macOS for Screen Recording permission (for screen context) |

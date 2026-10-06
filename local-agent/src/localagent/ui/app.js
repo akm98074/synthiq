@@ -480,6 +480,7 @@ async function loadSettings() {
   settings = await api("/api/settings");
   loadChannelStatus();
   loadGmailStatus();
+  loadCloudStatus();
   document.querySelectorAll(".agent-name-inline").forEach((n) => { n.textContent = settings.agent_name; });
   const form = $("#settings-form");
   try {
@@ -666,6 +667,27 @@ $("#roots-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   settings = await api("/api/settings", { method: "PUT", body: { file_roots: $("#file-roots").value } });
   loadConnectors();
+});
+
+async function loadCloudStatus() {
+  try {
+    const c = await api("/api/cloud");
+    $("#cloud-status").textContent = !c.installed ? "Cloud add-on missing: pipx inject localaiagent anthropic"
+      : c.has_key ? `Key saved (${c.vault.startsWith("file") ? "file" : "Keychain"})` : "No key yet";
+    $("#cloud-key-remove").classList.toggle("hidden", !c.has_key);
+  } catch (_) {}
+}
+
+$("#cloud-key-save").addEventListener("click", async () => {
+  try {
+    await api("/api/cloud/key", { method: "PUT", body: { key: $("#cloud-key").value.trim() } });
+    $("#cloud-key").value = "";
+  } catch (err) { $("#cloud-status").textContent = err.message; return; }
+  loadCloudStatus();
+});
+$("#cloud-key-remove").addEventListener("click", async () => {
+  await api("/api/cloud/key", { method: "PUT", body: { key: "" } }).catch(() => null);
+  loadCloudStatus();
 });
 
 async function loadGmailStatus() {
