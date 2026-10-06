@@ -104,14 +104,17 @@ Review the change (default: `git diff` against the last release commit, plus unt
 
 ## K. Verification gates (all must pass before sending a package)
 
+Run these from the project root: `local-agent/` inside the synthiq repo, or the repo root if the project moves to its own repository. `$PY` is a Python 3.11+ environment with `pip install -e ".[dev]"` already done.
+
 ```bash
-cd /home/user/LocalAIAgent
-/tmp/claude-0/venv/bin/python -m pytest -q
+$PY -m pytest -q
 node -e "for (const f of ['src/localagent/ui/app.js','src/localagent/ui/voice.js']) new Function(require('fs').readFileSync(f,'utf8'))"
 bash -n install.sh
-rm -rf dist && /tmp/claude-0/venv/bin/python -m build
-python3 -m venv /tmp/claude-0/clean && /tmp/claude-0/clean/bin/pip install dist/*.whl && /tmp/claude-0/clean/bin/localagent version
+rm -rf dist && $PY -m build
+python3 -m venv /tmp/la-clean && /tmp/la-clean/bin/pip install dist/*.whl && /tmp/la-clean/bin/localagent version
 ```
+
+CI runs the same tests on Ubuntu and macOS-14 (synthiq's `.github/workflows/local-agent.yml`).
 
 - **Browser:** drive the UI with Playwright using `executable_path="/opt/pw-browsers/chromium"` (don't run `playwright install`). Use the fake Ollama, fake runner, fake STT and fake TTS, and pass `--use-fake-device-for-media-stream` for voice.
 - **Upgrade:** open a previous release's database with the new code (git worktree).
