@@ -1,4 +1,5 @@
 import json
+import sys
 
 from test_chat_flow import read_events
 
@@ -91,7 +92,8 @@ def test_danger_tier_only_allows_once(action_client):
     r, ev2 = decide(action_client, ap["id"], True, "once")
     assert r.status_code == 200
     assert not (action_client.files_home / "Downloads" / "old.dmg").exists()
-    assert list((action_client.files_home / ".local/share/Trash/files").iterdir())
+    trash = ".Trash" if sys.platform == "darwin" else ".local/share/Trash/files"
+    assert list((action_client.files_home / trash).iterdir())
 
 
 def test_draft_tier_runs_and_creates_files(action_client):

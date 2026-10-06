@@ -359,6 +359,12 @@ class PlaywrightBrowser:
             # The user closed the agent's tab: open a fresh one in the same window.
             self._page = self._ctx.pages[0] if self._ctx.pages else await self._ctx.new_page()
             return self._page
+        exe = find_chrome(self.executable)
+        if exe is None:
+            where = (f"at {self.executable}" if self.executable
+                     else "in /Applications or ~/Applications" if sys.platform == "darwin" else "on this computer")
+            raise BrowserUnavailable(f"Google Chrome wasn't found {where}. Install it from google.com/chrome "
+                                     "(or set browser_executable in Settings), then try again.")
         if not self.installed():
             raise BrowserUnavailable("The browser add-on isn't installed. In Terminal run: "
                                      "pipx inject localaiagent playwright")
@@ -367,12 +373,6 @@ class PlaywrightBrowser:
         await self._disconnect()
         if self._pw is None:
             self._pw = await async_playwright().start()
-        exe = find_chrome(self.executable)
-        if exe is None:
-            where = (f"at {self.executable}" if self.executable
-                     else "in /Applications or ~/Applications")
-            raise BrowserUnavailable(f"Google Chrome wasn't found {where}. Install it from google.com/chrome "
-                                     "(or set browser_executable in Settings), then try again.")
         self.chrome = ChromeProcess(exe, self.profile_dir, self.headless)
         endpoint = await self.chrome.start()
         try:
