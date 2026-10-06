@@ -14,7 +14,7 @@ from .llm.ollama import OllamaClient
 from .memory import identity
 from .memory.store import Store
 from .connectors.applescript import AppleScriptRunner
-from .connectors.browser import PlaywrightBrowser
+from .connectors.browser import PlaywrightBrowser, find_chrome
 from .connectors.eventkit import EventKitCalendar
 from .connectors.forms import form_tools
 from .connectors.screen import ScreenContext
@@ -42,7 +42,8 @@ class Runtime:
         self.eventkit = eventkit if eventkit is not None else (
             EventKitCalendar() if runner is None and AppleScriptRunner.available() else None)
         self.browser = browser if browser is not None else PlaywrightBrowser(
-            self.base / "browser-profile", settings.browser_headless, settings.browser_executable)
+            self.base / "browser-profile", settings.browser_headless, settings.browser_executable,
+            settings.browser_show_actions, settings.browser_action_delay_ms, settings.agent_name)
         self.skills_dir = self.base / "skills"
         self.web_fetch = web_fetch
         extra = {k: v for k, v in (("capture", screen_capture), ("ocr", screen_ocr),
@@ -96,8 +97,11 @@ class Runtime:
     def connectors(self) -> list[dict]:
         self.build_tools()   # picks up skills added or edited since the last look
         notes = {}
-        if isinstance(self.browser, PlaywrightBrowser) and not self.browser.installed():
-            notes["browser"] = "Needs the browser add-on: pipx inject localaiagent playwright"
+        if isinstance(self.browser, PlaywrightBrowser):
+            if not self.browser.installed():
+                notes["browser"] = "Needs the browser add-on: pipx inject localaiagent playwright"
+            elif find_chrome(self.settings.browser_executable) is None:
+                notes["browser"] = "Google Chrome not found: install it from google.com/chrome"
         if self.settings.enable_skills and not any(t.connector == "skills" for t in self.tools.values()):
             notes["skills"] = f"No skills yet. Folder: {self.skills_dir}"
         return connector_status(self.settings, self.mac_available, self.tools, notes)
@@ -136,6 +140,9 @@ class Runtime:
         if isinstance(self.browser, PlaywrightBrowser):
             self.browser.headless = self.settings.browser_headless
             self.browser.executable = self.settings.browser_executable
+            self.browser.show_actions = self.settings.browser_show_actions
+            self.browser.action_delay_ms = self.settings.browser_action_delay_ms
+            self.browser.agent_name = self.settings.agent_name
         if isinstance(self.tts, SayTTS):
             self.tts.voice, self.tts.rate = self.settings.tts_voice, self.settings.tts_rate
         return self.settings

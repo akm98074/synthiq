@@ -240,12 +240,12 @@ class FakeBrowser:
     async def snapshot(self):
         return self.pages[self.url]
 
-    async def click(self, ref):
+    async def click(self, ref, label=""):
         self.calls.append(("click", ref))
         self.url = self.links.get((self.url, ref), self.url)
         return self.pages[self.url]
 
-    async def fill(self, ref, text, enter=False):
+    async def fill(self, ref, text, enter=False, label=""):
         self.calls.append(("fill", ref, text, enter))
         return self.pages[self.url]
 

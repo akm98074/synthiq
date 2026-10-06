@@ -75,7 +75,9 @@ class Settings:
     # Browser and skills (Step 5b)
     enable_browser: bool = True
     browser_headless: bool = False     # show the window so you can watch and take over
-    browser_executable: str = ""       # empty: Google Chrome, else Playwright's Chromium
+    browser_executable: str = ""       # empty: the installed Google Chrome
+    browser_show_actions: bool = True  # cursor, highlight and labels in the agent's window
+    browser_action_delay_ms: int = 600
     enable_web_search: bool = True
     enable_skills: bool = True
     skills_require_sandbox: bool = True
@@ -134,6 +136,8 @@ class Settings:
             raise ValueError("calendar_backend must be auto, eventkit or applescript")
         if not 5 <= self.check_every_minutes <= 720:
             raise ValueError("check_every_minutes must be between 5 and 720")
+        if not 0 <= self.browser_action_delay_ms <= 3000:
+            raise ValueError("browser_action_delay_ms must be between 0 and 3000")
         if not 1 <= self.screen_every_minutes <= 120:
             raise ValueError("screen_every_minutes must be between 1 and 120")
         if not 5 <= self.screen_retention_minutes <= 1440:

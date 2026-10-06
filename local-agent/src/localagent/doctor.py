@@ -73,6 +73,17 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
                                      "pyobjc-framework-Quartz" if state is None else "not allowed; run: localagent screen-access"),
             warn=True)
 
+    if s.enable_browser:
+        from .connectors.browser import PlaywrightBrowser, chrome_version, find_chrome
+
+        exe = find_chrome(s.browser_executable)
+        if not PlaywrightBrowser.installed():
+            add("browser", False, "add-on missing: pipx inject localaiagent playwright", warn=True)
+        elif exe is None:
+            add("browser", False, "Google Chrome not found; install it from google.com/chrome", warn=True)
+        else:
+            add("browser", True, f"{chrome_version(exe)} ({exe}); test it with: localagent setup --no-pull --browser")
+
     client = OllamaClient(s.ollama_url, timeout=5)
     try:
         version = await client.version()

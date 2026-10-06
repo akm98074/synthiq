@@ -2,6 +2,26 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.7.1 to 0.7.2 (the agent uses your real Google Chrome, and you can watch it)
+
+```bash
+bash install.sh localaiagent-0.7.2-py3-none-any.whl
+localagent setup --no-pull --browser
+localagent start
+```
+
+The middle command opens Chrome once with the agent's own profile, loads a test page and closes it. It should print `Browser works: Google Chrome 1xx …`. If it fails, it prints the exact reason; please send me that line.
+
+### What changed in 0.7.2
+
+- **Real Google Chrome, reliably.** The agent now starts your installed Google Chrome itself (from /Applications or ~/Applications), on its own separate profile, and connects to it. It no longer depends on Playwright's own copy of Chromium, which is what failed before.
+  - It runs next to your normal Chrome without touching your tabs or logins.
+  - Close its window any time: the next web task opens it again, still signed in to whatever you signed in to there.
+  - If something goes wrong, the error says exactly what Chrome reported.
+- **Watch it work, like Muse.** In the agent's Chrome window, a cursor glides to each button or field, a green ring and label show what it's doing ("Ari: clicking “Add to Cart”"), and typing appears letter by letter. A status pill in the corner says the current step, and each step pauses briefly so you can follow.
+  - Turn it off, or change the pause, in **Settings → Connectors**.
+- **Live view in the chat.** After each browser step, the chat shows a small picture of the page. Click it to enlarge.
+
 ## From 0.7.0 to 0.7.1 (better shopping, no card details)
 
 ```bash
@@ -71,7 +91,7 @@ The last line should print `0.7.1`. No new permissions are needed.
    localagent version
    ```
 
-   The last line should print `0.6.0`. The installer adds the browser add-on. If you have **Google Chrome**, the agent uses it with its own separate profile. Otherwise it downloads Chromium (about 150 MB).
+   The last line should print `0.6.0`. The installer adds the browser add-on. The agent uses your **Google Chrome** with its own separate profile.
 2. Optional: try a custom skill.
 
    ```bash

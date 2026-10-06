@@ -196,3 +196,10 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .tool-data ul { margin: 6px 0 2px; padding: 8px 10px 8px 26px; background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; font-size: 13px; max-height: 320px; overflow: auto; }
 .tool-data li { margin: 3px 0; }
+
+/* 0.7.2: live browser view */
+.tool-step { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.tool-step .shot { display: block; width: 240px; max-width: 100%; border-radius: 8px; border: 1px solid var(--border);
+  cursor: zoom-in; background: var(--surface-2); }
+.tool-step.big { flex-basis: 100%; }
+.tool-step.big .shot { width: 100%; cursor: zoom-out; }

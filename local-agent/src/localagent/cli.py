@@ -121,23 +121,40 @@ def setup(
     typer.secho("Setup complete. Run `localagent start`.", fg="green")
 
 
-CHROME = Path("/Applications/Google Chrome.app")
-
-
 def _setup_browser() -> None:
-    from .connectors.browser import PlaywrightBrowser
+    """Start the agent's Chrome once, the same way the agent does, and report exactly what happened."""
+    from .connectors.browser import BrowserUnavailable, PlaywrightBrowser, chrome_version, find_chrome
 
+    s = load_settings()
     if not PlaywrightBrowser.installed():
         typer.secho("The browser add-on isn't installed. Run: pipx inject localaiagent playwright", fg="yellow")
         raise typer.Exit(1)
-    if CHROME.exists():
-        typer.echo("Google Chrome found; the agent will use it with its own separate profile.")
-        return
-    typer.echo("Google Chrome not found; downloading Playwright's Chromium (about 150 MB) ...")
-    if subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"]).returncode != 0:
-        typer.secho("Chromium download failed. Install Google Chrome instead, then try again.", fg="red")
+    exe = find_chrome(s.browser_executable)
+    if exe is None:
+        typer.secho("Google Chrome wasn't found in /Applications or ~/Applications. Install it from "
+                    "https://www.google.com/chrome and run this again.", fg="red")
         raise typer.Exit(1)
-    typer.secho("Browser ready.", fg="green")
+    typer.echo(f"Starting {chrome_version(exe)} ({exe}) with the agent's own profile ...")
+    browser = PlaywrightBrowser(data_dir() / "browser-profile", s.browser_headless, s.browser_executable,
+                                show_actions=False)
+
+    async def check() -> str:
+        try:
+            # A local test page: checks Chrome itself, independent of the network.
+            snap = await browser.goto("data:text/html,<title>LocalAIAgent browser check</title><p>OK</p>")
+            return snap["title"]
+        finally:
+            await browser.close()
+
+    try:
+        title = asyncio.run(check())
+    except BrowserUnavailable as exc:
+        typer.secho(f"Browser check failed: {exc}", fg="red")
+        raise typer.Exit(1)
+    except Exception as exc:  # noqa: BLE001 - show any other failure verbatim
+        typer.secho(f"Browser check failed: {exc.__class__.__name__}: {str(exc).splitlines()[0][:300]}", fg="red")
+        raise typer.Exit(1)
+    typer.secho(f"Browser works: {chrome_version(exe)} opened “{title}”.", fg="green")
 
 
 def _setup_voice(model: str) -> None:

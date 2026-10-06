@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 5 complete (v0.7.1) — acting on the computer
+## Status: Step 5 complete (v0.7.2) — acting on the computer
 
 | Included | Comes later |
 |---|---|
@@ -28,7 +28,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.7.1-py3-none-any.whl
+bash install.sh localaiagent-0.7.2-py3-none-any.whl
 localagent start
 ```
 
@@ -39,7 +39,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.7.1-py3-none-any.whl
+pipx install ./localaiagent-0.7.2-py3-none-any.whl
 localagent setup
 localagent start
 ```
@@ -53,7 +53,7 @@ localagent start
 | `localagent stop` / `status` | Manage the background server |
 | `localagent doctor` | Check Ollama, models, RAM, data directory |
 | `localagent setup --voice` | Download the speech-recognition model |
-| `localagent setup --browser` | Prepare the browser (uses Google Chrome, or downloads Chromium) |
+| `localagent setup --browser` | Start the agent's Chrome once and report whether it works |
 | `localagent screen-access` | Ask macOS for Screen Recording permission (for screen context) |
 | `localagent skill new NAME` / `skill list` | Create a custom skill from a template / list skills and problems |
 | `localagent autostart on\|off\|status` | Start the agent at login (optional) |

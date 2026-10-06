@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.7.1 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.7.2 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -205,7 +205,7 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Files | `files_search`, `files_list` (read), `files_open` (draft), `files_move` (write), `files_trash` (danger) | Python, confined to allowed folders |
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
 | Web search | `web_search` (read; optional `site`) | DuckDuckGo HTML results via httpx: titles, unwrapped links, snippets; untrusted |
-| Browser | `browser_open` (draft), `browser_read` (read), `browser_find` (read), `browser_click`, `browser_type` (draft), `browser_submit` (danger) | Playwright on a persistent profile in the data folder; Google Chrome (`channel="chrome"`), else Playwright's Chromium |
+| Browser | `browser_open` (draft), `browser_read` (read), `browser_find` (read), `browser_click`, `browser_type` (draft), `browser_submit` (danger) | The user's installed Google Chrome, started by the agent on its own profile and driven over DevTools (Playwright `connect_over_cdp`) |
 | Custom skills | `skill_<name>` (tier from SKILL.md; at least write when `network: true`) | Folder with `SKILL.md`; scripts run under `sandbox-exec` |
 | Mac apps & Shortcuts | `apps_list`, `app_ui_read`, `shortcuts_list` (read), `app_open` (draft), `app_ui_press` (write; danger for Delete/Send/Buy… labels), `app_type_text`, `shortcuts_run` (write) | AppleScript: System Events (Accessibility) and Shortcuts Events |
 | Screen context (opt-in) | `screen_now`, `screen_recent` (read) | `screencapture` → Vision OCR (pyobjc), image deleted at once; text kept in `screen_snapshots` |
@@ -230,6 +230,18 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
   - `quick_answer` messages are always offered the tools (when web search is on). The guide tells the model to call `web_search` for anything that changes or is local (prices, shops, restaurants, hours, phone numbers, weather, news), open the best result, and answer from that page with the link. For a store's price, it opens the store's own site and uses its search box. General-knowledge questions get no tool call.
   - The decision layer gained 14 seed examples (`data/web_seed.jsonl`) such as "chutneys bellevue" → quick_answer. Seed files are now tracked per file in `meta` (`seeded:<file>`), so new seed sets reach existing installs.
   - The search POSTs to `html.duckduckgo.com/html/` and parses `result__a`/`result__snippet`, unwrapping `uddg` redirect links and dropping DuckDuckGo-internal links (ads). A robot check or network error points the model to Bing in the agent's browser.
+- **Starting Chrome (0.7.2, `ChromeProcess`):**
+  - `find_chrome()` uses the `browser_executable` setting (an `.app` or binary), else Google Chrome, Beta or Canary in `/Applications` or `~/Applications`.
+  - Chrome is started as a normal process (no automation flags): `--remote-debugging-port=0 --remote-debugging-address=127.0.0.1 --user-data-dir=<data>/browser-profile --no-first-run --no-default-browser-check`. Chrome writes the chosen port to `DevToolsActivePort`; the agent polls `/json/version` (20 s), then attaches with `connect_over_cdp`.
+  - A different user-data-dir means a separate Chrome instance, so the user's own Chrome is never touched.
+  - A Chrome from an earlier agent run that still holds the profile and answers is **reused**. A live holder that doesn't answer is reported with its pid. A `SingletonLock` left by a dead process is removed.
+  - If the tab is closed, a new one opens in the same window. If Chrome is gone, it's started again with the same profile, so logins persist. On shutdown, the agent terminates the Chrome it started (or sends `Browser.close` to a reused one).
+  - Every failure (not found, exited with code N plus Chrome's stderr tail, port never opened, attach failed) is reported verbatim. Playwright's bundled Chromium is never used. `localagent setup --browser` runs the same start-up against example.com.
+- **Watching it work:**
+  - Before each click or type, `SHOW_JS` scrolls the element into view and draws a fixed overlay (pointer-events none) with an animated cursor, a highlight ring, a label "<agent>: clicking “…”" and a click ripple.
+  - `PILL_JS` shows a status pill. The window comes to the front, and the step waits `browser_action_delay_ms` (600). Typing up to 80 characters uses `press_sequentially` at 40 ms per letter.
+  - The overlay sits on `<html>`, outside `<body>`, so it never appears in the page text or the element list.
+  - After each step a JPEG of the viewport is captured with CDP `Page.captureScreenshot` (quality 50, scaled to about 640 px wide). It's sent as `data.shot` for the chat's live view and isn't stored.
 - **Browser (Step 5b, `connectors/browser.py`):**
   - The model never sees HTML. `SNAPSHOT_JS` tags up to 1,500 visible interactive elements with `data-la-ref=N` (duplicate links with the same href and text are skipped). It returns title, URL and the main content's `innerText` (cut at 6,000 characters), or the whole page's text when there's no main content.
   - Each element gets a priority: 0 inside `main`, `[role=main]`, `article` or Amazon-style `#dp`/`#centerCol`; 2 inside header, nav or footer; 1 otherwise. The model sees the first 120 by priority, plus a "+N more" line. `browser_find(text)` searches all tagged elements by label words, so nothing on the page is out of reach.
@@ -368,7 +380,8 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
 | `enable_web_search` | on | Web look-ups |
-| `enable_browser` / `browser_headless` / `browser_executable` | on / off / (Chrome, else Chromium) | Browser |
+| `enable_browser` / `browser_headless` / `browser_executable` | on / off / (installed Google Chrome) | Browser |
+| `browser_show_actions` / `browser_action_delay_ms` | on / 600 | Cursor, highlight and labels in the agent's window |
 | `enable_skills` / `skills_require_sandbox` | on / on | Custom skills |
 | `enable_apps` | on | Mac apps & Shortcuts |
 | `screen_context_enabled` / `screen_every_minutes` / `screen_retention_minutes` / `screen_blocklist` | off / 5 / 120 / password managers, Messages, WhatsApp, Signal, FaceTime | Screen context |
@@ -381,7 +394,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 120 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 127 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

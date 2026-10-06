@@ -1,4 +1,4 @@
-# Testing Step 5c (v0.7.0 / 0.7.1): Mac apps, form filling, screen context
+# Testing Step 5c (v0.7.0 – 0.7.2): Mac apps, form filling, screen context
 
 Upgrade first with `UPGRADING.md`, including **Accessibility** for Terminal (and Screen Recording if you'll try screen context). This checklist takes about 20 minutes. The 5a and 5b checklists are in the 0.5.0 and 0.6.0 packages.
 
@@ -28,6 +28,15 @@ Upgrade first with `UPGRADING.md`, including **Accessibility** for Terminal (and
 2. `Open https://httpbin.org/forms/post`, then `Fill in the form for me`.
    - Fields fill in, in the agent's browser window. The reply lists each value and the fact it came from, and what's left for you.
    - Nothing is submitted. Saying `Submit it` shows the red danger approval.
+
+## B0. The agent's Chrome (0.7.2)
+
+1. Run `localagent setup --no-pull --browser`. It should print `Browser works: Google Chrome …`. If not, send me the line it prints.
+2. In Chat: `Open wikipedia.org and search for Sammamish`.
+   - A separate Chrome window opens. Watch the green cursor move to the search box, the label "Ari: typing in …", the text appear letter by letter, and the pill in the bottom-right corner.
+   - In the chat, a small picture of the page appears under the step. Click it to enlarge.
+3. Close the agent's Chrome window, then ask `Open bbc.com`. It should open again by itself.
+4. Your own Chrome windows and tabs should be untouched throughout.
 
 ## B1. Look-ups (0.7.1)
 

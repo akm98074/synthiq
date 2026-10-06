@@ -55,6 +55,7 @@ Review the change (default: `git diff` against the last release commit, plus unt
 
 - [ ] Browser: never let a draft-tier tool submit, send, buy or delete (`needs_submit()`), never type into password or payment/ID fields (`forms.SENSITIVE`), keep main-content elements ahead of navigation and reachable with `browser_find` on huge pages, open only http(s) URLs, and mark page text `untrusted`.
 - [ ] Look-ups: anything that changes or is local (prices, hours, businesses, news) must go through `web_search` and a source page, never the model's memory; a new seed file must be tracked by `seeded:<file>` so it reaches existing installs.
+- [ ] Browser start-up: launch the user's real Chrome ourselves (own profile, DevTools port 0 → `DevToolsActivePort`) and attach; never fall back silently, and never discard a launch error. Report every reason verbatim.
 - [ ] Skills: never run user scripts unsandboxed on macOS; network implies at least write tier; invalid SKILL.md files are reported, not half-loaded.
 
 - [ ] Mac UI actions: re-verify the element (role + name) before pressing, refuse password managers/System Settings/terminals, and give risky labels a higher tier through `risk(args)`. Unknown elements count as danger.

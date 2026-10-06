@@ -138,6 +138,15 @@ function itemText(it) {
 
 function toolResultView(ev) {
   const label = `${ev.ok ? "✓" : "✗"} ${ev.display}`;
+  if (ev.data && !Array.isArray(ev.data) && ev.data.shot) {
+    // Live view of the agent's browser after this step; click to enlarge.
+    const wrap = el("span", { class: "tool-step" });
+    const img = el("img", { class: "shot", alt: `Browser: ${ev.data.title || ""}`, title: "Click to enlarge",
+                            src: `data:image/jpeg;base64,${ev.data.shot}` });
+    img.addEventListener("click", () => wrap.classList.toggle("big"));
+    wrap.append(el("span", { class: `chip tool ${ev.ok ? "" : "low"}`, title: ev.tool }, label), img);
+    return wrap;
+  }
   if (!Array.isArray(ev.data) || !ev.data.length) {
     return el("span", { class: `chip tool ${ev.ok ? "" : "low"}`, title: ev.tool }, label);
   }
