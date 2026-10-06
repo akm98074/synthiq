@@ -46,7 +46,7 @@ def judge(text: str, schema: dict) -> dict:
         intent = "memory_query"
     elif t.startswith(("i'm", "i am", "my ", "remember", "i prefer", "i like")):
         intent = "memory_write"
-    elif any(w in t for w in ("open", "delete", "send", "book", "trash", "move", "downloads")):
+    elif any(w in t for w in ("open", "delete", "send", "book", "trash", "move", "downloads", "click")):
         intent = "computer_action"
     elif any(w in t for w in ("write", "draft", "plan", "make")):
         intent = "task"
@@ -76,6 +76,10 @@ def pick_tool(text: str, tool_names: set[str]):
     t = text.lower()
     words = text.split()
     rules = [
+        ("word count", "skill_word_count", lambda: {"text": "hello big world"}),
+        ("website", "browser_open", lambda: {"url": "shop.example/item"}),
+        ("click", "browser_click", lambda: {"ref": 2}),
+        ("book it", "browser_submit", lambda: {"ref": 3}),
         ("imessage", "imessage_send", lambda: {"thread": "imessage:1", "text": "Yes, see you at 7!"}),
         ("whatsapp", "whatsapp_open_draft", lambda: {"thread": "whatsapp:1", "text": "Will call tonight"}),
         ("chats", "messages_list", lambda: {"needs_reply": True}),

@@ -75,6 +75,7 @@ def setup(
     fast_model: Optional[str] = typer.Option(None, help="Ollama tag for the fast/judge model."),
     embed_model: Optional[str] = typer.Option(None, help="Ollama tag for the embedding model."),
     voice: bool = typer.Option(False, "--voice", help="Also download the speech-to-text model (~1.6 GB)."),
+    browser: bool = typer.Option(False, "--browser", help="Set up the browser for web tasks."),
 ) -> None:
     """Write the config and download the local models."""
     s = load_settings()
@@ -115,7 +116,28 @@ def setup(
         raise typer.Exit(1)
     if voice:
         _setup_voice(s.stt_model)
+    if browser:
+        _setup_browser()
     typer.secho("Setup complete. Run `localagent start`.", fg="green")
+
+
+CHROME = Path("/Applications/Google Chrome.app")
+
+
+def _setup_browser() -> None:
+    from .connectors.browser import PlaywrightBrowser
+
+    if not PlaywrightBrowser.installed():
+        typer.secho("The browser add-on isn't installed. Run: pipx inject localaiagent playwright", fg="yellow")
+        raise typer.Exit(1)
+    if CHROME.exists():
+        typer.echo("Google Chrome found; the agent will use it with its own separate profile.")
+        return
+    typer.echo("Google Chrome not found; downloading Playwright's Chromium (about 150 MB) ...")
+    if subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"]).returncode != 0:
+        typer.secho("Chromium download failed. Install Google Chrome instead, then try again.", fg="red")
+        raise typer.Exit(1)
+    typer.secho("Browser ready.", fg="green")
 
 
 def _setup_voice(model: str) -> None:
@@ -369,3 +391,38 @@ def eval_decision(
 
 if __name__ == "__main__":
     app()
+
+
+skill_app = typer.Typer(help="Create and list custom skills.", no_args_is_help=True)
+app.add_typer(skill_app, name="skill")
+
+
+@skill_app.command("new")
+def skill_new(name: str = typer.Argument(..., help="Lower-case name with dashes, e.g. word-count")) -> None:
+    """Create a skill folder with an example SKILL.md and script."""
+    from .skills import scaffold
+
+    try:
+        folder = scaffold(data_dir() / "skills", name)
+    except (ValueError, FileExistsError) as exc:
+        typer.secho(str(exc), fg="red")
+        raise typer.Exit(1)
+    typer.echo(f"Created {folder}")
+    typer.echo("Edit SKILL.md and main.py, then open the Connectors tab (it reloads skills).")
+
+
+@skill_app.command("list")
+def skill_list() -> None:
+    """List installed skills and any problems with them."""
+    from .skills import load_skills, sandbox_available
+
+    skills = load_skills(data_dir() / "skills")
+    if not skills:
+        typer.echo(f"No skills yet. Create one with: localagent skill new my-skill  ({data_dir() / 'skills'})")
+        return
+    for sk in skills:
+        state = "problem: " + "; ".join(sk.problems) if sk.problems else (
+            f"{sk.tier}{', network' if sk.network else ''}{', runs ' + sk.run if sk.run else ', instructions only'}")
+        typer.echo(f"{sk.name:<20} {state}")
+    if not sandbox_available():
+        typer.secho("Note: sandbox-exec isn't available here, so script skills won't run.", fg="yellow")

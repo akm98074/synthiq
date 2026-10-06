@@ -7,7 +7,9 @@ from ..config import Settings
 from ..connectors.documents import document_tools
 from ..connectors.files import FileSpace, file_tools, parse_roots
 from ..connectors.mac import calendar_tools, contacts_tools, mail_tools, notes_tools, reminder_tools
+from ..connectors.browser import browser_tools
 from ..connectors.messages import ContactNames, IMessages, WhatsApp, messages_tools, present
+from ..skills import skill_tools
 from .base import Tool
 
 CONNECTORS = [
@@ -27,6 +29,12 @@ CONNECTORS = [
               "Needs Full Disk Access for Terminal."},
     {"id": "files", "name": "Files", "mac": False, "setting": "enable_files",
      "about": "Find, list, move, open and trash files in the allowed folders."},
+    {"id": "browser", "name": "Browser", "mac": False, "setting": "enable_browser",
+     "about": "Open web pages, read them, click links and fill in fields in the agent's own browser window. "
+              "Anything that submits, sends, books or pays asks you every time; it never types passwords."},
+    {"id": "skills", "name": "Custom skills", "mac": False, "setting": "enable_skills",
+     "about": "Your own abilities: folders in the skills folder with a SKILL.md (create one with "
+              "`localagent skill new NAME`). Scripts run sandboxed: no network unless the skill says so."},
     {"id": "documents", "name": "Documents", "mac": False, "setting": "enable_documents",
      "about": "Create PDFs and Excel spreadsheets in ~/Documents/LocalAIAgent."},
 ]
@@ -45,7 +53,8 @@ TEST_CALLS = {
 }
 
 
-def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None) -> dict[str, Tool]:
+def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None, browser=None,
+                skills_dir: Path | None = None) -> dict[str, Tool]:
     tools: list[Tool] = []
     if mac_available:
         if settings.enable_calendar:
@@ -64,6 +73,10 @@ def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None) 
         tools += file_tools(FileSpace(parse_roots(settings.file_roots)))
     if settings.enable_documents:
         tools += document_tools(Path(settings.documents_dir).expanduser())
+    if settings.enable_browser and browser is not None:
+        tools += browser_tools(browser)
+    if settings.enable_skills and skills_dir is not None:
+        tools += skill_tools(skills_dir, settings.skills_require_sandbox)
     return {t.name: t for t in tools}
 
 
@@ -75,7 +88,8 @@ def message_sources(settings: Settings) -> tuple[IMessages | None, WhatsApp | No
     return imessage, whatsapp
 
 
-def connector_status(settings: Settings, mac_available: bool, tools: dict[str, Tool]) -> list[dict]:
+def connector_status(settings: Settings, mac_available: bool, tools: dict[str, Tool],
+                     notes: dict[str, str] | None = None) -> list[dict]:
     out = []
     for c in CONNECTORS:
         available = mac_available or not c["mac"]
@@ -87,7 +101,7 @@ def connector_status(settings: Settings, mac_available: bool, tools: dict[str, T
             "active": available and enabled,
             "tools": [{"name": t.name, "tier": t.tier} for t in tools.values() if t.connector == c["id"]],
             "testable": TEST_CALLS.get(c["id"]) is not None,
-            "note": None if available else "Needs macOS",
+            "note": (notes or {}).get(c["id"]) if available else "Needs macOS",
         })
     return out
 

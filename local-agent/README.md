@@ -4,11 +4,11 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 5a (v0.5.0) — your messages
+## Status: Step 5b (v0.6.0) — web tasks and custom skills
 
 | Included | Comes later |
 |---|---|
-| Chat with streaming replies | Browser + custom skills (Step 5b); Mac app actions, screen context, forms (Step 5c) |
+| Chat with streaming replies | Mac app actions, screen context, form filling (Step 5c) |
 | Decision layer (intent, memorable?, complexity; should-nudge, urgency) with probabilities and an eval harness | Telegram / iMessage (Step 6) |
 | Persistent memory, `about-me.md` identity file, edit and forget | Agent-to-agent, avatar, Windows/Linux (Step 7) |
 | **Connectors**: Calendar, Reminders, Notes, Mail, Contacts, Files, Documents (PDF/Excel) | |
@@ -16,13 +16,15 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Proactivity**: morning brief, nudges (events, reminders, unreplied mail), quiet hours, overnight memory review | |
 | **Voice**: push-to-talk, conversation mode, on-device Whisper, spoken replies | |
 | **Messages**: read iMessage/SMS and WhatsApp, chats waiting on your reply, iMessage replies (approved), WhatsApp replies typed in for you | |
-| **Prompt-injection guard** on mail and chat content | |
+| **Prompt-injection guard** on mail, chat and web content | |
+| **Browser**: the agent's own Chrome window; read pages, click, fill in, search. Submitting, booking or paying asks every time | |
+| **Custom skills**: your own SKILL.md folders, scripts sandboxed (`localagent skill new NAME`) | |
 | Learning from your corrections; model manager; persona settings | |
 
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.5.0-py3-none-any.whl
+bash install.sh localaiagent-0.6.0-py3-none-any.whl
 localagent start
 ```
 
@@ -33,7 +35,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.5.0-py3-none-any.whl
+pipx install ./localaiagent-0.6.0-py3-none-any.whl
 localagent setup
 localagent start
 ```
@@ -47,6 +49,8 @@ localagent start
 | `localagent stop` / `status` | Manage the background server |
 | `localagent doctor` | Check Ollama, models, RAM, data directory |
 | `localagent setup --voice` | Download the speech-recognition model |
+| `localagent setup --browser` | Prepare the browser (uses Google Chrome, or downloads Chromium) |
+| `localagent skill new NAME` / `skill list` | Create a custom skill from a template / list skills and problems |
 | `localagent autostart on\|off\|status` | Start the agent at login (optional) |
 | `localagent eval decision [--file my.jsonl] [--backend hybrid\|prototype\|slm\|systemone]` | Phase-0 gate: accuracy, macro-F1, calibration (ECE), latency |
 

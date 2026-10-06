@@ -84,6 +84,9 @@
         <p class="muted">What the agent can reach on this Mac. The first use of each Apple app shows a macOS permission prompt; press Test to answer it now.</p>
       </div>
       <div id="connector-list" class="list"></div>
+      <h3>Custom skills</h3>
+      <p class="muted small" id="skills-folder"></p>
+      <div id="skill-list" class="list"></div>
       <h3>Folders the Files connector may use</h3>
       <form id="roots-form" class="inline-form">
         <input id="file-roots" placeholder="~/Downloads,~/Desktop,~/Documents">
@@ -172,6 +175,7 @@
           </label>
           <label class="check"><input type="checkbox" name="enable_whatsapp"> Read WhatsApp chats (WhatsApp Desktop)</label>
           <label class="check"><input type="checkbox" name="messages_include_groups"> Include group chats in messages and nudges</label>
+          <label class="check"><input type="checkbox" name="browser_headless"> Hide the agent's browser window (not recommended: you can't watch or take over)</label>
         </fieldset>
         <fieldset><legend>Proactivity</legend>
           <label class="check"><input type="checkbox" name="proactive_enabled"> Let the agent reach out on its own</label>

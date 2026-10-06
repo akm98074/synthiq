@@ -72,6 +72,13 @@ class Settings:
     whatsapp_db: str = "~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite"
     addressbook_dir: str = "~/Library/Application Support/AddressBook"
 
+    # Browser and skills (Step 5b)
+    enable_browser: bool = True
+    browser_headless: bool = False     # show the window so you can watch and take over
+    browser_executable: str = ""       # empty: Google Chrome, else Playwright's Chromium
+    enable_skills: bool = True
+    skills_require_sandbox: bool = True
+
     # Proactivity (Step 3)
     proactive_enabled: bool = True
     brief_time: str = "08:00"

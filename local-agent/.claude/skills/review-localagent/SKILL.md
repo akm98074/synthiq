@@ -53,6 +53,9 @@ Review the change (default: `git diff` against the last release commit, plus unt
 - [ ] Reading another app's database (chat.db, WhatsApp, AddressBook): open with `mode=ro`, never write, check the schema first, and turn PermissionError/"unable to open" into the Full Disk Access steps (quit and reopen Terminal).
 - [ ] Never automate sending where the platform has no API (WhatsApp): open the official link with the text typed in and let the user press Send.
 
+- [ ] Browser: never let a draft-tier tool submit, send, buy or delete (`needs_submit()`), never type into password fields, open only http(s) URLs, and mark page text `untrusted`.
+- [ ] Skills: never run user scripts unsandboxed on macOS; network implies at least write tier; invalid SKILL.md files are reported, not half-loaded.
+
 ## D. LLM output hygiene
 
 - [ ] All model text shown to the user goes through `strip_think` (non-streaming) or `ThinkFilter` (streaming). That includes an **orphan `</think>` with no opening tag** (Qwen3 does this even with `think:false`). Streaming consumers must handle the `RESET` sentinel / `{"type":"reset"}` event.

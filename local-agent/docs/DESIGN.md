@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.5.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.6.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -204,6 +204,8 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Contacts | `contacts_find` (read) | AppleScript |
 | Files | `files_search`, `files_list` (read), `files_open` (draft), `files_move` (write), `files_trash` (danger) | Python, confined to allowed folders |
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
+| Browser | `browser_open` (draft), `browser_read` (read), `browser_click`, `browser_type` (draft), `browser_submit` (danger) | Playwright on a persistent profile in the data folder; Google Chrome (`channel="chrome"`), else Playwright's Chromium |
+| Custom skills | `skill_<name>` (tier from SKILL.md; at least write when `network: true`) | Folder with `SKILL.md`; scripts run under `sandbox-exec` |
 | Messages | `messages_list`, `messages_read` (read), `whatsapp_open_draft` (draft), `imessage_send` (write) | Read-only SQLite on `chat.db` and WhatsApp's `ChatStorage.sqlite` (Full Disk Access); send via Messages AppleScript; WhatsApp via the `whatsapp://send` link |
 
 - **AppleScript safety:** the scripts are bundled files in `connectors/scripts/` and run with `osascript -`. All arguments are passed as **argv**, never pasted into script text, so model or user text can't inject AppleScript.
@@ -220,6 +222,17 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
   - WhatsApp's schema is checked before use (`ZWACHATSESSION`, `ZWAMESSAGE` columns). A mismatch reports "WhatsApp changed how it stores chats" instead of guessing.
   - Sending: `messages_send.applescript` tries the chat id (`any;-;…`, `iMessage;-;…`, `SMS;-;…`) and then the participant handle. WhatsApp has no API for personal accounts, so `whatsapp_open_draft` opens `whatsapp://send?phone=…&text=…` and the user presses Send. Groups aren't supported by that link.
 - **Prompt-injection guard (`safety/injection.py`):** results marked `untrusted` (mail list/read/follow-ups, chats) are fenced as data and pattern-scanned before the model sees them. A hit adds a warning for the model, a ⚠ on the chip and an `injection_flagged` audit row. It also **taints** the run: `Policy.needs_approval(…, tainted=True)` ignores standing grants, so every write needs a fresh approval, and the card says why. The taint survives a pause for approval because it's stored in the run state. The scan is regex-based (deterministic, can't be argued with), so it reduces risk rather than eliminating it.
+- **Browser (Step 5b, `connectors/browser.py`):**
+  - The model never sees HTML. `SNAPSHOT_JS` returns title, URL, `innerText` (cut at 6,000 characters) and up to 120 visible interactive elements. Each one is tagged `data-la-ref=N`, and the model acts by that number.
+  - `needs_submit()` decides what counts as committing: a label matching buy, pay, order, send, delete, book, subscribe, agree…, or a form-submit button that isn't plainly search/filter/next. `browser_click` refuses those and points to `browser_submit` (danger: approved every time, scope "once" only).
+  - `browser_type` refuses password fields. It presses Enter only in search boxes (`type=search`, `role=search`, or a name/placeholder containing search/query/`q`).
+  - Only http(s) URLs open; `javascript:`, `file:` and `data:` are rejected. Page content is `untrusted`, so it's fenced and scanned like mail.
+  - The latest snapshot is stored on the browser object, so element numbers survive a tool rebuild. The window is visible by default (`browser_headless` off) so the user can watch and take over.
+- **Custom skills (`skills.py`):**
+  - The SKILL.md header holds name, description, args, run, tier (default write), network (default false) and timeout. Invalid skills are listed with their problems instead of loading.
+  - Script skills get their arguments as JSON on stdin, run with `cwd` set to the skill folder and `HOME`/`TMPDIR` set to its `work/` folder, a minimal environment and a timeout. Output is capped at 20,000 characters.
+  - On macOS they run under `sandbox-exec` with: `(deny network*)` unless `network: true`; file writes only to `work/` and temp folders; and reads denied for Mail, Messages, Keychains, Cookies, Safari, Group Containers, AddressBook, Chrome, the agent's data, `~/.ssh`, `~/.aws`, `~/.gnupg` and `~/.config/gh`. Without a sandbox (non-macOS), script skills refuse to run unless `skills_require_sandbox` is off (tests only).
+  - The Connectors tab rescans the folder. A message mentioning a skill's name offers the tools even for quick questions.
 - **Files:** every path is resolved and checked to be inside `file_roots` (default `~/Downloads`, `~/Desktop`, `~/Documents`). Trash moves files to `~/.Trash`, so they can be recovered.
 
 ---
@@ -330,6 +343,8 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 | `max_tool_steps` | 5 | Tool-loop iterations per turn |
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
+| `enable_browser` / `browser_headless` / `browser_executable` | on / off / (Chrome, else Chromium) | Browser |
+| `enable_skills` / `skills_require_sandbox` | on / on | Custom skills |
 | `file_roots` | ~/Downloads, ~/Desktop, ~/Documents | Files connector boundary |
 | `brief_time` / `dream_time` / `check_every_minutes` | 08:00 / 03:00 / 30 | Proactive schedule |
 | `quiet_start` / `quiet_end` / `max_nudges_per_day` | 22:00 / 07:30 / 6 | Interruption policy |
@@ -339,7 +354,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 92 pytest tests run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 104 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.
@@ -353,6 +368,7 @@ Known limits:
 - The decision percentages aren't calibrated probabilities (see 4.8).
 - Without calendar Full Access, repeating events are expanded from their rules. A moved single occurrence can appear at both times, and rules dateutil can't parse are skipped.
 - Mail search covers the Inbox only.
+- Browser tasks with a 4B model work for short flows; long checkouts and sites with bot checks often fail. The element list is capped at 120 per page.
 - WhatsApp reading uses an undocumented local database and only sees chats synced to WhatsApp Desktop. WhatsApp replies must be sent by the user.
 - Proactivity runs only while the Mac is awake and the agent is running.
 - Notifications are attributed to Script Editor.

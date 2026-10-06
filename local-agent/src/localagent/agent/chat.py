@@ -96,15 +96,19 @@ async def remember(rt: "Runtime", text: str, source_message_id: int | None) -> l
 TOOL_HINTS = re.compile(
     r"\b(calendar|meeting|event|remind|reminders?|notes?|mail|e-?mail|inbox|send|files?|folders?|"
     r"downloads?|desktop|documents?|pdf|spreadsheet|excel|xlsx|contacts?|phone number|save|"
-    r"messages?|imessages?|texts?|sms|whatsapp|chats?|repl(y|ies|ied))\b",
+    r"messages?|imessages?|texts?|sms|whatsapp|chats?|repl(y|ies|ied)|browser|website|web ?page|"
+    r"site|url|online|google|search the web|skills?)\b|https?://|www\.|\.(com|org|net|io)\b",
     re.IGNORECASE,
 )
 
 
-def wants_tools(intent: str, text: str) -> bool:
+def wants_tools(intent: str, text: str, skill_words: tuple[str, ...] = ()) -> bool:
     if intent in ("schedule", "computer_action"):
         return True
-    return intent in (*ACTION_INTENTS, "quick_answer") and bool(TOOL_HINTS.search(text))
+    if intent not in (*ACTION_INTENTS, "quick_answer"):
+        return False
+    low = text.lower()
+    return bool(TOOL_HINTS.search(text)) or any(w in low for w in skill_words)
 
 
 def pick_model(rt: "Runtime", intent: str, complexity: int) -> str:
@@ -150,7 +154,8 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
     past = [{"role": m["role"], "content": m["content"]} for m in history
             if m["role"] in ("user", "assistant")]
 
-    tools = candidates(rt.tools, intent) if wants_tools(intent, text) else []
+    skill_words = tuple(t.name[6:].replace("_", " ") for t in rt.tools.values() if t.connector == "skills")
+    tools = candidates(rt.tools, intent) if wants_tools(intent, text, skill_words) else []
     if tools:
         messages = [{"role": "system",
                      "content": system_prompt(s, "task", memories, with_tools=True) + "\n\n" + tools_prompt()}]

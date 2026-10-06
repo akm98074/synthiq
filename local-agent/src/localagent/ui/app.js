@@ -634,6 +634,19 @@ async function loadConnectors() {
       result);
   }));
   $("#file-roots").value = settings.file_roots || "";
+  loadSkills();
+}
+
+async function loadSkills() {
+  const info = await api("/api/skills");
+  $("#skills-folder").textContent = `Folder: ${info.folder}. Create one in Terminal with: localagent skill new my-skill`
+    + (info.sandbox ? "" : " (script skills need macOS's sandbox and won't run on this computer)");
+  $("#skill-list").replaceChildren(...(info.skills.length ? info.skills.map((s) => el("div", { class: "card" },
+    el("div", { class: "card-row" }, el("strong", {}, s.name),
+      el("span", { class: `badge tier-${s.tier}` }, `${s.tool} · ${s.tier}${s.network ? " · network" : ""}`)),
+    el("div", { class: "muted" }, s.description || ""),
+    s.problems.length ? el("div", { class: "status-fail small" }, "Not loaded: " + s.problems.join("; ")) : null))
+    : [el("div", { class: "muted small" }, "No skills yet.")]));
 }
 
 $("#roots-form").addEventListener("submit", async (e) => {

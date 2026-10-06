@@ -2,6 +2,36 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.5.0 to 0.6.0 (Step 5b: browser and custom skills)
+
+1. Put the new files in one folder, open Terminal there, and run (no `sudo`):
+
+   ```bash
+   bash install.sh localaiagent-0.6.0-py3-none-any.whl
+   localagent start
+   localagent version
+   ```
+
+   The last line should print `0.6.0`. The installer adds the browser add-on. If you have **Google Chrome**, the agent uses it with its own separate profile. Otherwise it downloads Chromium (about 150 MB).
+2. Optional: try a custom skill.
+
+   ```bash
+   localagent skill new word-count
+   localagent skill list
+   ```
+
+   Then open **Connectors**. The skill appears under **Custom skills**, and you can ask "make a word count of: …".
+
+### What changed in 0.6.0
+
+- **Browser.** Ask "open bbc.com and tell me the top headlines" or "search amazon for a blue kettle under $40".
+  - The agent uses **its own browser window**, which you can watch. It isn't signed in to anything. If a site needs a login, sign in yourself in that window once; the agent never types passwords.
+  - It can read pages, click links, fill in fields and run searches on its own. Anything that **submits, sends, books, pays or deletes** shows an approval card every time ("Just this once" only).
+  - Page text is treated like email: instructions hidden in a page are flagged ⚠ and ignored.
+- **Custom skills.** Folders in `~/Library/Application Support/LocalAIAgent/skills/` with a `SKILL.md`. A skill can be plain instructions ("how I pack for trips") or run a script.
+  - Scripts run in macOS's sandbox: **no network** unless the skill says `network: true`, writes only to the skill's own `work` folder, and no access to Mail, Messages, Keychains, browser data or the agent's own data.
+  - A skill that uses the network always asks for approval.
+
 ## From 0.4.2 to 0.5.0 (Step 5a: iMessage and WhatsApp)
 
 1. Put the new files in one folder, open Terminal there, and run (no `sudo`):

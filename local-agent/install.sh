@@ -2,7 +2,7 @@
 # LocalAIAgent installer for macOS (Apple Silicon).
 #
 # Run it WITHOUT sudo, from the folder containing the downloaded files:
-#   bash install.sh localaiagent-0.5.0-py3-none-any.whl
+#   bash install.sh localaiagent-0.6.0-py3-none-any.whl
 set -euo pipefail
 ORIG_PATH="$PATH"  # the PATH of the Terminal window that ran this script
 
@@ -23,7 +23,7 @@ find_wheel() {
 WHEEL="${1:-$(find_wheel)}"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "Can't find the localaiagent .whl file.
        Put install.sh and the .whl in the same folder, cd into it, and run:
-         bash install.sh localaiagent-0.5.0-py3-none-any.whl"
+         bash install.sh localaiagent-0.6.0-py3-none-any.whl"
 WHEEL="$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")"
 
 [ "$(uname -s)" = "Darwin" ] || warn "this installer targets macOS; continuing anyway."
@@ -93,6 +93,13 @@ fi
 if [ "$(uname -s)" = "Darwin" ]; then
   say "Adding the calendar add-on (complete calendars, including repeating events)"
   pipx inject localaiagent "pyobjc-framework-EventKit>=10" || warn "calendar add-on failed; Calendar falls back to AppleScript."
+fi
+
+say "Adding the browser add-on (web tasks in the agent's own browser window)"
+if pipx inject localaiagent "playwright>=1.45"; then
+  "$AGENT" setup --no-pull --browser || warn "browser setup failed; run 'localagent setup --browser' later."
+else
+  warn "browser add-on failed to install; everything else still works."
 fi
 
 if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then

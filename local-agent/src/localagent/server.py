@@ -82,13 +82,14 @@ async def _warm_up(rt: Runtime) -> None:
 
 
 def create_app(settings: Settings | None = None, base: Path | None = None, runner=None,
-               stt=None, tts=None, scheduler: bool = True, eventkit=None) -> FastAPI:
+               stt=None, tts=None, scheduler: bool = True, eventkit=None, browser=None) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.rt = Runtime(settings, base, runner=runner, stt=stt, tts=tts, eventkit=eventkit)
+        app.state.rt = Runtime(settings, base, runner=runner, stt=stt, tts=tts, eventkit=eventkit,
+                               browser=browser)
         tasks = [asyncio.create_task(_warm_up(app.state.rt))]
         if scheduler:
             tasks.append(asyncio.create_task(app.state.rt.scheduler.loop()))
@@ -285,6 +286,13 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             return {"ok": False, "message": str(exc)}
         r.audit.append("connector_test", name, tool.tier, args, "ok", result.display)
         return {"ok": True, "message": result.display}
+
+    @app.get("/api/skills")
+    async def skills() -> dict:
+        from .skills import sandbox_available, skill_status
+
+        return {"folder": str(rt().skills_dir), "sandbox": sandbox_available(),
+                "skills": skill_status(rt().skills_dir)}
 
     @app.get("/api/tools")
     async def tools() -> list[dict]:

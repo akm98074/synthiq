@@ -14,6 +14,7 @@ from .llm.ollama import OllamaClient
 from .memory import identity
 from .memory.store import Store
 from .connectors.applescript import AppleScriptRunner
+from .connectors.browser import PlaywrightBrowser
 from .connectors.eventkit import EventKitCalendar
 from .policy.engine import Audit, Policy
 from .tools.registry import build_tools, connector_status
@@ -25,7 +26,7 @@ from .voice.tts import SayTTS
 
 class Runtime:
     def __init__(self, settings: Settings, base: Path | None = None, runner=None,
-                 stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None):
+                 stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None, browser=None):
         self.base = base or data_dir()
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
@@ -37,6 +38,9 @@ class Runtime:
         # that inject a fake runner, which would otherwise read the machine's calendars).
         self.eventkit = eventkit if eventkit is not None else (
             EventKitCalendar() if runner is None and AppleScriptRunner.available() else None)
+        self.browser = browser if browser is not None else PlaywrightBrowser(
+            self.base / "browser-profile", settings.browser_headless, settings.browser_executable)
+        self.skills_dir = self.base / "skills"
         self.policy = Policy(self.store)
         self.audit = Audit(self.store)
         self.build_tools()
@@ -75,10 +79,17 @@ class Runtime:
         )
 
     def build_tools(self) -> None:
-        self.tools = build_tools(self.settings, self.runner, self.mac_available, self.eventkit)
+        self.tools = build_tools(self.settings, self.runner, self.mac_available, self.eventkit,
+                                 self.browser, self.skills_dir)
 
     def connectors(self) -> list[dict]:
-        return connector_status(self.settings, self.mac_available, self.tools)
+        self.build_tools()   # picks up skills added or edited since the last look
+        notes = {}
+        if isinstance(self.browser, PlaywrightBrowser) and not self.browser.installed():
+            notes["browser"] = "Needs the browser add-on: pipx inject localaiagent playwright"
+        if self.settings.enable_skills and not any(t.connector == "skills" for t in self.tools.values()):
+            notes["skills"] = f"No skills yet. Folder: {self.skills_dir}"
+        return connector_status(self.settings, self.mac_available, self.tools, notes)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         return await self.ollama.embed(self.settings.embed_model, texts)
@@ -107,10 +118,17 @@ class Runtime:
         self.register_jobs()
         if hasattr(self.stt, "model"):
             self.stt.model = self.settings.stt_model
+        if isinstance(self.browser, PlaywrightBrowser):
+            self.browser.headless = self.settings.browser_headless
+            self.browser.executable = self.settings.browser_executable
         if isinstance(self.tts, SayTTS):
             self.tts.voice, self.tts.rate = self.settings.tts_voice, self.settings.tts_rate
         return self.settings
 
     async def aclose(self) -> None:
+        try:
+            await self.browser.close()
+        except Exception:  # noqa: BLE001 - closing a browser that already went away
+            pass
         await self.ollama.aclose()
         self.store.close()
