@@ -2,6 +2,22 @@
 
 *October 2026 · LocalAIAgent 0.15.0*
 
+## Built in 0.16.0
+
+The first-class **Trust tab** implements most of §4:
+
+| From this document | Status in 0.16.0 |
+|---|---|
+| Privacy Control Center (§4.1) | ✅ Every capability with on/off, risk level, what it reads, what can leave, risks, safeguards, the system permission behind it (a link to that System Settings pane on macOS), last use and uses this week. **Turn off and forget** deletes sign-ins, keys, pairings, cached screen text and standing permissions. |
+| Trust presets | ✅ Observer / Assistant / Agent, enforced in the tool loop (tools above the preset are refused, not just hidden). |
+| Pause | ✅ A header button, `localagent pause`/`resume`, and the iMessage word "pause". Pausing stops actions, background jobs, the phone line, friends' agents and the wake word; the agent still answers in the app, read-only. |
+| Live indicators (§4.2) | ✅ A header strip shows paused, wake word, screen, cloud, phone and friends' agents. |
+| Egress ledger and receipt (§4.3) | ✅ "What left this computer", from the audit log: searches, pages, emails, iMessages, replies to you, spoken phone answers, answers to friends' agents. |
+| Approvals with payload (§4.4) | ✅ The full payload is open on every card, with why it asks; iMessage approvals include it. Grants are per recipient or site and expire. |
+| Off-by-default onboarding (§4.7) | ✅ (partial) New installs start with Messages, WhatsApp, Mail, Contacts and Mac apps off, and a banner points to the Trust tab. The guided "what should I help with?" flow is still to come. |
+| Third-party verification | ✅ **Verify & export**: the app's own checks for a date window (secrets and personal data in the log, personal data that left, actions without approval, injection attempts, sensitive setting changes, log integrity), and a zip for a person or another AI to review. It holds settings without secrets, capabilities, grants, the log, approvals, the ledger, decisions, the hash-chain boundary, the checks, a manifest with SHA-256 of every file, and a ready-made reviewer prompt. Personal data is redacted with stable tokens by default; a raw export needs confirmation. Exports are logged. |
+| Still to do | "Why?" card per nudge (§4.6); memory source and sensitive-category gate (§4.5); a menu-bar icon; the weekly privacy-receipt notification. |
+
 ## 1. Why people don't use Muse or Instinct
 
 Launch coverage and reviews of both products return to the same worries. The capabilities impress people; handing them over does not feel safe.

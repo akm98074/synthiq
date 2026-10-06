@@ -16,7 +16,7 @@ def main() -> None:
         if show:
             webbrowser.open(_signin_url())
         return
-    _pid_file().write_text(str(os.getpid()))
+    _pid_file().write_text(str(os.getpid()), encoding="utf-8")
     if show:
         threading.Timer(1.5, lambda: webbrowser.open(_signin_url())).start()
     from .server import main as serve

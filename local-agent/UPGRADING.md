@@ -2,6 +2,42 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/` (Windows: `%LOCALAPPDATA%\LocalAIAgent`, Linux: `~/.local/share/LocalAIAgent`), which the installer never touches.
 
+## From 0.15.0 to 0.16.0 (security fixes and the Trust & Transparency center)
+
+```bash
+bash install.sh localaiagent-0.16.0-py3-none-any.whl
+localagent start
+```
+
+Windows: `powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.16.0-py3-none-any.whl`.
+
+**Read this first: a few things change for you.**
+
+1. **Open the app with `localagent start` or `localagent open`.** For your privacy, the app now opens only for you. An old bookmark to http://127.0.0.1:8765 shows "Open LocalAIAgent from its app or Terminal" until your browser is signed in. `localagent open` signs it in, and it stays signed in.
+2. **Mac: a LocalAIAgent app.** The installer creates `~/Applications/LocalAIAgent.app`, and `localagent start` runs the agent as that app. macOS asks once more for each permission, now under the name **LocalAIAgent**: Calendar, Automation, Full Disk Access for Messages, Accessibility. If you gave Terminal Full Disk Access only for the agent, you can switch Terminal off in System Settings → Privacy & Security → Full Disk Access.
+3. **Phone line: set a PIN.** Calls are refused until you do. Use Settings → Phone line → Phone PIN, or run `localagent phone setup`. Every call asks for it, because caller ID can be faked.
+4. **Trusted agents: compare safety codes once.** Each pairing shows 4 emoji. Check with your friend, on a call or in person, that you both see the same ones, then press **They match**. Until then nothing is answered automatically for their agent, and you can't ask it things.
+5. **Some changes ask you to confirm.** Turning on screen context, the cloud model, the phone line, friends' agents or the iMessage channel shows what the change risks and asks first. Every settings change appears in Activity.
+
+### What changed in 0.16.0
+
+- **New Trust tab** (first in the bar):
+  - every capability, with an on/off switch, its risk, what it reads, what can leave this computer, its safeguards, the system permission it needs (with a link on the Mac), and when it was last used;
+  - **trust presets**: Observer (only looks), Assistant (also drafts), Agent (also acts, with your approval);
+  - **Pause**, a button at the top: the agent only answers you, read-only. Also `localagent pause` / `resume`, or text "pause" / "resume";
+  - **What left this computer**: every search, page, email, message and answer that went out;
+  - **Safety checks**, and **Verify & export**: pick dates, run the app's own checks (personal data, actions without approval, injection attempts, log integrity), and download a record you can check yourself or give to Claude or ChatGPT to review. A reviewer prompt is included, and personal data is hidden unless you choose otherwise.
+- **Safer by design** (all must-fix and high-priority items from `docs/SECURITY_REVIEW.md`):
+  - Other programs and websites can't use the app.
+  - After reading an email, a chat or a web page, nothing can be sent out without your OK, even if you had allowed it before.
+  - Approvals show the full email or message, and say why they ask.
+  - "Always" permissions apply only to that recipient or site, and expire after 30 days.
+  - Programs and scripts are never opened.
+  - Calendar invites, notes and contacts are treated as written by others.
+  - Custom skills on the Mac can't read your home folder or drive other apps.
+  - Your data folder is readable only by you.
+- **New installs** start with Messages, WhatsApp, Mail, Contacts and Mac apps off; turn on what you want in the Trust tab. **Upgrades keep your current choices.**
+
 ## From 0.14.0 to 0.15.0 (Step 7g: Windows and Linux)
 
 On the Mac nothing changes in how you use it:

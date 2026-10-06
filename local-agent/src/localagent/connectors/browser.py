@@ -244,7 +244,7 @@ class ChromeProcess:
 
     def _read_port(self) -> int | None:
         try:
-            first = self._port_file().read_text().splitlines()[0].strip()
+            first = self._port_file().read_text(encoding="utf-8").splitlines()[0].strip()
             return int(first)
         except (OSError, ValueError, IndexError):
             return None

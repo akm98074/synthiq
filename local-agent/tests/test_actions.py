@@ -97,8 +97,9 @@ def test_danger_tier_only_allows_once(action_client):
     r, ev2 = decide(action_client, ap["id"], True, "once")
     assert r.status_code == 200
     assert not (action_client.files_home / "Downloads" / "old.dmg").exists()
-    trash = ".Trash" if sys.platform == "darwin" else ".local/share/Trash/files"
-    assert list((action_client.files_home / trash).iterdir())
+    from localagent.connectors.files import default_trash
+
+    assert default_trash().is_relative_to(action_client.files_home) and list(default_trash().iterdir())
 
 
 def test_draft_tier_runs_and_creates_files(action_client):

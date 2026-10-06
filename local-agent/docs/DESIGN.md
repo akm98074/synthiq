@@ -344,9 +344,49 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
   - 1 hour or 24 hours;
   - always.
 
-  Grants are listed under **Approvals**, where they can be revoked.
+  Grants are keyed by **tool and target** (the recipient, chat, web site or friend's agent from `safety/egress.py`), so allowing emails to Priya doesn't allow emails to anyone else. "Always" expires after 30 days. Grants are listed under **Approvals** and in the Trust tab, where they can be revoked.
+- **Approval cards** carry the full payload (`preview`: destination, URL, every argument in full) and the reason (`reason`: the tier, or the egress or taint rule that triggered it). The iMessage channel includes both in its text approvals.
 - **Pending approvals** store the paused tool loop as JSON. Approvals still pending when the agent restarts are marked expired.
 - **Audit log** (`audit` table): every tool call, approval request and decision, grant revocation, connector test and proactive job is appended. Each row's `hash = SHA-256(previous_hash + canonical JSON of the row)`. **Activity** shows the log, and `/api/audit/verify` recomputes the chain, reporting the first row that was altered outside the app.
+
+### 7.1 Local API access (`security.py`, 0.16)
+
+The UI server listens on 127.0.0.1, but any local program, and any website through DNS rebinding, can reach localhost. A middleware therefore checks every request:
+1. **Host** must be `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>`, or else 421.
+2. **The per-install secret** (`<data>/api-token`, 0600): either the `la_session_<port>` cookie (HttpOnly, SameSite=Strict) that `GET /auth?t=<secret>&next=…` sets, or `Authorization: Bearer` from the CLI. Otherwise 401, and `/` shows "open with `localagent open`". Exempt: `/api/health` and `/api/gmail/callback`, which arrives from Google and is protected by its single-use state and PKCE.
+3. **Origin** on non-GET requests must be the app's own, or else 403.
+
+UI responses carry a CSP (`default-src 'self'`) and `nosniff`. Security-sensitive settings (`config.SENSITIVE_SETTINGS`) need `X-Confirm: <keys>`; otherwise the server answers 428 with each change's risk, and the UI asks. Every settings change is audited as `settings_changed`.
+
+### 7.2 Egress gating (`safety/egress.py`, 0.16)
+
+One table says which tool calls can carry data off the computer and where: `web_search`, `browser_open`/`type`/`fill_form`, `gmail_send`, `mail_send`, `imessage_send`, `peer_ask`, `cloud_ask` and network skills. `ActionRun` sets `read_untrusted` once **any** untrusted result enters the conversation; the pattern scanner is no longer the only trigger. From then on:
+- sends (write/danger) need a fresh approval, whatever grants exist;
+- `browser_open` runs by itself only for an address already seen verbatim (a link on a page or in your message), which can't carry new data;
+- typed or searched text runs by itself only if every word came from your own message;
+- form filling from memory needs approval.
+
+Before any untrusted read, only a URL whose query string is longer than 120 characters needs approval. The state survives an approval pause. `tests/test_redteam.py` covers an injection the scanner misses.
+
+### 7.3 Trust & Transparency center (`trust.py`, 0.16)
+
+- `CAPABILITIES`: one entry per capability with its setting, platform, OS permissions (deep links on macOS), what it reads, what can leave, risk level and text, and safeguards. Last use is derived from the audit log.
+- **Presets** (`autonomy`): observer = read, assistant = draft, agent = everything with approvals. **Pause** (`paused`) caps the tool loop at read and stops the scheduler, the phone line, peer answers, the iMessage channel (except "resume") and the wake word. Both are enforced in `ActionRun._beyond_ceiling`, not only in the UI.
+- **Egress ledger**: audit `tool_call` rows whose tool has egress, plus `channel_reply`, `channel_forward`, `phone_answer`, `peer_answered` and `peer_reply`.
+- **Posture checks**: sign-in guard, binding, data folder mode, disk encryption, local models, sandbox, app identity (macOS), phone PIN, listener address, verified peers, cloud memories, permanent grants and the audit chain.
+- **Automated checks** for a window: secrets and personal data in the log (`safety/pii.py`: emails, phones, Luhn-checked cards, SSNs, IBANs, API keys, JWTs, passwords, public IPs, street addresses, names from Contacts and peers), personal data that left, write/danger calls with neither an approval nor a prior grant, danger calls without a one-time approval, injection flags, blocked attempts, sensitive setting changes, and chain integrity.
+- **Export** (`/api/trust/export`): a zip with `README_FOR_REVIEWER.md` (file guide and reviewer prompt), `settings.json`, `secrets.json` (set or not set, never values), `capabilities.json`, `grants.json`, `audit.jsonl`, `approvals.jsonl` (without the stored conversation state), `egress.jsonl`, `decisions.jsonl`, `integrity.json` (chain verify plus the window's boundary hashes), `checks.json`, and `manifest.json` (SHA-256 of every file). Redaction is on by default: stable tokens per value (`<EMAIL_3>`). A raw export requires `confirm_raw=yes`. Each export is audited.
+
+### 7.4 Pairing verification and the phone PIN (0.16)
+
+- **Trusted agents** show a 4-emoji safety code from `sha256(sorted public keys)`. Until a pairing is confirmed with "They match", the peer gets no automatic answers and can't be asked. Invites last 24 h.
+- **The phone line** asks for a PIN (DTMF or spoken digits, kept in the vault) on every call. Three wrong tries end the call. A `StirVerstat` containing "Failed" is rejected, and with no PIN set every call is refused.
+
+### 7.5 Data at rest and app identity (0.16)
+
+- At every start the data folder is set to 0700 and its files to 0600 (`security.lock_down`), and the browser profile to 0700; `server.log` is created 0600. On Windows the per-user LocalAppData ACL applies. Disk encryption (FileVault, BitLocker, LUKS) is reported, not enforced.
+- **macOS**: `localagent app install` (run by `install.sh`) builds `~/Applications/LocalAIAgent.app` with bundle id `ai.localagent.app` and usage strings, ad-hoc signed. It runs `python -m localagent.launcher`. `start` uses `open -a` when the app exists, and autostart's LaunchAgent runs the app's executable. Privacy permissions therefore belong to LocalAIAgent, not Terminal. Because the signature changes, macOS may ask again after an upgrade.
+- **The macOS skill sandbox** denies reading the home folder; only the skill folder and an interpreter under home are allowed back. It also denies Apple Events, LaunchServices and the pasteboard, and executing `osascript`, `open`, `pbcopy`/`pbpaste` and `shortcuts`.
 
 ---
 
@@ -487,7 +527,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 173 pytest tests (two real agents in one process pair and exchange encrypted messages) (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 219 pytest tests (two real agents in one process pair and exchange encrypted messages) (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

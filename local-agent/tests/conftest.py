@@ -111,6 +111,7 @@ def files_home(tmp_path, monkeypatch):
     (home / "Downloads" / "old.dmg").write_text("x")
     (home / "Downloads" / "lease.pdf").write_text("x")
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))      # Windows: Path.home() follows USERPROFILE
     return home
 
 

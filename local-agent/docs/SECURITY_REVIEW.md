@@ -2,6 +2,32 @@
 
 *October 2026 · scope: the whole `local-agent/` code base at commit e2fea52*
 
+## Status in 0.16.0
+
+**All 3 P0 and all 11 P1 issues are fixed in 0.16.0**, each with regression tests. The PoC requests from this review (foreign Host, request without the secret, cross-site body-less POST) now fail.
+
+| ID | Fix in 0.16.0 | Tests |
+|---|---|---|
+| P0-1 | `security.py`: Host allowlist (421), per-install secret as an HttpOnly SameSite=Strict cookie from `/auth` or a Bearer header (401), same-origin check on writes (403), CSP and nosniff. `localagent open` signs the browser in. | `test_security.py` |
+| P0-2 | `safety/egress.py`: data-flow gating. After any untrusted read, sends ignore standing grants. Links not seen before, and typed or searched words not from your request, need approval. Long query strings always do. | `test_redteam.py` (an injection the scanner misses) |
+| P0-3 | `files_open` refuses programs and scripts (by extension or the executable bit). | `test_actions.py` |
+| P1-1 | Grants are keyed by target (recipient, chat, site). "Always" expires after 30 days. | `test_redteam.py` |
+| P1-2 | Sensitive settings need confirmation (428 + `X-Confirm`, UI dialog with the risk). Every change is audited and raises a security nudge. Updates are validated on a copy. | `test_security.py` |
+| P1-3 | Calendar, reminders, notes, contacts and file listings are marked untrusted. | suite |
+| P1-4 | Approvals carry the full payload and the reason. The card shows them expanded, and iMessage approvals include them. | `test_redteam.py`, browser check |
+| P1-5 | The phone line needs a PIN on every call (3 tries), rejects failed STIR/SHAKEN, and refuses calls until a PIN is set. | `test_phone.py` |
+| P1-6 | The macOS sandbox denies reading the home folder (except the skill and its interpreter), Apple Events, LaunchServices and `osascript`/`open`. | `test_web.py` (profile); verify on a Mac |
+| P1-7 | `localagent app install` builds an ad-hoc-signed LocalAIAgent.app. `start` and `autostart` run through it. | `test_cli.py`; verify on a Mac |
+| P1-8 | The browser profile is 0700 (DevToolsActivePort inside). The remaining same-user risk is documented. | suite |
+| P1-9 | The data folder is 0700 and its files 0600 at every start; the log is created 0600; doctor and the Trust center report disk encryption. | `test_security.py` |
+| P1-10 | Enforcement no longer depends on the regex (P0-2). The scan remains as a signal. | `test_redteam.py` |
+| P1-11 | A 4-emoji safety code is shown on both sides. Unverified agents get no automatic answers and can't be asked. Invites last 24 h. | `test_peers.py`, browser check |
+| P2-1 / P2-3 / P2-5 | Random fence boundary; validate settings on a copy; CSP and security headers. | suite |
+
+Still open (P2): P2-2 (anchoring the audit chain in the keychain), P2-4 (default listener address), P2-6 (pinning the supply chain), P2-7 (narrower Gmail scope), P2-8 (request size limits), P2-9 (log redaction), P2-10 (per-channel tool lists). The Trust center's export partly covers P2-2: it includes the hash-chain boundary hashes, so a reviewer can check continuity between exports.
+
+The original review follows, unchanged.
+
 ## Summary
 
 The architecture is sound. Its strengths:

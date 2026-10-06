@@ -26,7 +26,7 @@ APP_NAMES = {
 
 
 def script_text(name: str) -> str:
-    return resources.files("localagent.connectors.scripts").joinpath(f"{name}.applescript").read_text()
+    return resources.files("localagent.connectors.scripts").joinpath(f"{name}.applescript").read_text(encoding="utf-8")
 
 
 def parse_records(out: str) -> list[list[str]]:

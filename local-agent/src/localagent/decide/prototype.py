@@ -33,7 +33,7 @@ SEED_COLUMNS = {
 
 
 def load_jsonl(name: str) -> list[dict]:
-    text = resources.files("localagent.data").joinpath(name).read_text()
+    text = resources.files("localagent.data").joinpath(name).read_text(encoding="utf-8")
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 

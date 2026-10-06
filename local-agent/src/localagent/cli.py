@@ -47,7 +47,7 @@ def _running_pid() -> int | None:
     if not path.exists():
         return None
     try:
-        pid = int(path.read_text().strip())
+        pid = int(path.read_text(encoding="utf-8").strip())
     except ValueError:
         path.unlink(missing_ok=True)
         return None
@@ -238,7 +238,7 @@ def start(
             [sys.executable, "-m", "localagent.server"],
             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=os.environ.copy(), **detach,
         )
-        _pid_file().write_text(str(proc.pid))
+        _pid_file().write_text(str(proc.pid), encoding="utf-8")
         for _ in range(100):
             if _healthy(url):
                 break
@@ -448,10 +448,11 @@ def _autostart_other(action: str) -> None:
     if action == "on":
         path.parent.mkdir(parents=True, exist_ok=True)
         if sys.platform == "win32":
-            path.write_text(f'@echo off\r\nstart "" /min "{sys.executable}" -m localagent.server\r\n')
+            path.write_text(f'@echo off\r\nstart "" /min "{sys.executable}" -m localagent.server\r\n', encoding="utf-8")
         else:
             path.write_text("[Desktop Entry]\nType=Application\nName=LocalAIAgent\n"
-                            f"Exec={sys.executable} -m localagent.server\nX-GNOME-Autostart-enabled=true\n")
+                            f"Exec={sys.executable} -m localagent.server\nX-GNOME-Autostart-enabled=true\n",
+                            encoding="utf-8")
         typer.secho(f"Autostart on ({path}). The agent now starts when you log in.", fg="green")
     elif action == "off":
         path.unlink(missing_ok=True)
@@ -470,14 +471,15 @@ def autostart(action: str = typer.Argument("status", help="on | off | status")) 
         _autostart_other(action)
         return
     path = plist_path()
-    uid = os.getuid()
+    uid = os.getuid() if hasattr(os, "getuid") else 0
     launchctl = shutil.which("launchctl")
     if action == "on":
         path.parent.mkdir(parents=True, exist_ok=True)
         from . import macapp
 
         program = [str(macapp.executable()), "--no-open"] if macapp.installed() else None
-        path.write_text(plist_xml(sys.executable, _log_file(), os.environ.get("LOCALAGENT_HOME"), program))
+        path.write_text(plist_xml(sys.executable, _log_file(), os.environ.get("LOCALAGENT_HOME"), program),
+                        encoding="utf-8")
         if launchctl:
             if _running_pid():
                 stop()
@@ -548,7 +550,7 @@ def eval_decision(
         typer.secho(f"Phase-0 gate (intent acc ≥ {g['accuracy_target']:.0%}, ECE ≤ {g['ece_target']}): "
                     f"{verdict}", fg="green" if g["passed"] else "yellow")
     out = output or data_dir() / f"eval-decision-{int(time.time())}.json"
-    out.write_text(json.dumps(report, indent=2))
+    out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     typer.echo(f"Report: {out}")
 
 

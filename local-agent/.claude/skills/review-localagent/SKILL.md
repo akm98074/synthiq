@@ -91,10 +91,16 @@ Review the change (default: `git diff` against the last release commit, plus unt
 - [ ] Paused runs store **JSON-serialisable** state, and resume handles pending calls after the approved one.
 - [ ] Every executed tool call, approval decision, grant revocation and proactive job is appended to the **audit chain**. `/api/audit/verify` still passes.
 - [ ] Nothing approves by voice, by notification click, or by model output.
+- [ ] A new tool that can send data out (a URL, typed text, a message, an upload) has an entry in `safety/egress.py` (`EGRESS`, or `Tool.egress`). Then data-flow gating, the egress ledger and per-target grants all cover it. Add a red-team case to `tests/test_redteam.py`.
+- [ ] A new tool whose results contain text written by other people returns `untrusted=True`. Calendar invites, notes, contacts, file names, mail, chats and web pages are all untrusted.
+- [ ] Approval cards show the full payload (`policy.preview_of`). Never truncate what's being sent.
+- [ ] The trust presets and Pause are enforced in `ActionRun._beyond_ceiling`. A new action path outside the tool loop (like `cloud_ask` in `chat.py`) checks `settings.paused` and `settings.autonomy` itself.
 
 ## F. Security and privacy
 
 - [ ] The server binds to `127.0.0.1` only. The only new network calls are model downloads, unless explicitly approved and documented in DESIGN §11.
+- [ ] Every new route goes through the `security.py` guard (Host allowlist, secret, Origin). Only `/api/health`, `/auth` and the Gmail OAuth callback are open. A new setting that can expose data or let someone else act goes in `config.SENSITIVE_SETTINGS`, and a new capability gets a `trust.CAPABILITIES` entry (reads, leaves, risk, safeguards, permission).
+- [ ] New files in the data folder are created private (`security.private_file`, or `os.open(..., 0o600)`). Text files are read and written with `encoding="utf-8"`, because Windows defaults to cp1252.
 - [ ] File paths are resolved (`.resolve()`) and confined to `file_roots`. Watch symlinks and `..`. Never trash or move a root.
 - [ ] The UI never sets `innerHTML` from data except through `md()`, which escapes first. Data from email or calendar is rendered with `textContent` or `el()`.
 - [ ] No secrets in logs or the audit log. Audio is never written to disk (STT runs in memory; the TTS temp file holds only reply text and is deleted).

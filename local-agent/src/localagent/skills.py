@@ -69,7 +69,7 @@ class Skill:
 
 
 def parse_skill(folder: Path) -> Skill:
-    text = (folder / "SKILL.md").read_text(errors="replace").lstrip("\ufeff \t\n")
+    text = (folder / "SKILL.md").read_text(encoding="utf-8", errors="replace").lstrip("\ufeff \t\n")
     meta: dict[str, str] = {}
     body = text
     if text.startswith("---"):
@@ -277,6 +277,6 @@ def scaffold(root: Path, name: str) -> Path:
     if folder.exists():
         raise FileExistsError(f"{folder} already exists")
     folder.mkdir(parents=True)
-    (folder / "SKILL.md").write_text(EXAMPLE_SKILL.format(name=name))
-    (folder / "main.py").write_text(EXAMPLE_MAIN)
+    (folder / "SKILL.md").write_text(EXAMPLE_SKILL.format(name=name), encoding="utf-8")
+    (folder / "main.py").write_text(EXAMPLE_MAIN, encoding="utf-8")
     return folder

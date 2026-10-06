@@ -89,7 +89,7 @@ def percentile(values: list[float], pct: float) -> float:
 def load_rows(path: Path | None) -> list[dict]:
     if path is None:
         return load_jsonl(EVAL_FILE)
-    return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
 async def run(

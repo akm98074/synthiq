@@ -34,7 +34,7 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
     try:
         base.mkdir(parents=True, exist_ok=True)
         probe = base / ".write-test"
-        probe.write_text("ok")
+        probe.write_text("ok", encoding="utf-8")
         probe.unlink()
         add("data directory", True, str(base))
     except OSError as exc:

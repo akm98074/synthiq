@@ -54,11 +54,20 @@ def launches_code(p: Path) -> bool:
     return sys.platform != "win32" and os.access(p, os.X_OK)
 
 
+def default_trash() -> Path:
+    """macOS Trash, the freedesktop Trash on Linux, and on Windows a folder in your profile
+    (the Recycle Bin has no plain-folder interface)."""
+    if sys.platform == "darwin":
+        return Path.home() / ".Trash"
+    if sys.platform == "win32":
+        return Path.home() / "LocalAIAgent Trash"
+    return Path.home() / ".local/share/Trash/files"
+
+
 class FileSpace:
     def __init__(self, roots: list[Path], trash_dir: Path | None = None):
         self.roots = roots
-        self.trash_dir = trash_dir or (Path.home() / ".Trash" if sys.platform == "darwin"
-                                       else Path.home() / ".local/share/Trash/files")
+        self.trash_dir = trash_dir or default_trash()
 
     def allowed(self, p: Path) -> bool:
         return any(p == r or r in p.parents for r in self.roots)

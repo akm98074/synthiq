@@ -85,7 +85,7 @@ def api_token(base: Path) -> str:
     """The per-install API secret, created on first use."""
     f = base / TOKEN_FILE
     try:
-        tok = f.read_text().strip()
+        tok = f.read_text(encoding="utf-8").strip()
         if len(tok) >= 32:
             private_file(f)
             return tok

@@ -42,5 +42,5 @@ def render(store: Store, agent_name: str = "the assistant") -> str:
 def write(store: Store, path: Path, agent_name: str = "the assistant") -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = render(store, agent_name)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     return text

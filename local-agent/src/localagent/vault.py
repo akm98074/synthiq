@@ -38,7 +38,7 @@ class Vault:
 
     def _read(self) -> dict:
         try:
-            return json.loads(self.file.read_text())
+            return json.loads(self.file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
 

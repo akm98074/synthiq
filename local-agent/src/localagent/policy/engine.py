@@ -113,6 +113,9 @@ class Policy:
             for col in new:
                 if col not in cols:
                     store.db.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+        # "Always" from before 0.16 had no end: give them the same 30 days from now.
+        store.db.execute("UPDATE grants SET expires_at=? WHERE scope='always' AND expires_at IS NULL",
+                         (time.time() + ALWAYS_DAYS * 86400,))
         store.db.commit()
         # Approvals left pending by a previous run can't be resumed.
         store.execute("UPDATE approvals SET status='expired' WHERE status='pending'")

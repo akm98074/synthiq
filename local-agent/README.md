@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). Product-level documents (also as PDFs in `docs/pdf/`): [design overview and Muse/Instinct comparison](docs/OVERVIEW.md), [trust and control UX](docs/TRUST_UX.md), [security and privacy review](docs/SECURITY_REVIEW.md), [product roadmap](docs/PRODUCT_ROADMAP.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 7g (v0.15.0) — Windows and Linux
+## Status: v0.16.0 — security fixes and the Trust & Transparency center
 
 | Included | Comes later |
 |---|---|
@@ -31,12 +31,14 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Form filling from memory** in the agent's browser; you review, nothing is submitted for you | |
 | **Screen context** (opt-in): on-device OCR of your screen, private apps skipped, forgotten after 2 hours | |
 | Learning from your corrections; model manager; persona settings | |
+| **Trust & Transparency center**: every capability with its risk and on/off, trust presets, pause, what left this computer, automated checks, and a redacted export for third-party (or AI) review | |
+| **Security**: the app opens only for you (per-install secret, Host and Origin checks), data can't leave after reading others' content without your OK, approvals show the full payload, phone PIN, verified trusted agents, private data folder, macOS app identity | |
 | **Windows and Linux**: everything except the Apple apps (Calendar, Contacts, Messages, Mail, Notes, Reminders, Mac apps, screen context) | |
 
 ## Install (Apple Silicon Mac, 16 GB+; Windows and Linux below)
 
 ```bash
-bash install.sh localaiagent-0.15.0-py3-none-any.whl
+bash install.sh localaiagent-0.16.0-py3-none-any.whl
 localagent start
 ```
 
@@ -47,8 +49,9 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.15.0-py3-none-any.whl
+pipx install ./localaiagent-0.16.0-py3-none-any.whl
 localagent setup
+localagent app install     # macOS: permissions go to the LocalAIAgent app, not Terminal
 localagent start
 ```
 
@@ -57,7 +60,7 @@ localagent start
 Windows, in a normal (not Administrator) PowerShell window, in the folder with the files:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.15.0-py3-none-any.whl
+powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.16.0-py3-none-any.whl
 localagent start
 ```
 
@@ -71,11 +74,14 @@ Available there: chat, memory, decisions, Files, Documents, Gmail, web look-ups,
 |---|---|
 | `localagent setup [--agent-name Ari] [--chat-model qwen3:8b]` | Write config, pull models |
 | `localagent start [-f] [--no-open]` | Start in the background (or foreground) and open the UI |
+| `localagent open` | Open the app in your browser, signed in (the app only opens for you) |
 | `localagent stop` / `status` | Manage the background server |
+| `localagent pause` / `resume` | Stop everything except answering you in the app (read-only), and undo it |
+| `localagent app install` | macOS: create LocalAIAgent.app so privacy permissions belong to it, not Terminal |
 | `localagent doctor` | Check Ollama, models, RAM, data directory |
 | `localagent setup --voice` | Download the speech-recognition model |
 | `localagent setup --browser` | Start the agent's Chrome once and report whether it works |
-| `localagent phone setup` | Save your Twilio auth token and print the steps to connect a number |
+| `localagent phone setup` | Save your Twilio auth token and phone PIN, and print the steps to connect a number |
 | `localagent cloud-key` | Save your Anthropic API key (Keychain) for the optional cloud model |
 | `localagent gmail-login` | Connect Gmail (asks for your Google OAuth client, then opens Google's sign-in) |
 | `localagent channel test` | Send a test iMessage from the agent to your phone |
@@ -84,7 +90,7 @@ Available there: chat, memory, decisions, Files, Documents, Gmail, web look-ups,
 | `localagent autostart on\|off\|status` | Start the agent at login (optional) |
 | `localagent eval decision [--file my.jsonl] [--backend hybrid\|prototype\|slm\|systemone]` | Phase-0 gate: accuracy, macro-F1, calibration (ECE), latency |
 
-Data lives in `~/Library/Application Support/LocalAIAgent/` (database, `identity/about-me.md`, config, logs, eval reports). The server binds to `127.0.0.1` only.
+Data lives in `~/Library/Application Support/LocalAIAgent/` (database, `identity/about-me.md`, config, logs, eval reports). The server binds to `127.0.0.1` only and answers only requests that carry this install's secret (see `docs/DESIGN.md` §7.1).
 
 ## How the decision layer works
 

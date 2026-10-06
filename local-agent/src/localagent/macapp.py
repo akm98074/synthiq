@@ -74,9 +74,9 @@ def install(python: str | None = None, home: Path | None = None, sign: bool = Tr
     app = app_path(home)
     contents = app / "Contents"
     (contents / "MacOS").mkdir(parents=True, exist_ok=True)
-    (contents / "Info.plist").write_text(info_plist(__version__))
+    (contents / "Info.plist").write_text(info_plist(__version__), encoding="utf-8")
     exe = executable(home)
-    exe.write_text(launcher_script(python or sys.executable))
+    exe.write_text(launcher_script(python or sys.executable), encoding="utf-8")
     exe.chmod(0o755)
     note = "not signed (codesign not available)"
     if sign and shutil.which("codesign"):

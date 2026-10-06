@@ -277,7 +277,7 @@ def load_settings(base: Path | None = None) -> Settings:
         settings.update({k: False for k in FIRST_RUN_OFF})
         return settings
     try:
-        saved = json.loads(path.read_text())
+        saved = json.loads(path.read_text(encoding="utf-8"))
     except (ValueError, json.JSONDecodeError):
         return settings
     try:
@@ -293,5 +293,5 @@ def load_settings(base: Path | None = None) -> Settings:
 
 def save_settings(settings: Settings, base: Path | None = None) -> Path:
     path = config_path(base)
-    path.write_text(json.dumps(settings.to_dict(), indent=2))
+    path.write_text(json.dumps(settings.to_dict(), indent=2), encoding="utf-8")
     return path

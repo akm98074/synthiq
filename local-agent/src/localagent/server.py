@@ -179,7 +179,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
 
     @app.get("/", include_in_schema=False)
     async def index() -> HTMLResponse:
-        html = (UI_DIR / "index.html").read_text()
+        html = (UI_DIR / "index.html").read_text(encoding="utf-8")
         for asset in ("/ui/app.js", "/ui/voice.js", "/ui/app.css"):
             html = html.replace(f'"{asset}"', f'"{asset}?v={__version__}"')
         return HTMLResponse(html)
