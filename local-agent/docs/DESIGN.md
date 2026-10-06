@@ -385,7 +385,13 @@ Before any untrusted read, only a URL whose query string is longer than 120 char
 ### 7.5 Data at rest and app identity (0.16)
 
 - At every start the data folder is set to 0700 and its files to 0600 (`security.lock_down`), and the browser profile to 0700; `server.log` is created 0600. On Windows the per-user LocalAppData ACL applies. Disk encryption (FileVault, BitLocker, LUKS) is reported, not enforced.
-- **macOS**: `localagent app install` (run by `install.sh`) builds `~/Applications/LocalAIAgent.app` with bundle id `ai.localagent.app` and usage strings, ad-hoc signed. It runs `python -m localagent.launcher`. `start` uses `open -a` when the app exists, and autostart's LaunchAgent runs the app's executable. Privacy permissions therefore belong to LocalAIAgent, not Terminal. Because the signature changes, macOS may ask again after an upgrade.
+- **macOS**: `localagent app install` (run by `install.sh`) builds `~/Applications/LocalAIAgent.app` on the Mac with Apple's `osacompile`. That gives an AppleScript applet, a Mach-O stub LaunchServices accepts. (0.16.0–0.16.1 used a shell-script executable, which macOS refused with error -10669.)
+  - `plutil` sets bundle id `ai.localagent.app`, `LSUIElement` and the usage strings, and the bundle is ad-hoc signed.
+  - The applet runs `python -m localagent.launcher --no-open` in the background and quits; the agent is its child, so permissions belong to LocalAIAgent.
+  - **Self-test:** `install` writes `app-selftest-request` and opens the app. The launcher answers with `app-selftest-ok` without starting anything. If that doesn't happen within 15 s, the bundle is removed.
+  - **Start:** `start` uses `open -g -a`. If `open` fails, or the agent doesn't come up in 30 s, it writes `app-launch-failed`, prints why, and starts from Terminal; later starts skip the app until `app install` succeeds.
+  - Autostart's LaunchAgent runs `/usr/bin/open -g -a <app>`.
+  - Because the signature changes, macOS may ask for permissions again after an upgrade.
 - **The macOS skill sandbox** denies reading the home folder; only the skill folder and an interpreter under home are allowed back. It also denies Apple Events, LaunchServices and the pasteboard, and executing `osascript`, `open`, `pbcopy`/`pbpaste` and `shortcuts`.
 
 ---

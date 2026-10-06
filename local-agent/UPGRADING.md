@@ -2,6 +2,20 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/` (Windows: `%LOCALAPPDATA%\LocalAIAgent`, Linux: `~/.local/share/LocalAIAgent`), which the installer never touches.
 
+## From 0.16.1 to 0.16.2 (fix for "error -10669" on the Mac)
+
+```bash
+bash install.sh localaiagent-0.16.2-py3-none-any.whl
+localagent start
+```
+
+If `localagent start` failed with **"_LSOpenURLsWithCompletionHandler() failed … error -10669"**, this fixes it:
+- The LocalAIAgent app is now built on your Mac with Apple's `osacompile`, which makes an app macOS will launch. The installer launches it once to check.
+- If macOS still won't run it, the installer removes it, and the agent runs from Terminal (as in 0.15).
+- `localagent start` never gets stuck on the app again: if the app won't open, it says so and starts from Terminal instead.
+
+`localagent doctor` shows which one is in use: "permissions identity". To try the app again later, run `localagent app install`.
+
 ## From 0.16.0 to 0.16.1
 
 ```bash

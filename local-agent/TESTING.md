@@ -1,4 +1,4 @@
-# Testing v0.16.0: security fixes and the Trust & Transparency center
+# Testing v0.16.2: security fixes and the Trust & Transparency center
 
 Do the steps in `UPGRADING.md` first (about 5 minutes). This checklist takes about 20 minutes.
 
@@ -26,6 +26,8 @@ Do the steps in `UPGRADING.md` first (about 5 minutes). This checklist takes abo
 
 | You see | Fix |
 |---|---|
+| `localagent start`: "_LSOpenURLsWithCompletionHandler() failed … error -10669" | Install 0.16.2. Or, right away: `rm -rf ~/Applications/LocalAIAgent.app && localagent start` (the agent then runs from Terminal). |
+| "Couldn't start LocalAIAgent.app …; starting from Terminal instead" | The agent works; macOS refused the app. Retry with `localagent app install` and send the message it prints. |
 | "Open LocalAIAgent from its app or Terminal" | Run `localagent open` (or `localagent start`). Your browser stays signed in afterwards. |
 | macOS asks for Calendar/Automation/Full Disk Access again | Expected once: answer **Allow** for **LocalAIAgent**. For Messages: System Settings → Privacy & Security → Full Disk Access → turn on LocalAIAgent. |
 | Messages or Mail say "disabled" | New installs start with them off: Trust tab → switch them on. |
@@ -39,7 +41,7 @@ Do the steps in `UPGRADING.md` first (about 5 minutes). This checklist takes abo
 2. `localagent open`. The app opens normally.
 
 **Mac app identity**
-3. `localagent doctor` shows "permissions identity: LocalAIAgent.app".
+3. `localagent app install` prints "self-test passed", or explains that macOS wouldn't launch the app (then the agent runs from Terminal; please send that message). `localagent doctor` shows "permissions identity: LocalAIAgent.app" in the first case.
 4. Ask _"What's on my calendar today?"_. If macOS asks, the prompt names **LocalAIAgent**.
 
 **Trust tab**

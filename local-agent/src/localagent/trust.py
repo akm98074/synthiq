@@ -297,8 +297,10 @@ def posture(rt: "Runtime") -> list[dict]:
     if sys.platform == "darwin":
         from . import macapp
 
-        add("identity", "Permissions belong to LocalAIAgent", macapp.installed(),
-            "LocalAIAgent.app installed" if macapp.installed() else "permissions go to Terminal/Python",
+        add("identity", "Permissions belong to LocalAIAgent", macapp.usable(rt.base),
+            "LocalAIAgent.app installed" if macapp.usable(rt.base)
+            else "macOS won't launch LocalAIAgent.app; permissions go to Terminal"
+            if macapp.installed() else "permissions go to Terminal/Python",
             "Run: localagent app install")
     if s.phone_enabled:
         add("pin", "Phone calls need a PIN", rt.vault.has("phone_pin"), "PIN set" if rt.vault.has("phone_pin")

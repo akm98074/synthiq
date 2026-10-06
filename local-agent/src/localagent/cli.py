@@ -217,39 +217,8 @@ def start(
     pid = _running_pid()
     if _healthy(url):
         typer.echo(f"Already running at {url}" + (f" (pid {pid})" if pid else " (started at login)"))
-    elif sys.platform == "darwin" and _mac_app_installed():
-        # Run as LocalAIAgent.app, so macOS gives the permissions to that app, not to Terminal.
-        from . import macapp
-
-        subprocess.run(["open", "-g", "-a", str(macapp.app_path()), "--args", "--no-open"], check=False)
-        for _ in range(150):
-            if _healthy(url):
-                break
-            time.sleep(0.2)
-        else:
-            typer.secho(f"The app didn't start; see {_log_file()}", fg="red")
-            raise typer.Exit(1)
-        typer.secho(f"Started LocalAIAgent.app at {url}", fg="green")
-    else:
-        log = os.fdopen(os.open(_log_file(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a")
-        detach = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
-                  if sys.platform == "win32" else {"start_new_session": True})
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "localagent.server"],
-            stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=os.environ.copy(), **detach,
-        )
-        _pid_file().write_text(str(proc.pid), encoding="utf-8")
-        for _ in range(100):
-            if _healthy(url):
-                break
-            if proc.poll() is not None:
-                typer.secho(f"Server exited early; see {_log_file()}", fg="red")
-                raise typer.Exit(1)
-            time.sleep(0.2)
-        else:
-            typer.secho(f"Server did not become healthy; see {_log_file()}", fg="red")
-            raise typer.Exit(1)
-        typer.secho(f"Started (pid {proc.pid}) at {url}", fg="green")
+    elif not (sys.platform == "darwin" and _mac_app_installed() and _start_mac_app(url)):
+        _start_background(url)
     if open_browser:
         webbrowser.open(_signin_url())
 
@@ -257,7 +226,49 @@ def start(
 def _mac_app_installed() -> bool:
     from . import macapp
 
-    return macapp.installed()
+    return macapp.usable(data_dir())
+
+
+def _start_mac_app(url: str) -> bool:
+    """Run as LocalAIAgent.app, so macOS gives the permissions to that app, not to Terminal.
+    False (with a note, and remembered) if macOS won't launch it: the caller starts from Terminal."""
+    from . import macapp
+
+    r = subprocess.run(["open", "-g", "-a", str(macapp.app_path())], capture_output=True, text=True)
+    reason = (r.stderr or r.stdout).strip().splitlines()[-1][:200] if r.returncode else ""
+    if not reason:
+        for _ in range(150):
+            if _healthy(url):
+                typer.secho(f"Started LocalAIAgent.app at {url}", fg="green")
+                return True
+            time.sleep(0.2)
+        reason = "it opened but the agent didn't come up"
+    (data_dir() / macapp.LAUNCH_FAILED).write_text(reason, encoding="utf-8")
+    typer.secho(f"Couldn't start LocalAIAgent.app ({reason}); starting from Terminal instead. "
+                "Retry later with: localagent app install", fg="yellow")
+    return False
+
+
+def _start_background(url: str) -> None:
+    log = os.fdopen(os.open(_log_file(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a")
+    detach = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
+              if sys.platform == "win32" else {"start_new_session": True})
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "localagent.server"],
+        stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=os.environ.copy(), **detach,
+    )
+    _pid_file().write_text(str(proc.pid), encoding="utf-8")
+    for _ in range(100):
+        if _healthy(url):
+            break
+        if proc.poll() is not None:
+            typer.secho(f"Server exited early; see {_log_file()}", fg="red")
+            raise typer.Exit(1)
+        time.sleep(0.2)
+    else:
+        typer.secho(f"Server did not become healthy; see {_log_file()}", fg="red")
+        raise typer.Exit(1)
+    typer.secho(f"Started (pid {proc.pid}) at {url}", fg="green")
 
 
 app_cli = typer.Typer(help="The LocalAIAgent app (macOS): its own identity for privacy permissions.",
@@ -273,8 +284,22 @@ def app_install() -> None:
         return
     from . import macapp
 
-    path, note = macapp.install()
-    typer.secho(f"Installed {path} ({note}).", fg="green")
+    if _healthy(_url()):
+        stop()                     # the app will start it again; one agent at a time
+    try:
+        path, note = macapp.install()
+    except (RuntimeError, OSError, subprocess.CalledProcessError) as exc:
+        typer.secho(f"Couldn't create the app: {exc}. The agent runs from Terminal instead.", fg="yellow")
+        return
+    ok, detail = macapp.selftest(data_dir())
+    if not ok:
+        shutil.rmtree(path, ignore_errors=True)
+        (data_dir() / macapp.LAUNCH_FAILED).unlink(missing_ok=True)
+        typer.secho(f"macOS wouldn't launch the app on this Mac ({detail}), so it was removed. The agent runs "
+                    "from Terminal; permissions show under Terminal.", fg="yellow")
+        return
+    (data_dir() / macapp.LAUNCH_FAILED).unlink(missing_ok=True)
+    typer.secho(f"Installed {path} ({note}; self-test passed).", fg="green")
     typer.echo("From now on `localagent start` runs the agent as this app. macOS will ask once for each\n"
                "permission under the name LocalAIAgent; you can remove Terminal's Full Disk Access if you\n"
                "only gave it for the agent (System Settings > Privacy & Security).")
@@ -477,7 +502,8 @@ def autostart(action: str = typer.Argument("status", help="on | off | status")) 
         path.parent.mkdir(parents=True, exist_ok=True)
         from . import macapp
 
-        program = [str(macapp.executable()), "--no-open"] if macapp.installed() else None
+        program = (["/usr/bin/open", "-g", "-a", str(macapp.app_path())]
+                   if macapp.usable(data_dir()) else None)
         path.write_text(plist_xml(sys.executable, _log_file(), os.environ.get("LOCALAGENT_HOME"), program),
                         encoding="utf-8")
         if launchctl:

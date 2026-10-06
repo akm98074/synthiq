@@ -50,8 +50,11 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
     if sys.platform == "darwin":
         from . import macapp
 
-        add("permissions identity", macapp.installed(),
-            "LocalAIAgent.app (permissions are granted to the app)" if macapp.installed()
+        refused = (base / macapp.LAUNCH_FAILED).exists()
+        add("permissions identity", macapp.usable(base),
+            "LocalAIAgent.app (permissions are granted to the app)" if macapp.usable(base)
+            else ("LocalAIAgent.app is installed but macOS won't launch it, so the agent runs from Terminal; "
+                  "retry: localagent app install") if refused
             else "Terminal/Python - permissions you grant also apply to everything run there; "
                  "run: localagent app install", warn=True)
 

@@ -1,3 +1,7 @@
+import os
+
+import pytest
+
 from typer.testing import CliRunner
 
 from localagent.cli import app
@@ -7,7 +11,7 @@ runner = CliRunner()
 
 def test_version():
     r = runner.invoke(app, ["version"])
-    assert r.exit_code == 0 and r.stdout.strip() == "0.16.1"
+    assert r.exit_code == 0 and r.stdout.strip() == "0.16.2"
 
 
 def test_setup_doctor_eval(settings, home):
@@ -95,3 +99,82 @@ def test_autostart_plist_uses_app_when_present(tmp_path):
 
     xml = plist_xml("/py", tmp_path / "log", None, ["/Users/me/Applications/LocalAIAgent.app/Contents/MacOS/LocalAIAgent", "--no-open"])
     assert plistlib.loads(xml.encode())["ProgramArguments"][1] == "--no-open"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX shell stand-ins for osacompile/plutil")
+def test_mac_app_is_an_osacompile_applet(tmp_path, monkeypatch, home):
+    """On a Mac the app is built by Apple's osacompile (a Mach-O applet LaunchServices accepts), not a
+    shell script (LaunchServices error -10669). Stand-ins record what would run."""
+    from localagent import macapp
+
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    calls = tmp_path / "calls.log"
+    (bin_ / "osacompile").write_text(
+        "#!/bin/sh\n"
+        f'echo "osacompile $@" >> "{calls}"\n'
+        'app="$2"; mkdir -p "$app/Contents/MacOS"; cp "$3" "$app/source.applescript"\n'
+        'printf "<plist/>" > "$app/Contents/Info.plist"; : > "$app/Contents/MacOS/applet"\n')
+    (bin_ / "plutil").write_text(f'#!/bin/sh\necho "plutil $@" >> "{calls}"\n')
+    for f in bin_.iterdir():
+        f.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
+    log = tmp_path / "Application Support" / "server.log"
+    path, note = macapp.install(python="/Users/me/.local/pipx/venvs/localaiagent/bin/python", home=tmp_path,
+                                sign=False, log=log)
+    src = (path / "source.applescript").read_text()
+    assert src.startswith('do shell script "') and "-m localagent.launcher --no-open" in src
+    assert f"'{log}'" in src and src.rstrip().endswith('&"')          # paths with spaces stay quoted
+    log_text = calls.read_text()
+    assert "plutil -replace CFBundleIdentifier -string ai.localagent.app" in log_text
+    assert "plutil -replace LSUIElement -bool YES" in log_text and "NSAppleEventsUsageDescription" in log_text
+    assert macapp.executable(tmp_path).name == "applet" and macapp.installed(tmp_path)
+
+
+def test_start_falls_back_to_terminal_when_macos_refuses_the_app(monkeypatch, home):
+    import subprocess as sp
+
+    from localagent import cli, macapp
+
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    monkeypatch.setattr(cli, "_healthy", lambda url: False)
+    monkeypatch.setattr(macapp, "installed", lambda home=None: True)
+    started = []
+    monkeypatch.setattr(cli, "_start_background", lambda url: started.append(url))
+    err = "_LSOpenURLsWithCompletionHandler() failed for the application LocalAIAgent.app with error -10669."
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: sp.CompletedProcess(a[0], 1, "", err))
+    r = runner.invoke(app, ["start", "--no-open"])
+    assert r.exit_code == 0, r.stdout
+    assert started and "starting from Terminal instead" in r.stdout and "-10669" in r.stdout
+    assert (home / macapp.LAUNCH_FAILED).exists() and not macapp.usable(home)
+    calls = []
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: calls.append(a) or sp.CompletedProcess(a[0], 0))
+    runner.invoke(app, ["start", "--no-open"])
+    assert not calls and len(started) == 2                             # remembered: no retry until reinstall
+
+
+def test_app_install_removes_an_app_macos_wont_launch(monkeypatch, tmp_path, home):
+    from localagent import cli, macapp
+
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    monkeypatch.setattr(cli, "_healthy", lambda url: False)
+    bundle = tmp_path / "LocalAIAgent.app"
+    bundle.mkdir()
+    monkeypatch.setattr(macapp, "install", lambda **k: (bundle, "ad-hoc signed"))
+    monkeypatch.setattr(macapp, "selftest", lambda base: (False, "error -10669"))
+    r = runner.invoke(app, ["app", "install"])
+    assert r.exit_code == 0 and "wouldn't launch" in r.stdout and not bundle.exists()
+    bundle.mkdir()
+    (home / macapp.LAUNCH_FAILED).write_text("old")
+    monkeypatch.setattr(macapp, "selftest", lambda base: (True, "launched"))
+    r = runner.invoke(app, ["app", "install"])
+    assert "self-test passed" in r.stdout and not (home / macapp.LAUNCH_FAILED).exists()
+
+
+def test_launcher_answers_selftest_without_starting(home, monkeypatch):
+    from localagent import launcher, macapp
+
+    (home / macapp.SELFTEST_REQUEST).write_text("1")
+    monkeypatch.setattr("localagent.cli._healthy", lambda url: (_ for _ in ()).throw(AssertionError("no start")))
+    launcher.main()
+    assert (home / macapp.SELFTEST_OK).exists() and not (home / macapp.SELFTEST_REQUEST).exists()
