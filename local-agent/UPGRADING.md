@@ -2,6 +2,35 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.4.1 to 0.4.2 (repeating meetings without extra permissions)
+
+1. Put the new files in one folder, open Terminal there, and run (no `sudo`):
+
+   ```bash
+   bash install.sh localaiagent-0.4.2-py3-none-any.whl
+   localagent start
+   localagent version
+   ```
+
+   The last line should print `0.4.2`.
+2. In Chat, ask `What's on my calendar this week?`. Repeating meetings now appear, using the Calendar permission you already gave Terminal.
+   The chip shows where the events came from, for example "Found 14 event(s) via AppleScript (EventKit: not asked yet)".
+3. Optional, for the most exact results (moved or cancelled single occurrences): give the agent EventKit access from Terminal:
+
+   ```bash
+   localagent calendar-access
+   localagent stop
+   localagent start
+   ```
+
+   Click **Allow** if macOS asks. If it prints "access denied", open **System Settings → Privacy & Security → Calendars**, set **Terminal** to **Full Access**, and restart the agent as above. The chip then says "via EventKit".
+
+### What changed in 0.4.2
+
+- **Repeating meetings fixed for everyone.** Without EventKit, the agent now reads each repeating series' rule from Calendar and works out every occurrence in the requested range itself (skipping deleted occurrences). No new permission is needed.
+- **It tells you why.** The calendar result, the Connectors **Test** and `localagent doctor` all show the EventKit status: not installed, not asked yet, access denied, or ok.
+- **New `localagent calendar-access` command.** It asks macOS for calendar access from Terminal, where the prompt reliably appears. The background agent no longer asks on its own.
+
 ## From 0.4.0 to 0.4.1 (complete calendars and cleaner replies)
 
 1. Put the new files in one folder, open Terminal there, and run (no `sudo`):

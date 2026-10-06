@@ -39,6 +39,20 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
     except OSError as exc:
         add("data directory", False, f"{base}: {exc}")
 
+    if sys.platform == "darwin":
+        from .connectors.eventkit import EventKitCalendar
+
+        detail = EventKitCalendar().status_detail()
+        tips = {
+            "not installed": " - optional; run: pipx inject localaiagent pyobjc-framework-EventKit",
+            "not asked yet": " - optional; run: localagent calendar-access",
+            "access denied": " - Privacy & Security > Calendars > Terminal > Full Access",
+        }
+        add("calendar (EventKit)", detail == "ok",
+            ("full access" if detail == "ok" else detail + tips.get(detail, ""))
+            + ("" if detail == "ok" else " (AppleScript is used meanwhile; repeating events still listed)"),
+            warn=True)
+
     client = OllamaClient(s.ollama_url, timeout=5)
     try:
         version = await client.version()

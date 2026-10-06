@@ -1,4 +1,4 @@
-# Testing Steps 3 + 4 (v0.4.1): proactivity and voice
+# Testing Steps 3 + 4 (v0.4.2): proactivity and voice
 
 Upgrade first with `UPGRADING.md` (about 10 minutes, mostly the speech-model download). This checklist takes about 25 minutes.
 
@@ -13,11 +13,12 @@ Upgrade first with `UPGRADING.md` (about 10 minutes, mostly the speech-model dow
 | No notifications | **System Settings → Notifications → Script Editor → Allow notifications**. Also check quiet hours in Settings. |
 | Calendar/Mail errors in a job | Same fix as before: **Privacy & Security → Automation → Terminal**. Then start the agent from Terminal. |
 
-## 0. Calendar completeness (new in 0.4.1)
+## 0. Calendar completeness (fixed in 0.4.2)
 
-1. **Connectors → Calendar → Test**. Allow full calendar access, and check that it says "via EventKit".
-2. In Chat, ask `What's on my calendar this week?`
-3. Click the "✓ Found N event(s)" chip and compare the list with Calendar's week view. Repeating meetings, invitations and events that appear in both your Gmail and Outlook calendars should all be there.
+1. In Chat, ask `What's on my calendar this week?`
+2. Click the "✓ Found N event(s) via …" chip and compare the list with Calendar's week view. **Repeating meetings** (marked "repeats") should now be there, along with invitations and events from both your Gmail and Outlook calendars.
+3. Note what the chip says after "via". "AppleScript (EventKit: …)" is fine; the text in brackets says why EventKit isn't used.
+4. Optional: run `localagent calendar-access`, then `localagent stop` and `localagent start`, and ask again. The chip should now say "via EventKit".
 
 ## A. Proactivity (Nudges tab)
 
@@ -56,7 +57,7 @@ Upgrade first with `UPGRADING.md` (about 10 minutes, mostly the speech-model dow
 5. Any dropped or failed jobs (in **Nudges**, the job card shows "last: … (error)" or "(deferred)").
 
 Known limits:
-- Calendar needs **Full Access** (Privacy & Security → Calendars → Terminal) for complete results, including repeating events; otherwise it falls back to AppleScript and says so.
+- Without EventKit access, repeating meetings are worked out from their repeat rules. A single occurrence you moved may show at both its old and new time, and very unusual rules may be skipped. `localagent calendar-access` gives exact results.
 - Proactivity only runs while the Mac is awake and the agent is running; missed jobs run once when it's back.
 - There's no always-listening wake word ("Hey Ari") yet. Use conversation mode instead.
 - The overnight review waits until the Mac is plugged in.

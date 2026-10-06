@@ -26,8 +26,9 @@ def test_read_tool_runs_automatically(action_client):
     assert res[0]["data"][0]["title"] == "Dentist"
     assert "approval_required" not in types(ev)
     assert "".join(e["text"] for e in ev if e["type"] == "token").startswith("Done:")
-    name, args = action_client.runner.calls[-1]
+    (name, args), (rname, _) = action_client.runner.calls[-2:]
     assert name == "calendar_list" and int(args[1]) > int(args[0])
+    assert rname == "calendar_recurring"
     audit = action_client.get("/api/audit").json()
     assert audit[0]["kind"] == "tool_call" and audit[0]["tool"] == "calendar_list_events"
 

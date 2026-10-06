@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.4.1 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.4.2 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -197,7 +197,7 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 
 | Connector | Tools (tier) | Mechanism |
 |---|---|---|
-| Calendar | `calendar_list_events` (read), `calendar_create_event` (write) | Listing: **EventKit** (pyobjc; expands repeating events, includes every account, invitation status) with an AppleScript fallback that's labelled as possibly incomplete. Creating: AppleScript |
+| Calendar | `calendar_list_events` (read), `calendar_create_event` (write) | Listing: **EventKit** (pyobjc; expands repeating events, includes every account, invitation status) with an AppleScript fallback that expands repeating series from their RRULE (`connectors/recurrence.py`, python-dateutil). Creating: AppleScript |
 | Reminders | `reminders_list` (read), `reminders_create` (write) | AppleScript |
 | Notes | `notes_search` (read), `notes_create` (draft) | AppleScript |
 | Mail | `mail_list`, `mail_followups`, `mail_read` (read), `mail_draft` (draft), `mail_send` (write) | AppleScript |
@@ -206,7 +206,8 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
 
 - **AppleScript safety:** the scripts are bundled files in `connectors/scripts/` and run with `osascript -`. All arguments are passed as **argv**, never pasted into script text, so model or user text can't inject AppleScript.
-- **EventKit:** reads the calendar store directly with `predicateForEventsWithStartDate_endDate_calendars_`, which expands repeating events. Access is requested once per process ("Full Access", attributed to Terminal); if access is denied or EventKit errors, listing falls back to AppleScript with a note. Setting: `calendar_backend` = auto, eventkit or applescript.
+- **EventKit:** reads the calendar store directly with `predicateForEventsWithStartDate_endDate_calendars_`, which expands repeating events. The server **only reads** the authorization status (`status_detail()`: ok, not asked yet, access denied, write-only, blocked by policy, not installed) and never prompts from the background, where macOS may not show the dialog. Access is requested in the foreground with `localagent calendar-access`. Setting: `calendar_backend` = auto, eventkit or applescript.
+- **AppleScript calendar fallback:** Calendar's `whose start date …` query returns only a series' first occurrence, so repeating meetings that started before the window were missing. `calendar_recurring.applescript` returns each repeating series (start/end as exact local `YYYY-MM-DD HH:MM:SS`, the `recurrence` RRULE text and excluded dates). `recurrence.expand()` runs `rrulestr` over the window, keeps the duration, converts `UNTIL=…Z` to local time, drops excluded dates, skips invalid rules, and caps each series at 500. `merge()` dedupes against the base list by (title, start minute, calendar). The result is labelled e.g. "via AppleScript (EventKit: access denied)".
 - **Results** come back as records separated by ASCII control characters, and are parsed into structured data for the UI plus text for the model.
 - **Dates:** times cross the boundary as offsets in seconds from "now", which avoids locale-dependent date parsing.
 - **Files:** every path is resolved and checked to be inside `file_roots` (default `~/Downloads`, `~/Desktop`, `~/Documents`). Trash moves files to `~/.Trash`, so they can be recovered.
@@ -338,7 +339,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 
 Known limits:
 - The decision percentages aren't calibrated probabilities (see 4.8).
-- Without calendar Full Access, the AppleScript fallback can miss repeating events. The tool says so in its result.
+- Without calendar Full Access, repeating events are expanded from their rules. A moved single occurrence can appear at both times, and rules dateutil can't parse are skipped.
 - Mail search covers the Inbox only.
 - Proactivity runs only while the Mac is awake and the agent is running.
 - Notifications are attributed to Script Editor.

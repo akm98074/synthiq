@@ -2,7 +2,7 @@
 # LocalAIAgent installer for macOS (Apple Silicon).
 #
 # Run it WITHOUT sudo, from the folder containing the downloaded files:
-#   bash install.sh localaiagent-0.4.1-py3-none-any.whl
+#   bash install.sh localaiagent-0.4.2-py3-none-any.whl
 set -euo pipefail
 ORIG_PATH="$PATH"  # the PATH of the Terminal window that ran this script
 
@@ -23,7 +23,7 @@ find_wheel() {
 WHEEL="${1:-$(find_wheel)}"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "Can't find the localaiagent .whl file.
        Put install.sh and the .whl in the same folder, cd into it, and run:
-         bash install.sh localaiagent-0.4.1-py3-none-any.whl"
+         bash install.sh localaiagent-0.4.2-py3-none-any.whl"
 WHEEL="$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")"
 
 [ "$(uname -s)" = "Darwin" ] || warn "this installer targets macOS; continuing anyway."

@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Steps 3 + 4 (v0.4.1) — proactivity and voice
+## Status: Steps 3 + 4 (v0.4.2) — proactivity and voice
 
 | Included | Comes later |
 |---|---|
@@ -20,7 +20,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.4.1-py3-none-any.whl
+bash install.sh localaiagent-0.4.2-py3-none-any.whl
 localagent start
 ```
 
@@ -31,7 +31,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.4.1-py3-none-any.whl
+pipx install ./localaiagent-0.4.2-py3-none-any.whl
 localagent setup
 localagent start
 ```

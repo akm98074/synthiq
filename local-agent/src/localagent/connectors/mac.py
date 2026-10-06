@@ -8,6 +8,7 @@ from typing import Protocol
 from ..tools.base import (Tool, ToolError, ToolResult, fmt_dt, i, obj, offset_seconds,
                           parse_when, pretty_when, s)
 from .applescript import parse_records
+from .recurrence import expand, merge
 
 
 class Runner(Protocol):
@@ -18,9 +19,9 @@ def _at(offset: str, now: datetime) -> datetime:
     return now + timedelta(seconds=float(offset))
 
 
-APPLESCRIPT_NOTE = ("Note: repeating events may be missing because this Mac is using the AppleScript "
-                    "fallback. Allow the agent full access to calendars for complete results.")
-
+APPLESCRIPT_NOTE = ("Note: read through AppleScript; repeating meetings were expanded from their "
+                    "repeat rules, so a single occurrence that was moved or cancelled may differ slightly "
+                    "from Calendar.")
 
 def _event_line(e: dict) -> str:
     when = (f"{e['start'][:10]} (all day)" if e.get("all_day")
@@ -40,6 +41,17 @@ def _event_line(e: dict) -> str:
 def calendar_tools(runner: Runner, eventkit=None, backend: str = "auto") -> list[Tool]:
     async def applescript_events(start: datetime, end: datetime) -> list[dict]:
         now = datetime.now()
+        base = await applescript_base(start, end, now)
+        series = []
+        for rec in parse_records(await runner.run("calendar_recurring", [str(offset_seconds(end, now))])):
+            if len(rec) < 7:
+                continue
+            series.append({"title": rec[0], "start": rec[1], "end": rec[2], "location": rec[3],
+                           "calendar": rec[4], "all_day": rec[5] == "true", "rrule": rec[6],
+                           "excluded": rec[7].split(",") if len(rec) > 7 else []})
+        return merge(base, expand(series, start, end))
+
+    async def applescript_base(start: datetime, end: datetime, now: datetime) -> list[dict]:
         out = await runner.run("calendar_list", [str(offset_seconds(start, now)), str(offset_seconds(end, now))])
         events = []
         for rec in parse_records(out):
@@ -54,26 +66,23 @@ def calendar_tools(runner: Runner, eventkit=None, backend: str = "auto") -> list
         return events
 
     async def fetch(start: datetime, end: datetime) -> tuple[list[dict], str]:
-        """Prefer EventKit (expands repeating events); fall back to AppleScript."""
-        if backend != "applescript" and eventkit is not None and eventkit.installed():
-            status = eventkit.authorization()
-            if status == "not_determined":
-                await eventkit.request_access()
-                status = eventkit.authorization()
-            if status == "authorized":
-                try:
-                    return await eventkit.list(start, end), "EventKit"
-                except Exception as exc:  # noqa: BLE001 - fall back rather than fail the request
-                    if backend == "eventkit":
-                        raise ToolError(f"EventKit failed: {exc}") from exc
-                    return await applescript_events(start, end), "AppleScript"
-            if backend == "eventkit":
-                from .eventkit import DENIED_HELP
-                raise ToolError(DENIED_HELP)
-        elif backend == "eventkit":
-            raise ToolError("The EventKit calendar add-on isn't installed. Re-run the installer, or "
-                            "pipx inject localaiagent pyobjc-framework-EventKit")
-        return await applescript_events(start, end), "AppleScript"
+        """Prefer EventKit when access is already granted; otherwise AppleScript with
+        repeating events expanded from their rules. Access is never requested from the
+        background server (macOS may not show that prompt); `localagent calendar-access`
+        asks from Terminal instead."""
+        detail = eventkit.status_detail() if eventkit is not None else None
+        if backend != "applescript" and detail == "ok":
+            try:
+                return await eventkit.list(start, end), "EventKit"
+            except Exception as exc:  # noqa: BLE001 - fall back rather than fail the request
+                if backend == "eventkit":
+                    raise ToolError(f"EventKit failed: {exc}") from exc
+                detail = f"error: {exc.__class__.__name__}"
+        if backend == "eventkit":
+            raise ToolError(f"EventKit isn't usable ({detail or 'not available'}). In Terminal run: "
+                            "localagent calendar-access")
+        source = "AppleScript" + (f" (EventKit: {detail})" if detail and backend != "applescript" else "")
+        return await applescript_events(start, end), source
 
     async def list_events(a: dict) -> ToolResult:
         now = datetime.now()
@@ -84,7 +93,7 @@ def calendar_tools(runner: Runner, eventkit=None, backend: str = "auto") -> list
         events, source = await fetch(start, end)
         events.sort(key=lambda e: (e["start"], e["title"]))
         span = f"{fmt_dt(start)} – {fmt_dt(end)}"
-        note = f"\n{APPLESCRIPT_NOTE}" if source == "AppleScript" else ""
+        note = f"\n{APPLESCRIPT_NOTE}" if source.startswith("AppleScript") else ""
         if not events:
             return ToolResult(f"No events between {span}.{note}", f"No events ({span}) via {source}", [])
         body = "\n".join(_event_line(e) for e in events)

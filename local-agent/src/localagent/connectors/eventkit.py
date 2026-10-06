@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import threading
+import time
 from datetime import datetime
 from typing import Any
 
@@ -90,6 +91,19 @@ class EventKitCalendar:
         code = int(ek.EKEventStore.authorizationStatusForEntityType_(ek.EKEntityTypeEvent))
         return _STATUS.get(code, "unknown")
 
+    def status_detail(self) -> str:
+        """Human-readable reason, shown wherever the calendar source is reported."""
+        if not self.installed():
+            return "not installed"
+        status = self.authorization()
+        return {
+            "authorized": "ok",
+            "not_determined": "asked but not answered" if self._asked else "not asked yet",
+            "denied": "access denied",
+            "restricted": "blocked by a device policy",
+            "write_only": "write-only access (needs Full Access)",
+        }.get(status, status)
+
     def _request_sync(self, timeout: float) -> bool:
         ek, _ = self._modules()
         store = ek.EKEventStore.alloc().init()
@@ -104,7 +118,15 @@ class EventKitCalendar:
             store.requestFullAccessToEventsWithCompletion_(handler)
         else:
             store.requestAccessToEntityType_completion_(ek.EKEntityTypeEvent, handler)
-        done.wait(timeout)
+        # Pump the run loop while waiting: the completion may be delivered on the main queue.
+        _, foundation = self._modules()
+        deadline = time.monotonic() + timeout
+        while not done.is_set() and time.monotonic() < deadline:
+            try:
+                foundation.NSRunLoop.currentRunLoop().runUntilDate_(
+                    foundation.NSDate.dateWithTimeIntervalSinceNow_(0.2))
+            except Exception:  # noqa: BLE001
+                done.wait(0.2)
         return result["granted"]
 
     async def request_access(self, timeout: float = 60) -> bool:

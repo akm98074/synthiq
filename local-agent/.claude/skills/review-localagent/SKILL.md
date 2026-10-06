@@ -43,7 +43,9 @@ Review the change (default: `git diff` against the last release commit, plus unt
 ## C. AppleScript connectors
 
 - [ ] Arguments are passed as **argv** (`osascript - arg…`), never spliced into script text: no injection from model, email or user text.
-- [ ] `whose start date …` on Calendar **does not expand repeating events**. Listing events must prefer EventKit and label the AppleScript fallback as possibly incomplete.
+- [ ] `whose start date …` on Calendar **does not expand repeating events**. The AppleScript path must also fetch repeating series and expand their RRULE in Python (`recurrence.py`). Never rely solely on EventKit TCC: it failed twice on the real Mac.
+- [ ] Never request TCC access from the background server (macOS may not show the prompt). Read the status only, show it to the user ("via AppleScript (EventKit: …)"), and request access from a foreground CLI command.
+- [ ] Dates passed out of AppleScript must be built from components (`YYYY-MM-DD HH:MM:SS`). Large second offsets print as `6.3E+8` and break parsing.
 - [ ] Dates cross the boundary as **integer second offsets from now**, never locale-formatted strings. Watch AppleScript coercing large reals to `1.2E+6`.
 - [ ] Records use the `\x1e`/`\x1f` separators. The parser tolerates short records and empty fields.
 - [ ] Every script has a timeout, and stderr is mapped through `explain_error`.

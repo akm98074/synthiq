@@ -224,6 +224,41 @@ def doctor() -> None:
         raise typer.Exit(1)
 
 
+def _eventkit():
+    from .connectors.eventkit import EventKitCalendar
+
+    return EventKitCalendar()
+
+
+@app.command("calendar-access")
+def calendar_access() -> None:
+    """Ask macOS for full calendar access (run this in Terminal)."""
+    ek = _eventkit()
+    if not ek.installed():
+        typer.secho("The calendar add-on isn't installed. Run:", fg="yellow")
+        typer.echo("    pipx inject localaiagent pyobjc-framework-EventKit")
+        typer.echo("Until then, repeating events are still listed (expanded via AppleScript).")
+        raise typer.Exit(1)
+    status = ek.status_detail()
+    if status == "ok":
+        typer.secho("Full calendar access is already granted. Restart the agent if it still says AppleScript.",
+                    fg="green")
+        return
+    if status == "not asked yet":
+        typer.echo("macOS will now ask: \"Terminal would like full access to your calendars\". Click Allow.")
+        asyncio.run(ek.request_access())
+        status = ek.status_detail()
+    if status == "ok":
+        typer.secho("Granted. Now run: localagent stop, then localagent start", fg="green")
+        return
+    typer.secho(f"Calendar access: {status}.", fg="yellow")
+    typer.echo("Open System Settings > Privacy & Security > Calendars, set Terminal to Full Access,")
+    typer.echo("then run: localagent stop, then localagent start")
+    typer.echo("If Terminal isn't listed there, macOS didn't offer the prompt to this tool; that's fine:")
+    typer.echo("the agent still lists repeating events through AppleScript.")
+    raise typer.Exit(1)
+
+
 LAUNCH_LABEL = "com.localaiagent.agent"
 
 
