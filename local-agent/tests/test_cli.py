@@ -78,17 +78,27 @@ def test_running_pid_uses_psutil(home):
     assert _running_pid() is None and not _pid_file().exists()
 
 
-def test_mac_app_bundle(tmp_path):
+def test_mac_app_bundle(tmp_path, home):
+    """On a Mac (CI runner included) the real osacompile/plutil build the applet; elsewhere the plain
+    test-only writer is used. Either way the bundle carries our identity and usage strings."""
     import plistlib
+    import shutil
 
     from localagent import macapp
 
-    path, note = macapp.install(python="/opt/py/bin/python3", home=tmp_path, sign=False)
+    path, note = macapp.install(python="/opt/py/bin/python3", home=tmp_path, sign=False,
+                                log=tmp_path / "server.log")
     info = plistlib.loads((path / "Contents" / "Info.plist").read_bytes())
-    assert info["CFBundleIdentifier"] == "ai.localagent.app" and info["CFBundleExecutable"] == "LocalAIAgent"
-    assert "NSAppleEventsUsageDescription" in info and info["LSUIElement"] is True
+    assert info["CFBundleIdentifier"] == "ai.localagent.app" and info["LSUIElement"] is True
+    assert "NSAppleEventsUsageDescription" in info and info["CFBundleName"] == "LocalAIAgent"
     exe = macapp.executable(tmp_path)
-    assert exe.read_text().startswith("#!/bin/sh") and '"/opt/py/bin/python3" -m localagent.launcher' in exe.read_text()
+    if shutil.which("osacompile"):
+        # A real Mach-O applet (what LaunchServices accepts), not a script.
+        assert info["CFBundleExecutable"] == "applet" and exe.name == "applet"
+        assert exe.read_bytes()[:4] in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
+    else:
+        assert info["CFBundleExecutable"] == "LocalAIAgent"
+        assert '"/opt/py/bin/python3" -m localagent.launcher' in exe.read_text()
     assert macapp.installed(tmp_path) and note.startswith("not signed")
 
 
