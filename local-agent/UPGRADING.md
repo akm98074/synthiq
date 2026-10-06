@@ -2,6 +2,15 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/` (Windows: `%LOCALAPPDATA%\LocalAIAgent`, Linux: `~/.local/share/LocalAIAgent`), which the installer never touches.
 
+## From 0.16.0 to 0.16.1
+
+```bash
+bash install.sh localaiagent-0.16.1-py3-none-any.whl
+localagent start
+```
+
+A bug fix: a reminder or calendar event could occasionally produce a second, duplicate nudge. Nothing else changes, and your data and settings are kept. If you're coming from 0.15 or earlier, also read the 0.16.0 notes below: they explain the sign-in, the Mac app, the phone PIN and the Trust tab.
+
 ## From 0.15.0 to 0.16.0 (security fixes and the Trust & Transparency center)
 
 ```bash
