@@ -167,9 +167,11 @@
             <select name="calendar_backend">
               <option value="auto">Automatic: EventKit when allowed, otherwise AppleScript</option>
               <option value="eventkit">EventKit only (complete, includes repeating events)</option>
-              <option value="applescript">AppleScript only (may miss repeating events)</option>
+              <option value="applescript">AppleScript only (repeating events expanded from their rules)</option>
             </select>
           </label>
+          <label class="check"><input type="checkbox" name="enable_whatsapp"> Read WhatsApp chats (WhatsApp Desktop)</label>
+          <label class="check"><input type="checkbox" name="messages_include_groups"> Include group chats in messages and nudges</label>
         </fieldset>
         <fieldset><legend>Proactivity</legend>
           <label class="check"><input type="checkbox" name="proactive_enabled"> Let the agent reach out on its own</label>

@@ -231,7 +231,7 @@ def mail_tools(runner: Runner) -> list[Tool]:
         lines = [f"- [id {m['id']}] {m['received'].replace('T', ' ')} from {m['from']}: {m['subject']}"
                  + ("" if m["read"] else " (unread)") + f"\n  {m['snippet']}" for m in msgs]
         return ToolResult("Inbox messages (newest first):\n" + "\n".join(lines),
-                          f"Found {len(msgs)} message(s)", msgs)
+                          f"Found {len(msgs)} message(s)", msgs, untrusted=True)
 
     async def read_mail(a: dict) -> ToolResult:
         now = datetime.now()
@@ -242,7 +242,7 @@ def mail_tools(runner: Runner) -> list[Tool]:
         subj, sender, recv, content = parts
         when = _at(recv, now).strftime("%a %d %b %H:%M")
         return ToolResult(f"From: {sender}\nDate: {when}\nSubject: {subj}\n\n{content}",
-                          f"Read: {subj}", {"subject": subj, "from": sender})
+                          f"Read: {subj}", {"subject": subj, "from": sender}, untrusted=True)
 
     async def compose(a: dict, mode: str) -> ToolResult:
         to = _clean_recipients(a["to"])
@@ -270,7 +270,7 @@ def mail_tools(runner: Runner) -> list[Tool]:
             return ToolResult("No unreplied messages in that window.", "Nothing waiting on a reply", [])
         lines = [f"- [id {m['id']}] {m['days_ago']}d ago from {m['from']}: {m['subject']}" for m in msgs]
         return ToolResult("Inbox messages you haven't replied to:\n" + "\n".join(lines),
-                          f"{len(msgs)} message(s) without a reply", msgs)
+                          f"{len(msgs)} message(s) without a reply", msgs, untrusted=True)
 
     params = obj({"to": s("Recipient email address(es), comma-separated"),
                   "subject": s("Subject line"), "body": s("Plain-text body")}, ["to", "subject", "body"])

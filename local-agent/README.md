@@ -4,23 +4,25 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Steps 3 + 4 (v0.4.2) — proactivity and voice
+## Status: Step 5a (v0.5.0) — your messages
 
 | Included | Comes later |
 |---|---|
-| Chat with streaming replies | Browser and Mac app actions (Step 5) |
+| Chat with streaming replies | Browser + custom skills (Step 5b); Mac app actions, screen context, forms (Step 5c) |
 | Decision layer (intent, memorable?, complexity; should-nudge, urgency) with probabilities and an eval harness | Telegram / iMessage (Step 6) |
 | Persistent memory, `about-me.md` identity file, edit and forget | Agent-to-agent, avatar, Windows/Linux (Step 7) |
 | **Connectors**: Calendar, Reminders, Notes, Mail, Contacts, Files, Documents (PDF/Excel) | |
 | **Approvals** with risk tiers and scopes; hash-chained **Activity** log | |
 | **Proactivity**: morning brief, nudges (events, reminders, unreplied mail), quiet hours, overnight memory review | |
 | **Voice**: push-to-talk, conversation mode, on-device Whisper, spoken replies | |
+| **Messages**: read iMessage/SMS and WhatsApp, chats waiting on your reply, iMessage replies (approved), WhatsApp replies typed in for you | |
+| **Prompt-injection guard** on mail and chat content | |
 | Learning from your corrections; model manager; persona settings | |
 
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.4.2-py3-none-any.whl
+bash install.sh localaiagent-0.5.0-py3-none-any.whl
 localagent start
 ```
 
@@ -31,7 +33,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.4.2-py3-none-any.whl
+pipx install ./localaiagent-0.5.0-py3-none-any.whl
 localagent setup
 localagent start
 ```

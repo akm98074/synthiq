@@ -50,6 +50,9 @@ Review the change (default: `git diff` against the last release commit, plus unt
 - [ ] Records use the `\x1e`/`\x1f` separators. The parser tolerates short records and empty fields.
 - [ ] Every script has a timeout, and stderr is mapped through `explain_error`.
 
+- [ ] Reading another app's database (chat.db, WhatsApp, AddressBook): open with `mode=ro`, never write, check the schema first, and turn PermissionError/"unable to open" into the Full Disk Access steps (quit and reopen Terminal).
+- [ ] Never automate sending where the platform has no API (WhatsApp): open the official link with the text typed in and let the user press Send.
+
 ## D. LLM output hygiene
 
 - [ ] All model text shown to the user goes through `strip_think` (non-streaming) or `ThinkFilter` (streaming). That includes an **orphan `</think>` with no opening tag** (Qwen3 does this even with `think:false`). Streaming consumers must handle the `RESET` sentinel / `{"type":"reset"}` event.
@@ -57,6 +60,8 @@ Review the change (default: `git diff` against the last release commit, plus unt
 - [ ] Lists the user asked for must not depend on the model's summary: tool results carry the full `data` list, and the UI shows it (expandable chips). The prompt says to list every item.
 - [ ] Never claim more than the model gives. Decision percentages are **not calibrated probabilities** (kNN softmax at T=30; the SLM judge is a fixed 0.8 blend). Docs and UI copy must not call them calibrated. Calibration claims need `localagent eval decision` (ECE).
 - [ ] Untrusted text (email bodies, notes, web, files) can contain instructions. It must never change policy, tiers or approvals, and must never be executed.
+
+- [ ] Any tool returning text written by other people (mail, chats, web pages) sets `ToolResult(untrusted=True)`. It's then fenced and scanned, and a hit taints the run so grants stop applying. Proactive jobs that pass such text to the model must `fence()` it too.
 
 ## E. Policy, approvals and audit
 

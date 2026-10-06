@@ -81,10 +81,11 @@ class Policy:
         store.execute("UPDATE approvals SET status='expired' WHERE status='pending'")
 
     # ── decisions ─────────────────────────────────────────────────────────
-    def needs_approval(self, tool: Tool, task_id: int | None) -> bool:
+    def needs_approval(self, tool: Tool, task_id: int | None, tainted: bool = False) -> bool:
         if tool.tier in ("read", "draft"):
             return False
-        if tool.tier == "danger":
+        if tool.tier == "danger" or tainted:
+            # After a suspected prompt injection, standing grants don't apply.
             return True
         return self.matching_grant(tool.name, task_id) is None
 
@@ -104,11 +105,13 @@ class Policy:
         return None
 
     # ── approvals ─────────────────────────────────────────────────────────
-    def request(self, tool: Tool, args: dict, task_id: int | None, state: dict) -> dict:
+    def request(self, tool: Tool, args: dict, task_id: int | None, state: dict,
+                note: str | None = None) -> dict:
+        summary = tool.summary(args) + (f" ⚠ {note}" if note else "")
         cur = self.store.execute(
             "INSERT INTO approvals(created_at, tool, tier, args, summary, task_id, state)"
             " VALUES (?,?,?,?,?,?,?)",
-            (time.time(), tool.name, tool.tier, json.dumps(args), tool.summary(args), task_id,
+            (time.time(), tool.name, tool.tier, json.dumps(args), summary, task_id,
              json.dumps(state)),
         )
         return self.get(int(cur.lastrowid))

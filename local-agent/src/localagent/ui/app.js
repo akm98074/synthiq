@@ -123,6 +123,11 @@ function itemText(it) {
     return `${fmtItemTime(it.start, it.end, it.all_day)}  ${it.title}${it.location ? " @ " + it.location : ""}`
       + (tags.length ? ` (${tags.join(", ")})` : "") + (cal ? `  [${cal}]` : "");
   }
+  if (it.app && it.last_text !== undefined) {
+    return `${it.last_at ? fmtItemTime(it.last_at) + "  " : ""}${it.app} · ${it.name}${it.group ? " (group)" : ""}: `
+      + `${it.last_from_me ? "You: " : ""}${it.last_text.slice(0, 120)}${it.unread ? `  [${it.unread} unread]` : ""}`;
+  }
+  if (it.sender !== undefined && it.text !== undefined) return `${fmtItemTime(it.at)}  ${it.sender}: ${it.text.slice(0, 160)}`;
   if (it.subject !== undefined) return `${it.received ? fmtItemTime(it.received) + "  " : ""}${it.from}: ${it.subject}`;
   if (it.title !== undefined) return `${it.title}${it.due ? " (due " + fmtItemTime(it.due) + ")" : ""}${it.list ? "  [" + it.list + "]" : ""}`;
   if (it.path) return it.path;

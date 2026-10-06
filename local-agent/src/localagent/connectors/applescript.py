@@ -19,7 +19,7 @@ US = "\x1f"  # unit (field) separator
 
 APP_NAMES = {
     "calendar": "Calendar", "reminders": "Reminders", "notes": "Notes",
-    "mail": "Mail", "contacts": "Contacts",
+    "mail": "Mail", "contacts": "Contacts", "messages": "Messages", "open": "the app",
 }
 
 

@@ -13,6 +13,7 @@ from ..decide.questions import NUDGE_GATING, NUDGE_QUESTIONS
 from ..llm.ollama import OllamaError
 from ..memory.store import normalize
 from ..persona import system_prompt
+from ..safety.injection import fence, scan
 from ..tools.base import ToolError, ToolResult
 from .scheduler import Deferred, JobSpec
 
@@ -44,7 +45,7 @@ def _now(rt: "Runtime") -> datetime:
 BRIEF_PROMPT = """Write my morning brief for {day}.
 Use ONLY the data below; never invent events, emails or tasks.
 Format: 4-8 short lines starting with "- ": today's schedule, what's due or overdue,
-emails waiting on my reply, then one practical suggestion. No greeting, no preamble.
+emails and chats waiting on my reply, then one practical suggestion. No greeting, no preamble.
 If a section has no data, skip it.
 
 DATA:
@@ -60,9 +61,12 @@ async def morning_brief(rt: "Runtime", manual: bool = False) -> dict:
         "unread mail": await _tool(rt, "mail_list", {"unread_only": True, "limit": 5}),
         "waiting on your reply": await _tool(rt, "mail_followups",
                                              {"min_days": 1, "max_days": s.followup_days, "limit": 5}),
+        "chats waiting on your reply": await _tool(rt, "messages_list", {
+            "needs_reply": True, "max_days": 2, "min_minutes": 60, "limit": 5}),
     }
     used = [k for k, v in results.items() if v is not None]
-    data = "\n\n".join(f"## {k}\n{v.content}" for k, v in results.items() if v is not None)
+    data = "\n\n".join(f"## {k}\n{fence(k, v.content)[0] if v.untrusted else v.content}"
+                       for k, v in results.items() if v is not None)
     if not data:
         data = "(No calendar, reminder or mail connectors are available.)"
     messages = [
@@ -128,6 +132,19 @@ def _followup_candidates(res: ToolResult | None) -> list[dict]:
     return out
 
 
+def _message_candidates(res: ToolResult | None) -> list[dict]:
+    out = []
+    for t in (res.data or []) if res else []:
+        suspicious = bool(scan(t["last_text"]))
+        out.append({"kind": "followup", "key": f"message:{t['id']}:{t['last_at']}",
+                    "title": (f"⚠ Suspicious message from {t['name']} ({t['app']})" if suspicious
+                              else f"Reply to {t['name']} ({t['app']})"),
+                    "body": t["last_text"][:140],
+                    "text": f"Unreplied {t['app']} message from {t['name']}: {t['last_text'][:300]}",
+                    "data": {"thread": t["id"], "app": t["app"]}})
+    return out
+
+
 async def run_checks(rt: "Runtime", manual: bool = False) -> dict:
     s = rt.settings
     now = _now(rt)
@@ -138,6 +155,8 @@ async def run_checks(rt: "Runtime", manual: bool = False) -> dict:
         + _reminder_candidates(await _tool(rt, "reminders_list", {"limit": 50}), now)
         + _followup_candidates(await _tool(rt, "mail_followups",
                                            {"min_days": 1, "max_days": s.followup_days, "limit": 15}))
+        + _message_candidates(await _tool(rt, "messages_list", {
+            "needs_reply": True, "max_days": min(s.followup_days, 3), "min_minutes": 60, "limit": 15}))
     )
     delivered, skipped = [], 0
     for c in candidates:
@@ -237,7 +256,7 @@ def job_specs(rt: "Runtime") -> list[JobSpec]:
         JobSpec("morning_brief", "daily", s.brief_time, lambda manual: morning_brief(rt, manual),
                 "Morning brief"),
         JobSpec("checks", "interval", str(s.check_every_minutes), lambda manual: run_checks(rt, manual),
-                "Check calendar, reminders and email"),
+                "Check calendar, reminders, email and chats"),
         JobSpec("dream", "daily", s.dream_time, lambda manual: dream(rt, manual),
                 "Overnight memory review"),
     ]

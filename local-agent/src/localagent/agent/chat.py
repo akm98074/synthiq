@@ -95,7 +95,8 @@ async def remember(rt: "Runtime", text: str, source_message_id: int | None) -> l
 # connector can touch ("any unread email?", "newest PDF in Downloads").
 TOOL_HINTS = re.compile(
     r"\b(calendar|meeting|event|remind|reminders?|notes?|mail|e-?mail|inbox|send|files?|folders?|"
-    r"downloads?|desktop|documents?|pdf|spreadsheet|excel|xlsx|contacts?|phone number|save)\b",
+    r"downloads?|desktop|documents?|pdf|spreadsheet|excel|xlsx|contacts?|phone number|save|"
+    r"messages?|imessages?|texts?|sms|whatsapp|chats?|repl(y|ies|ied))\b",
     re.IGNORECASE,
 )
 

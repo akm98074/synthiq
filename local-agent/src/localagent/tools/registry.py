@@ -7,6 +7,7 @@ from ..config import Settings
 from ..connectors.documents import document_tools
 from ..connectors.files import FileSpace, file_tools, parse_roots
 from ..connectors.mac import calendar_tools, contacts_tools, mail_tools, notes_tools, reminder_tools
+from ..connectors.messages import ContactNames, IMessages, WhatsApp, messages_tools, present
 from .base import Tool
 
 CONNECTORS = [
@@ -20,6 +21,10 @@ CONNECTORS = [
      "about": "Search the inbox, read messages, open drafts, and send (send always asks first)."},
     {"id": "contacts", "name": "Contacts", "mac": True, "setting": "enable_contacts",
      "about": "Look up email addresses and phone numbers."},
+    {"id": "messages", "name": "Messages & WhatsApp", "mac": True, "setting": "enable_messages",
+     "about": "Read iMessage/SMS and WhatsApp chats, find ones waiting on your reply, and reply "
+              "(iMessage sends after you approve; WhatsApp opens with the reply typed for you to send). "
+              "Needs Full Disk Access for Terminal."},
     {"id": "files", "name": "Files", "mac": False, "setting": "enable_files",
      "about": "Find, list, move, open and trash files in the allowed folders."},
     {"id": "documents", "name": "Documents", "mac": False, "setting": "enable_documents",
@@ -34,6 +39,7 @@ TEST_CALLS = {
     "notes": ("notes_search", {"query": "a", "limit": 1}),
     "mail": ("mail_list", {"limit": 1}),
     "contacts": ("contacts_find", {"name": "a", "limit": 1}),
+    "messages": ("messages_list", {"limit": 3}),
     "files": ("files_list", {"folder": "~/Downloads", "limit": 3}),
     "documents": None,
 }
@@ -52,11 +58,21 @@ def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None) 
             tools += mail_tools(runner)
         if settings.enable_contacts:
             tools += contacts_tools(runner)
+        if settings.enable_messages:
+            tools += messages_tools(runner, *message_sources(settings), settings.messages_include_groups)
     if settings.enable_files:
         tools += file_tools(FileSpace(parse_roots(settings.file_roots)))
     if settings.enable_documents:
         tools += document_tools(Path(settings.documents_dir).expanduser())
     return {t.name: t for t in tools}
+
+
+def message_sources(settings: Settings) -> tuple[IMessages | None, WhatsApp | None]:
+    names = ContactNames(Path(settings.addressbook_dir).expanduser())
+    wa_path = Path(settings.whatsapp_db).expanduser()
+    imessage = IMessages(Path(settings.imessage_db).expanduser(), names)
+    whatsapp = WhatsApp(wa_path, names) if settings.enable_whatsapp and present(wa_path) else None
+    return imessage, whatsapp
 
 
 def connector_status(settings: Settings, mac_available: bool, tools: dict[str, Tool]) -> list[dict]:

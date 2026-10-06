@@ -53,6 +53,17 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
             + ("" if detail == "ok" else " (AppleScript is used meanwhile; repeating events still listed)"),
             warn=True)
 
+    if sys.platform == "darwin" and s.enable_messages:
+        from .connectors.messages import IMessages, ContactNames
+        from .tools.base import ToolError
+
+        try:
+            IMessages(Path(s.imessage_db).expanduser(), ContactNames(Path("/nonexistent"))).threads(1)
+            add("messages (Full Disk Access)", True, "can read iMessage history")
+        except ToolError as exc:
+            add("messages (Full Disk Access)", False,
+                str(exc) if "Full Disk Access" in str(exc) else f"{exc}", warn=True)
+
     client = OllamaClient(s.ollama_url, timeout=5)
     try:
         version = await client.version()

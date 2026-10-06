@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.4.2 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.5.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -204,12 +204,22 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Contacts | `contacts_find` (read) | AppleScript |
 | Files | `files_search`, `files_list` (read), `files_open` (draft), `files_move` (write), `files_trash` (danger) | Python, confined to allowed folders |
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
+| Messages | `messages_list`, `messages_read` (read), `whatsapp_open_draft` (draft), `imessage_send` (write) | Read-only SQLite on `chat.db` and WhatsApp's `ChatStorage.sqlite` (Full Disk Access); send via Messages AppleScript; WhatsApp via the `whatsapp://send` link |
 
 - **AppleScript safety:** the scripts are bundled files in `connectors/scripts/` and run with `osascript -`. All arguments are passed as **argv**, never pasted into script text, so model or user text can't inject AppleScript.
 - **EventKit:** reads the calendar store directly with `predicateForEventsWithStartDate_endDate_calendars_`, which expands repeating events. The server **only reads** the authorization status (`status_detail()`: ok, not asked yet, access denied, write-only, blocked by policy, not installed) and never prompts from the background, where macOS may not show the dialog. Access is requested in the foreground with `localagent calendar-access`. Setting: `calendar_backend` = auto, eventkit or applescript.
 - **AppleScript calendar fallback:** Calendar's `whose start date …` query returns only a series' first occurrence, so repeating meetings that started before the window were missing. `calendar_recurring.applescript` returns each repeating series (start/end as exact local `YYYY-MM-DD HH:MM:SS`, the `recurrence` RRULE text and excluded dates). `recurrence.expand()` runs `rrulestr` over the window, keeps the duration, converts `UNTIL=…Z` to local time, drops excluded dates, skips invalid rules, and caps each series at 500. `merge()` dedupes against the base list by (title, start minute, calendar). The result is labelled e.g. "via AppleScript (EventKit: access denied)".
 - **Results** come back as records separated by ASCII control characters, and are parsed into structured data for the UI plus text for the model.
 - **Dates:** times cross the boundary as offsets in seconds from "now", which avoids locale-dependent date parsing.
+- **Messages (Step 5a, `connectors/messages.py`):**
+  - Databases are opened with `mode=ro`. A `PermissionError` or "unable to open" becomes the Full Disk Access instructions.
+  - iMessage text on recent macOS lives only in `attributedBody` (an NSArchiver typedstream). `decode_attributed_body()` reads the NSString payload after `+` with its 1-, 2- (`0x81`) or 4-byte (`0x82`) length.
+  - Dates are nanoseconds since 2001 (older: seconds). Tapback reactions (`associated_message_type ≠ 0`) aren't treated as the last message.
+  - Names come from the Contacts database (`AddressBook-v22.abcddb`), matching the last 10 digits of a phone number or the lower-case email.
+  - "Waiting on your reply" means the last message isn't yours. Short-code senders (fewer than 7 digits) are never in that list, and group chats are off by default.
+  - WhatsApp's schema is checked before use (`ZWACHATSESSION`, `ZWAMESSAGE` columns). A mismatch reports "WhatsApp changed how it stores chats" instead of guessing.
+  - Sending: `messages_send.applescript` tries the chat id (`any;-;…`, `iMessage;-;…`, `SMS;-;…`) and then the participant handle. WhatsApp has no API for personal accounts, so `whatsapp_open_draft` opens `whatsapp://send?phone=…&text=…` and the user presses Send. Groups aren't supported by that link.
+- **Prompt-injection guard (`safety/injection.py`):** results marked `untrusted` (mail list/read/follow-ups, chats) are fenced as data and pattern-scanned before the model sees them. A hit adds a warning for the model, a ⚠ on the chip and an `injection_flagged` audit row. It also **taints** the run: `Policy.needs_approval(…, tainted=True)` ignores standing grants, so every write needs a fresh approval, and the card says why. The taint survives a pause for approval because it's stored in the run state. The scan is regex-based (deterministic, can't be argued with), so it reduces risk rather than eliminating it.
 - **Files:** every path is resolved and checked to be inside `file_roots` (default `~/Downloads`, `~/Desktop`, `~/Documents`). Trash moves files to `~/.Trash`, so they can be recovered.
 
 ---
@@ -302,6 +312,7 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 | PDFs / spreadsheets the agent makes | `~/Documents/LocalAIAgent/` | No |
 | Audio | In memory only, during transcription; never written to disk | No |
 | Calendar/Mail/Contacts content | Read on demand through the Apple apps; only what a tool returns is kept (in messages or the audit summary) | No |
+| iMessage/WhatsApp history | Read on demand, read-only, from the apps' own databases; never copied in bulk | No (a sent iMessage goes through Apple, as if you sent it) |
 
 Network access happens only for **model downloads**: Ollama pulls from ollama.com, and the Whisper model comes from Hugging Face (anonymous; the "unauthenticated" warning is harmless). The optional `systemone` backend talks to a server you run on localhost.
 
@@ -318,6 +329,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 | `memory_top_k` / `memory_min_similarity` | 5 / 0.35 | Recall breadth and threshold |
 | `max_tool_steps` | 5 | Tool-loop iterations per turn |
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
+| `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
 | `file_roots` | ~/Downloads, ~/Desktop, ~/Documents | Files connector boundary |
 | `brief_time` / `dream_time` / `check_every_minutes` | 08:00 / 03:00 / 30 | Proactive schedule |
 | `quiet_start` / `quiet_end` / `max_nudges_per_day` | 22:00 / 07:30 / 6 | Interruption policy |
@@ -327,7 +339,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 69 pytest tests run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 92 pytest tests run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.
@@ -341,6 +353,7 @@ Known limits:
 - The decision percentages aren't calibrated probabilities (see 4.8).
 - Without calendar Full Access, repeating events are expanded from their rules. A moved single occurrence can appear at both times, and rules dateutil can't parse are skipped.
 - Mail search covers the Inbox only.
+- WhatsApp reading uses an undocumented local database and only sees chats synced to WhatsApp Desktop. WhatsApp replies must be sent by the user.
 - Proactivity runs only while the Mac is awake and the agent is running.
 - Notifications are attributed to Script Editor.
 

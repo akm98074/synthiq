@@ -76,6 +76,9 @@ def pick_tool(text: str, tool_names: set[str]):
     t = text.lower()
     words = text.split()
     rules = [
+        ("imessage", "imessage_send", lambda: {"thread": "imessage:1", "text": "Yes, see you at 7!"}),
+        ("whatsapp", "whatsapp_open_draft", lambda: {"thread": "whatsapp:1", "text": "Will call tonight"}),
+        ("chats", "messages_list", lambda: {"needs_reply": True}),
         ("trash", "files_trash", lambda: {"paths": [w for w in words if "." in w][-1:]}),
         ("move", "files_move", lambda: {"paths": [w for w in words if "." in w][:1], "destination": "Downloads/Archive"}),
         ("pdf", "documents_create_pdf", lambda: {"title": "Packing list", "content": "# Packing\n- socks\n- “passport”"}),

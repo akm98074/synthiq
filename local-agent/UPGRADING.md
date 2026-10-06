@@ -2,6 +2,40 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.4.2 to 0.5.0 (Step 5a: iMessage and WhatsApp)
+
+1. Put the new files in one folder, open Terminal there, and run (no `sudo`):
+
+   ```bash
+   bash install.sh localaiagent-0.5.0-py3-none-any.whl
+   localagent version
+   ```
+
+   The last line should print `0.5.0`.
+2. Give Terminal **Full Disk Access**, which lets the agent read your Messages and WhatsApp history on this Mac:
+   - Open **System Settings → Privacy & Security → Full Disk Access**.
+   - Turn on **Terminal**. If it isn't listed, click **+**, open **Applications → Utilities**, and choose **Terminal**.
+   - **Quit Terminal completely** (Cmd+Q) and open it again. macOS only applies this permission to a fresh Terminal.
+3. Start the agent from the new Terminal window and check the permission:
+
+   ```bash
+   localagent start
+   localagent doctor
+   ```
+
+   The line `messages (Full Disk Access)` should say `ok`.
+4. For WhatsApp, have **WhatsApp Desktop** (from the App Store or whatsapp.com) installed and linked to your phone. Only chats synced to the Mac can be read.
+5. The first iMessage the agent sends shows a macOS prompt, _"Terminal wants to control Messages"_. Click **OK**.
+
+### What changed in 0.5.0
+
+- **Messages connector.** Ask "which chats are waiting on my reply?", "what did Sam say?" or "reply to Mum on WhatsApp that I'll call at 8".
+  - **iMessage/SMS:** the agent drafts the reply and shows it on an approval card; it's sent only when you approve.
+  - **WhatsApp:** WhatsApp opens with the reply typed into the chat, and **you press Send**. WhatsApp has no way for apps to send from a personal account.
+  - Group chats are left out unless you turn them on in **Settings → Connectors**.
+- **Nudges and the morning brief** now include chats waiting on your reply (older than an hour). Automated senders such as bank codes are skipped.
+- **Prompt-injection guard.** Emails and chats are written by other people, so the agent treats them as data. If one contains text aimed at an AI ("ignore previous instructions…"), the result is marked ⚠ and logged in **Activity**. Every send or change for the rest of that request needs your fresh approval, even if you'd allowed it before.
+
 ## From 0.4.1 to 0.4.2 (repeating meetings without extra permissions)
 
 1. Put the new files in one folder, open Terminal there, and run (no `sudo`):

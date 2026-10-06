@@ -29,6 +29,7 @@ class ToolResult:
     display: str                 # one-line summary for the UI
     data: Any = None             # structured payload for the UI
     ok: bool = True
+    untrusted: bool = False      # written by other people (mail, chats, web): fenced + scanned
 
     def to_dict(self) -> dict:
         return {"ok": self.ok, "display": self.display, "content": self.content, "data": self.data}

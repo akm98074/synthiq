@@ -168,3 +168,19 @@ def voice_client(fake_ollama, home, files_home, fake_runner):
     with TestClient(create_app(s, home, runner=fake_runner, stt=stt, tts=tts, scheduler=False)) as c:
         c.runner, c.stt, c.tts = fake_runner, stt, tts
         yield c
+
+
+@pytest.fixture
+def messages_client(fake_ollama, home, files_home, fake_runner, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from localagent.config import Settings, save_settings
+    from localagent.server import create_app
+    from msg_fixtures import message_paths
+
+    s = Settings(ollama_url=fake_ollama.url, confidence_threshold=1.0, quiet_start="00:00", quiet_end="00:00",
+                 file_roots=str(files_home / "Downloads"), **message_paths(tmp_path / "msgs"))
+    save_settings(s, home)
+    with TestClient(create_app(s, home, runner=fake_runner, scheduler=False)) as c:
+        c.runner = fake_runner
+        yield c

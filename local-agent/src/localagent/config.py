@@ -64,6 +64,14 @@ class Settings:
     max_tool_steps: int = 5
     calendar_backend: str = "auto"   # auto | eventkit | applescript
 
+    # Messages (Step 5a). Reading needs Full Disk Access for Terminal.
+    enable_messages: bool = True
+    enable_whatsapp: bool = True
+    messages_include_groups: bool = False
+    imessage_db: str = "~/Library/Messages/chat.db"
+    whatsapp_db: str = "~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite"
+    addressbook_dir: str = "~/Library/Application Support/AddressBook"
+
     # Proactivity (Step 3)
     proactive_enabled: bool = True
     brief_time: str = "08:00"
