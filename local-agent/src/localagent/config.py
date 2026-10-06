@@ -76,6 +76,7 @@ class Settings:
     enable_browser: bool = True
     browser_headless: bool = False     # show the window so you can watch and take over
     browser_executable: str = ""       # empty: Google Chrome, else Playwright's Chromium
+    enable_web_search: bool = True
     enable_skills: bool = True
     skills_require_sandbox: bool = True
 

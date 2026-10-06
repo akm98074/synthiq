@@ -8,7 +8,8 @@ INTENT = choice(
     "What does the user want from the assistant with this message?",
     {
         "chit_chat": "small talk, greetings, thanks, feelings, banter",
-        "quick_answer": "a factual question, explanation, or advice answerable from knowledge",
+        "quick_answer": "a factual question, explanation or advice, or looking something up "
+                        "(prices, shops, restaurants, opening hours, weather, news)",
         "task": "write, draft, plan, summarise, rewrite or produce something",
         "schedule": "set a reminder, plan a time, check or change the calendar",
         "memory_write": "the user is telling the assistant something about themselves to remember",

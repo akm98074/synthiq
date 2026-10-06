@@ -29,7 +29,7 @@ from .voice.tts import SayTTS
 class Runtime:
     def __init__(self, settings: Settings, base: Path | None = None, runner=None,
                  stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None, browser=None,
-                 screen_capture=None, screen_ocr=None, screen_permission=None):
+                 screen_capture=None, screen_ocr=None, screen_permission=None, web_fetch=None):
         self.base = base or data_dir()
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
@@ -44,6 +44,7 @@ class Runtime:
         self.browser = browser if browser is not None else PlaywrightBrowser(
             self.base / "browser-profile", settings.browser_headless, settings.browser_executable)
         self.skills_dir = self.base / "skills"
+        self.web_fetch = web_fetch
         extra = {k: v for k, v in (("capture", screen_capture), ("ocr", screen_ocr),
                                    ("permission", screen_permission)) if v is not None}
         self.screen = ScreenContext(self.store, self.runner, settings.screen_blocklist,
@@ -87,7 +88,7 @@ class Runtime:
 
     def build_tools(self) -> None:
         tools = build_tools(self.settings, self.runner, self.mac_available, self.eventkit,
-                            self.browser, self.skills_dir, self.screen)
+                            self.browser, self.skills_dir, self.screen, self.web_fetch)
         if self.settings.enable_browser:
             tools.update({t.name: t for t in form_tools(self)})
         self.tools = tools

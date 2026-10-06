@@ -1,4 +1,4 @@
-# Testing Step 5c (v0.7.0): Mac apps, form filling, screen context
+# Testing Step 5c (v0.7.0 / 0.7.1): Mac apps, form filling, screen context
 
 Upgrade first with `UPGRADING.md`, including **Accessibility** for Terminal (and Screen Recording if you'll try screen context). This checklist takes about 20 minutes. The 5a and 5b checklists are in the 0.5.0 and 0.6.0 packages.
 
@@ -28,6 +28,28 @@ Upgrade first with `UPGRADING.md`, including **Accessibility** for Terminal (and
 2. `Open https://httpbin.org/forms/post`, then `Fill in the form for me`.
    - Fields fill in, in the agent's browser window. The reply lists each value and the fact it came from, and what's left for you.
    - Nothing is submitted. Saying `Submit it` shows the red danger approval.
+
+## B1. Look-ups (0.7.1)
+
+1. `Find price of onion in Safeway Sammamish`
+   - Expected: a "✓ Searched the web" chip, then the agent opens safeway.com in its window and searches for onions. The answer gives a price and the link, and notes that prices can vary by store.
+   - Safeway may ask you to pick a store or ZIP code. Pick Sammamish in the agent's window once, and ask again.
+2. `Chutneys Bellevue`
+   - Expected: what it is (an Indian restaurant), address, hours, phone and rating, with a link.
+3. `Is Trader Joe's Redmond open now?` and `Weather in Seattle this weekend` should both be searched, not guessed.
+4. `What is the capital of Portugal?` should be answered directly, with no search chip.
+5. If you see "The search engine asked for a robot check", the agent switches to Bing in its window. Tell me if that happens often.
+
+## B2. Shopping (0.7.1)
+
+1. In the agent's browser window (it opens on the first web task), go to amazon.com and **sign in yourself** once. The agent stays signed in after that, in its own window only.
+2. Ask `Find a stainless steel electric kettle under $40 on Amazon and add the best-rated one to my cart`.
+   - Expected: it searches, opens a product, and shows a red approval card for **Add to Cart**. Approve it.
+   - Then it **stops** and summarises the item, price and delivery. It shouldn't go to checkout.
+3. Optional: `Go ahead and place the order`. Every step (checkout, Place your order) shows its own approval card. Decline at the last one if you don't want the kettle.
+4. If a payment field appears, the agent should say you need to fill it in yourself.
+
+If Amazon shows a CAPTCHA, solve it in the window and ask again. Amazon's terms restrict automated shopping, so keep this to occasional personal use.
 
 ## C. Screen context (optional)
 

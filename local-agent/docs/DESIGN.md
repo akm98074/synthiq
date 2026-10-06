@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.7.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.7.1 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -204,7 +204,8 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Contacts | `contacts_find` (read) | AppleScript |
 | Files | `files_search`, `files_list` (read), `files_open` (draft), `files_move` (write), `files_trash` (danger) | Python, confined to allowed folders |
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
-| Browser | `browser_open` (draft), `browser_read` (read), `browser_click`, `browser_type` (draft), `browser_submit` (danger) | Playwright on a persistent profile in the data folder; Google Chrome (`channel="chrome"`), else Playwright's Chromium |
+| Web search | `web_search` (read; optional `site`) | DuckDuckGo HTML results via httpx: titles, unwrapped links, snippets; untrusted |
+| Browser | `browser_open` (draft), `browser_read` (read), `browser_find` (read), `browser_click`, `browser_type` (draft), `browser_submit` (danger) | Playwright on a persistent profile in the data folder; Google Chrome (`channel="chrome"`), else Playwright's Chromium |
 | Custom skills | `skill_<name>` (tier from SKILL.md; at least write when `network: true`) | Folder with `SKILL.md`; scripts run under `sandbox-exec` |
 | Mac apps & Shortcuts | `apps_list`, `app_ui_read`, `shortcuts_list` (read), `app_open` (draft), `app_ui_press` (write; danger for Delete/Send/Buy… labels), `app_type_text`, `shortcuts_run` (write) | AppleScript: System Events (Accessibility) and Shortcuts Events |
 | Screen context (opt-in) | `screen_now`, `screen_recent` (read) | `screencapture` → Vision OCR (pyobjc), image deleted at once; text kept in `screen_snapshots` |
@@ -225,10 +226,15 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
   - WhatsApp's schema is checked before use (`ZWACHATSESSION`, `ZWAMESSAGE` columns). A mismatch reports "WhatsApp changed how it stores chats" instead of guessing.
   - Sending: `messages_send.applescript` tries the chat id (`any;-;…`, `iMessage;-;…`, `SMS;-;…`) and then the participant handle. WhatsApp has no API for personal accounts, so `whatsapp_open_draft` opens `whatsapp://send?phone=…&text=…` and the user presses Send. Groups aren't supported by that link.
 - **Prompt-injection guard (`safety/injection.py`):** results marked `untrusted` (mail list/read/follow-ups, chats) are fenced as data and pattern-scanned before the model sees them. A hit adds a warning for the model, a ⚠ on the chip and an `injection_flagged` audit row. It also **taints** the run: `Policy.needs_approval(…, tainted=True)` ignores standing grants, so every write needs a fresh approval, and the card says why. The taint survives a pause for approval because it's stored in the run state. The scan is regex-based (deterministic, can't be argued with), so it reduces risk rather than eliminating it.
+- **Look-ups (0.7.1, `connectors/websearch.py`):**
+  - `quick_answer` messages are always offered the tools (when web search is on). The guide tells the model to call `web_search` for anything that changes or is local (prices, shops, restaurants, hours, phone numbers, weather, news), open the best result, and answer from that page with the link. For a store's price, it opens the store's own site and uses its search box. General-knowledge questions get no tool call.
+  - The decision layer gained 14 seed examples (`data/web_seed.jsonl`) such as "chutneys bellevue" → quick_answer. Seed files are now tracked per file in `meta` (`seeded:<file>`), so new seed sets reach existing installs.
+  - The search POSTs to `html.duckduckgo.com/html/` and parses `result__a`/`result__snippet`, unwrapping `uddg` redirect links and dropping DuckDuckGo-internal links (ads). A robot check or network error points the model to Bing in the agent's browser.
 - **Browser (Step 5b, `connectors/browser.py`):**
-  - The model never sees HTML. `SNAPSHOT_JS` returns title, URL, `innerText` (cut at 6,000 characters) and up to 120 visible interactive elements. Each one is tagged `data-la-ref=N`, and the model acts by that number.
+  - The model never sees HTML. `SNAPSHOT_JS` tags up to 1,500 visible interactive elements with `data-la-ref=N` (duplicate links with the same href and text are skipped). It returns title, URL and the main content's `innerText` (cut at 6,000 characters), or the whole page's text when there's no main content.
+  - Each element gets a priority: 0 inside `main`, `[role=main]`, `article` or Amazon-style `#dp`/`#centerCol`; 2 inside header, nav or footer; 1 otherwise. The model sees the first 120 by priority, plus a "+N more" line. `browser_find(text)` searches all tagged elements by label words, so nothing on the page is out of reach.
   - `needs_submit()` decides what counts as committing: a label matching buy, pay, order, send, delete, book, subscribe, agree…, or a form-submit button that isn't plainly search/filter/next. `browser_click` refuses those and points to `browser_submit` (danger: approved every time, scope "once" only).
-  - `browser_type` refuses password fields. It presses Enter only in search boxes (`type=search`, `role=search`, or a name/placeholder containing search/query/`q`).
+  - `browser_type` refuses password fields and fields whose label matches `forms.SENSITIVE` (card number, CVV, expiry, IBAN, SSN, one-time codes). It presses Enter only in search boxes (`type=search`, `role=search`, or a name/placeholder containing search/query/`q`).
   - Only http(s) URLs open; `javascript:`, `file:` and `data:` are rejected. Page content is `untrusted`, so it's fenced and scanned like mail.
   - The latest snapshot is stored on the browser object, so element numbers survive a tool rebuild. The window is visible by default (`browser_headless` off) so the user can watch and take over.
 - **Custom skills (`skills.py`):**
@@ -341,10 +347,11 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 | PDFs / spreadsheets the agent makes | `~/Documents/LocalAIAgent/` | No |
 | Audio | In memory only, during transcription; never written to disk | No |
 | Calendar/Mail/Contacts content | Read on demand through the Apple apps; only what a tool returns is kept (in messages or the audit summary) | No |
+| Web search queries | Sent to DuckDuckGo (search words only, no account or cookies) | **Yes**, the query; turn off with `enable_web_search` |
 | Screen text (opt-in) | `screen_snapshots` table, deleted after 2 hours; screenshots are deleted immediately after OCR | No |
 | iMessage/WhatsApp history | Read on demand, read-only, from the apps' own databases; never copied in bulk | No (a sent iMessage goes through Apple, as if you sent it) |
 
-Network access happens only for **model downloads**: Ollama pulls from ollama.com, and the Whisper model comes from Hugging Face (anonymous; the "unauthenticated" warning is harmless). The optional `systemone` backend talks to a server you run on localhost.
+Besides the web tools you ask for (web search queries, pages the agent's browser opens), network access happens only for **model downloads**: Ollama pulls from ollama.com, and the Whisper model comes from Hugging Face (anonymous; the "unauthenticated" warning is harmless). The optional `systemone` backend talks to a server you run on localhost.
 
 ---
 
@@ -360,6 +367,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 | `max_tool_steps` | 5 | Tool-loop iterations per turn |
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
+| `enable_web_search` | on | Web look-ups |
 | `enable_browser` / `browser_headless` / `browser_executable` | on / off / (Chrome, else Chromium) | Browser |
 | `enable_skills` / `skills_require_sandbox` | on / on | Custom skills |
 | `enable_apps` | on | Mac apps & Shortcuts |
@@ -373,7 +381,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 115 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 120 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

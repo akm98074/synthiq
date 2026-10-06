@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 5 complete (v0.7.0) — acting on the computer
+## Status: Step 5 complete (v0.7.1) — acting on the computer
 
 | Included | Comes later |
 |---|---|
@@ -17,6 +17,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Voice**: push-to-talk, conversation mode, on-device Whisper, spoken replies | |
 | **Messages**: read iMessage/SMS and WhatsApp, chats waiting on your reply, iMessage replies (approved), WhatsApp replies typed in for you | |
 | **Prompt-injection guard** on mail, chat and web content | |
+| **Web look-ups**: prices, shops, restaurants, hours and news are searched (DuckDuckGo) and read from the source page, never answered from memory | |
 | **Browser**: the agent's own Chrome window; read pages, click, fill in, search. Submitting, booking or paying asks every time | |
 | **Custom skills**: your own SKILL.md folders, scripts sandboxed (`localagent skill new NAME`) | |
 | **Mac apps & Shortcuts**: open apps, read and press their buttons, type, run your Shortcuts (pressing asks first) | |
@@ -27,7 +28,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.7.0-py3-none-any.whl
+bash install.sh localaiagent-0.7.1-py3-none-any.whl
 localagent start
 ```
 
@@ -38,7 +39,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.7.0-py3-none-any.whl
+pipx install ./localaiagent-0.7.1-py3-none-any.whl
 localagent setup
 localagent start
 ```

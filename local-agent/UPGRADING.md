@@ -2,6 +2,24 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.7.0 to 0.7.1 (better shopping, no card details)
+
+```bash
+bash install.sh localaiagent-0.7.1-py3-none-any.whl
+localagent start
+localagent version
+```
+
+The last line should print `0.7.1`. No new permissions are needed.
+
+### What changed in 0.7.1
+
+- **Look-ups search the web first.** Ask "find price of onion in Safeway Sammamish" or just "Chutneys Bellevue". The agent searches the web (DuckDuckGo), opens the best page (for a shop, the shop's own site and its search box), and answers with the source link. A business name plus a place gets you what it is, address, hours, phone and rating. General-knowledge questions are still answered directly.
+  - Only the search words leave your Mac. You can turn this off under **Connectors → Web search**.
+- **Big pages work better.** The agent now sees a page's main content (the product, its price, "Add to Cart") before the site's menus. A new **find** step reaches any button or link on the page, even on huge pages like Amazon's.
+- **Never types card details.** Card number, security code, expiry, IBAN and ID-number fields are refused, like passwords. You type those yourself.
+- **Shopping stops at the cart** unless you clearly asked it to buy: it adds the item and summarises the price and delivery. Add to Cart, checkout and Place order each still show a red approval card.
+
 ## From 0.6.0 to 0.7.0 (Step 5c: Mac apps, screen context, form filling)
 
 1. Put the new files in one folder, open Terminal there, and run (no `sudo`):

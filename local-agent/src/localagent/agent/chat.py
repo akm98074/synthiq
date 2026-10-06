@@ -103,9 +103,11 @@ TOOL_HINTS = re.compile(
 )
 
 
-def wants_tools(intent: str, text: str, skill_words: tuple[str, ...] = ()) -> bool:
+def wants_tools(intent: str, text: str, skill_words: tuple[str, ...] = (), web: bool = False) -> bool:
     if intent in ("schedule", "computer_action"):
         return True
+    if intent == "quick_answer" and web:
+        return True     # the model decides whether the answer needs a fresh look-up
     if intent not in (*ACTION_INTENTS, "quick_answer"):
         return False
     low = text.lower()
@@ -156,7 +158,8 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
             if m["role"] in ("user", "assistant")]
 
     skill_words = tuple(t.name[6:].replace("_", " ") for t in rt.tools.values() if t.connector == "skills")
-    tools = candidates(rt.tools, intent) if wants_tools(intent, text, skill_words) else []
+    web = "web_search" in rt.tools
+    tools = candidates(rt.tools, intent) if wants_tools(intent, text, skill_words, web) else []
     if tools:
         messages = [{"role": "system",
                      "content": system_prompt(s, "task", memories, with_tools=True) + "\n\n" + tools_prompt()}]

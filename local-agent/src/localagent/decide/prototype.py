@@ -42,21 +42,29 @@ NUDGE_COLUMNS = {
     "nudge": ("should_nudge", lambda v: "yes" if v else "no"),
     "urgency": ("urgency", lambda v: str(int(v))),
 }
-SEED_SETS = [(SEED_FILE, SEED_COLUMNS), (NUDGE_SEED_FILE, NUDGE_COLUMNS)]
+SEED_SETS = [(SEED_FILE, SEED_COLUMNS), (NUDGE_SEED_FILE, NUDGE_COLUMNS),
+             ("web_seed.jsonl", SEED_COLUMNS)]
+# Sets shipped before seeding was tracked per file: present examples mean "already seeded".
+LEGACY_SETS = {SEED_FILE, NUDGE_SEED_FILE}
 
 
 def seed_store(store: Store) -> int:
     """Insert each shipped seed set once (also on upgrade). Returns rows inserted."""
     n = 0
     for filename, columns in SEED_SETS:
+        key = f"seeded:{filename}"
+        if store.meta_get(key):
+            continue
         first_question = next(iter(columns.values()))[0]
-        if store.count_examples_for(first_question, "seed"):
+        if filename in LEGACY_SETS and store.count_examples_for(first_question, "seed"):
+            store.meta_set(key, "1")
             continue
         for row in load_jsonl(filename):
             for column, (question, fmt) in columns.items():
                 if column in row:
                     store.add_example(question, fmt(row[column]), row["text"], source="seed")
                     n += 1
+        store.meta_set(key, "1")
     return n
 
 

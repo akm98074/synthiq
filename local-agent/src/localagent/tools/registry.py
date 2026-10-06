@@ -10,6 +10,7 @@ from ..connectors.mac import calendar_tools, contacts_tools, mail_tools, notes_t
 from ..connectors.apps import apps_tools
 from ..connectors.browser import browser_tools
 from ..connectors.screen import screen_tools
+from ..connectors.websearch import ddg_fetch, web_tools
 from ..connectors.messages import ContactNames, IMessages, WhatsApp, messages_tools, present
 from ..skills import skill_tools
 from .base import Tool
@@ -37,6 +38,9 @@ CONNECTORS = [
               "(the picture is deleted at once), skips private apps, and forgets it after a couple of hours."},
     {"id": "files", "name": "Files", "mac": False, "setting": "enable_files",
      "about": "Find, list, move, open and trash files in the allowed folders."},
+    {"id": "web", "name": "Web search", "mac": False, "setting": "enable_web_search",
+     "about": "Looks things up on the web (DuckDuckGo) for prices, shops, restaurants, hours and news, then "
+              "reads the best page. Only the search words leave this Mac."},
     {"id": "browser", "name": "Browser", "mac": False, "setting": "enable_browser",
      "about": "Open web pages, read them, click links and fill in fields in the agent's own browser window. "
               "Anything that submits, sends, books or pays asks you every time; it never types passwords."},
@@ -57,6 +61,7 @@ TEST_CALLS = {
     "contacts": ("contacts_find", {"name": "a", "limit": 1}),
     "messages": ("messages_list", {"limit": 3}),
     "apps": ("apps_list", {}),
+    "web": ("web_search", {"query": "weather Seattle", "limit": 1}),
     "screen": ("screen_now", {}),
     "files": ("files_list", {"folder": "~/Downloads", "limit": 3}),
     "documents": None,
@@ -64,7 +69,7 @@ TEST_CALLS = {
 
 
 def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None, browser=None,
-                skills_dir: Path | None = None, screen=None) -> dict[str, Tool]:
+                skills_dir: Path | None = None, screen=None, web_fetch=None) -> dict[str, Tool]:
     tools: list[Tool] = []
     if mac_available:
         if settings.enable_calendar:
@@ -87,6 +92,8 @@ def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None, 
         tools += file_tools(FileSpace(parse_roots(settings.file_roots)))
     if settings.enable_documents:
         tools += document_tools(Path(settings.documents_dir).expanduser())
+    if settings.enable_web_search:
+        tools += web_tools(web_fetch or ddg_fetch)
     if settings.enable_browser and browser is not None:
         tools += browser_tools(browser)
     if settings.enable_skills and skills_dir is not None:

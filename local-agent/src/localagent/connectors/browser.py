@@ -21,9 +21,11 @@ from typing import Protocol
 from urllib.parse import urlparse
 
 from ..tools.base import Tool, ToolError, ToolResult, i, obj, s
+from .forms import SENSITIVE
 
 MAX_TEXT = 6000
-MAX_ELEMENTS = 120
+MAX_ELEMENTS = 120     # shown to the model per page; the rest are reachable with browser_find
+MAX_SCAN = 1500        # tagged per page
 # Submit buttons with these labels only search, filter or page; they don't need approval.
 SAFE_WORDS = re.compile(r"^\s*(search|find|go|filter|apply filters?|sort|show( more)?|more|load more|next( page)?|"
                         r"previous( page)?|look ?up|🔍)\s*$", re.IGNORECASE)
@@ -42,11 +44,17 @@ SNAPSHOT_JS = """
   const sel = 'a[href], button, input:not([type=hidden]), textarea, select, [role=button], [role=link], '
             + '[role=checkbox], [role=tab], [role=menuitem], [contenteditable=true], summary';
   document.querySelectorAll('[data-la-ref]').forEach((el) => el.removeAttribute('data-la-ref'));
-  const out = []; let n = 0;
+  const MAIN = 'main, [role=main], #dp, #centerCol, #ppd, #content, article';
+  const CHROME = 'header, nav, footer, [role=navigation], [role=banner], [role=contentinfo]';
+  const out = []; const seen = new Set(); let n = 0;
   for (const el of document.querySelectorAll(sel)) {
     if (out.length >= maxEls) break;
     if (!vis(el) || el.disabled) continue;
+    const key = el.tagName === 'A' ? el.href + '|' + (el.innerText || '').trim() : null;
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
     n += 1; el.setAttribute('data-la-ref', String(n));
+    const priority = el.closest(MAIN) ? 0 : (el.closest(CHROME) ? 2 : 1);
     const tag = el.tagName.toLowerCase(); const type = (el.getAttribute('type') || '').toLowerCase();
     const own = el.labels && el.labels[0] ? el.labels[0].innerText : '';
     const label = (el.getAttribute('aria-label') || own || el.innerText || el.getAttribute('placeholder')
@@ -61,11 +69,13 @@ SNAPSHOT_JS = """
     const search = type === 'search' || !!el.closest('[role=search]')
       || /search|query/i.test([el.getAttribute('name'), el.getAttribute('placeholder'),
                                el.getAttribute('aria-label')].join(' ')) || el.getAttribute('name') === 'q';
-    out.push({ ref: n, tag, type, label, submits, value, search, editable: el.isContentEditable,
+    out.push({ ref: n, tag, type, label, submits, value, search, editable: el.isContentEditable, priority,
                href: tag === 'a' ? el.href : null, password: type === 'password',
                options: tag === 'select' ? Array.from(el.options).slice(0, 20).map((o) => o.text) : null });
   }
-  const text = (document.body ? document.body.innerText : '').replace(/\\n{3,}/g, '\\n\\n');
+  const main = document.querySelector(MAIN);
+  const raw = main && main.innerText.length > 300 ? main.innerText : (document.body ? document.body.innerText : '');
+  const text = raw.replace(/\\n{3,}/g, '\\n\\n');
   return { title: document.title, url: location.href, text, elements: out };
 }
 """
@@ -136,21 +146,21 @@ class PlaywrightBrowser:
 
     async def snapshot(self) -> dict:
         page = await self._page_ready()
-        return await page.evaluate(SNAPSHOT_JS, MAX_ELEMENTS)
+        return await page.evaluate(SNAPSHOT_JS, MAX_SCAN)
 
     async def goto(self, url: str) -> dict:
         async with self._lock:
             page = await self._page_ready()
             await page.goto(url, timeout=30000)
             await self._settle(page)
-            return await page.evaluate(SNAPSHOT_JS, MAX_ELEMENTS)
+            return await page.evaluate(SNAPSHOT_JS, MAX_SCAN)
 
     async def click(self, ref: int) -> dict:
         async with self._lock:
             page = await self._page_ready()
             await page.locator(f'[data-la-ref="{int(ref)}"]').first.click(timeout=10000)
             await self._settle(page)
-            return await page.evaluate(SNAPSHOT_JS, MAX_ELEMENTS)
+            return await page.evaluate(SNAPSHOT_JS, MAX_SCAN)
 
     async def fill(self, ref: int, text: str, enter: bool = False) -> dict:
         async with self._lock:
@@ -163,7 +173,7 @@ class PlaywrightBrowser:
                 if enter:
                     await loc.press("Enter")
                     await self._settle(page)
-            return await page.evaluate(SNAPSHOT_JS, MAX_ELEMENTS)
+            return await page.evaluate(SNAPSHOT_JS, MAX_SCAN)
 
     async def close(self) -> None:
         if self._ctx is not None:
@@ -199,11 +209,21 @@ def needs_submit(e: dict) -> bool:
     return bool(e.get("submits")) and not SAFE_WORDS.match(label)
 
 
+def shown(snap: dict) -> list[dict]:
+    """Main-content elements first, then the rest, then header/nav/footer; capped."""
+    ordered = sorted(snap["elements"], key=lambda e: (e.get("priority", 1), e["ref"]))
+    return ordered[:MAX_ELEMENTS]
+
+
 def render(snap: dict) -> str:
     text = snap["text"].strip()
     if len(text) > MAX_TEXT:
         text = text[:MAX_TEXT] + "\n…(page text cut)"
-    els = "\n".join(element_line(e) for e in snap["elements"]) or "(no interactive elements)"
+    show = shown(snap)
+    els = "\n".join(element_line(e) for e in show) or "(no interactive elements)"
+    more = len(snap["elements"]) - len(show)
+    if more > 0:
+        els += f"\n(+{more} more elements not listed; use browser_find with words from the button or link)"
     return f"Page: {snap['title']}\nURL: {snap['url']}\n\nText:\n{text}\n\nElements (act by number):\n{els}"
 
 
@@ -257,6 +277,9 @@ def browser_tools(browser: Browser) -> list[Tool]:
         e = element(a["ref"])
         if e.get("password"):
             raise ToolError("The agent never types passwords. Ask the user to type it in the browser window.")
+        if SENSITIVE.search(e.get("label") or ""):
+            raise ToolError(f"“{e['label']}” asks for payment or ID details, which the agent never types. "
+                            "Ask the user to fill it in themselves in the browser window.")
         if e["tag"] not in ("input", "textarea", "select") and not e.get("editable"):
             raise ToolError(f"[{e['ref']}] isn't a text field.")
         if e.get("submits"):
@@ -266,6 +289,18 @@ def browser_tools(browser: Browser) -> list[Tool]:
             raise ToolError("Enter can only be pressed in a search box. To send a form, use browser_submit.")
         snap = await browser.fill(e["ref"], a["text"], enter)
         return result(snap, f"{'Searched' if enter else 'Typed into'} “{e['label'] or e['ref']}”")
+
+    async def find(a: dict) -> ToolResult:
+        snap = state["snap"]
+        if snap is None:
+            raise ToolError("Open a page first with browser_open.")
+        words = [w for w in a["text"].lower().split() if w]
+        hits = [e for e in sorted(snap["elements"], key=lambda e: (e.get("priority", 1), e["ref"]))
+                if all(w in (e.get("label") or "").lower() for w in words)][:20]
+        if not hits:
+            return ToolResult(f"No element matching “{a['text']}” on this page.", "Nothing found", [])
+        return ToolResult(f"Elements matching “{a['text']}”:\n" + "\n".join(element_line(e) for e in hits),
+                          f"Found {len(hits)} element(s)", None, untrusted=True)
 
     async def submit(a: dict) -> ToolResult:
         e = element(a["ref"])
@@ -286,6 +321,9 @@ def browser_tools(browser: Browser) -> list[Tool]:
              "draft", "browser", open_page, lambda a: f"Open {a.get('url', '')}", intents),
         Tool("browser_read", "Read the current page again (text and numbered elements).", obj({}),
              "read", "browser", read_page, lambda a: "Read the current page", intents),
+        Tool("browser_find", "Find buttons, links or fields on the current page by their words (also ones "
+             "not listed in the snapshot).", obj({"text": s("Words on the element, e.g. add to cart")}, ["text"]),
+             "read", "browser", find, lambda a: f"Look for “{a.get('text', '')}” on the page", intents),
         Tool("browser_click", "Click a link, tab or button by its number. Never for submitting, sending or "
              "buying (use browser_submit).", obj({"ref": i("Element number from the page snapshot")}, ["ref"]),
              "draft", "browser", click, lambda a: f"Click {label_of(a.get('ref'))}", ("task", "computer_action")),

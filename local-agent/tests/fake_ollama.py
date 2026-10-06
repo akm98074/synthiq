@@ -50,7 +50,7 @@ def judge(text: str, schema: dict) -> dict:
         intent = "computer_action"
     elif any(w in t for w in ("write", "draft", "plan", "make")):
         intent = "task"
-    elif "?" in t:
+    elif "?" in t or any(w in t for w in ("price of", "chutneys", "restaurant", "open now")):
         intent = "quick_answer"
     else:
         intent = "chit_chat"
@@ -79,6 +79,8 @@ def pick_tool(text: str, tool_names: set[str]):
         ("fill", "browser_fill_form", lambda: {}),
         ("shortcut", "shortcuts_run", lambda: {"name": "Focus", "input": ""}),
         ("my screen", "screen_now", lambda: {}),
+        ("price of", "web_search", lambda: {"query": "onion price Safeway Sammamish", "site": "safeway.com"}),
+        ("chutneys", "web_search", lambda: {"query": "Chutneys Bellevue WA"}),
         ("word count", "skill_word_count", lambda: {"text": "hello big world"}),
         ("website", "browser_open", lambda: {"url": "shop.example/item"}),
         ("click", "browser_click", lambda: {"ref": 2}),
@@ -165,7 +167,10 @@ def create_fake_app() -> FastAPI:
                 return {"model": model, "message": {"role": "assistant", "content": content}, "done": True}
             picked = pick_tool(last_msg["content"], names)
             if picked is None:
-                return {"model": model, "message": {"role": "assistant", "content": "No tool needed."}, "done": True}
+                system = body["messages"][0]["content"] if body["messages"][0]["role"] == "system" else ""
+                recalled = [l[2:] for l in system.splitlines() if l.startswith("- (")]
+                content = f"Fake reply from {model}." + (" I remember: " + "; ".join(recalled) if recalled else "")
+                return {"model": model, "message": {"role": "assistant", "content": content}, "done": True}
             name, args = picked
             return {"model": model, "done": True, "message": {
                 "role": "assistant", "content": "",

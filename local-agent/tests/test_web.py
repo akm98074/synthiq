@@ -52,7 +52,7 @@ def test_browser_tools_guardrails():
     b = FakeBrowser()
     tools = {t.name: t for t in browser_tools(b)}
     assert {t.name: t.tier for t in tools.values()} == {
-        "browser_open": "draft", "browser_read": "read", "browser_click": "draft",
+        "browser_open": "draft", "browser_read": "read", "browser_find": "read", "browser_click": "draft",
         "browser_type": "draft", "browser_submit": "danger"}
     with pytest.raises(ToolError, match="Open a page first"):
         run(tools["browser_click"].run({"ref": 1}))
@@ -76,6 +76,31 @@ def test_browser_tools_guardrails():
         run(tools["browser_type"].run({"ref": 1, "text": "x", "enter": True}))
     b.url = "https://shop.example/details"
     run(tools["browser_type"].run({"ref": 2, "text": "hello"}))           # contenteditable is fine
+
+
+def test_main_content_first_and_find():
+    nav = [el(ref=i, tag="a", label=f"Menu {i}", href=f"https://shop.example/m{i}", priority=2)
+           for i in range(1, 201)]
+    main = [el(ref=201, tag="a", label="Blue Kettle", href="https://shop.example/k", priority=0),
+            el(ref=202, label="Add to Cart", submits=True, priority=0),
+            el(ref=203, tag="input", type="text", label="Card number", priority=0),
+            el(ref=204, tag="input", type="text", label="Security code (CVV)", priority=0)]
+    b = FakeBrowser()
+    b.pages["https://shop.example/big"] = {"title": "Big", "url": "https://shop.example/big", "text": "x",
+                                           "elements": nav + main}
+    tools = {t.name: t for t in browser_tools(b)}
+    res = run(tools["browser_open"].run({"url": "https://shop.example/big"}))
+    listed = res.content.split("Elements (act by number):")[1]
+    assert listed.lstrip().startswith("[201]") and "[202] button “Add to Cart”" in listed
+    assert "[200]" not in listed and "+84 more elements" in listed
+    hit = run(tools["browser_find"].run({"text": "menu 199"}))
+    assert "[199] link “Menu 199”" in hit.content
+    assert "Nothing found" == run(tools["browser_find"].run({"text": "checkout now"})).display
+    for ref in (203, 204):
+        with pytest.raises(ToolError, match="payment or ID"):
+            run(tools["browser_type"].run({"ref": ref, "text": "4111111111111111"}))
+    with pytest.raises(ToolError, match="browser_submit"):
+        run(tools["browser_click"].run({"ref": 202}))
 
 
 def test_snapshot_survives_tool_rebuild():
@@ -112,13 +137,15 @@ def test_web_chat_flow_with_approval_for_submit(web_client):
 def test_real_playwright_browser(tmp_path):
     site = tmp_path / "site"
     site.mkdir()
+    nav = "".join(f'<a href="/m{i}.html">Menu {i}</a> ' for i in range(150))
     (site / "index.html").write_text("""<html><head><title>Shop</title></head><body>
+      <nav>""" + nav + """</nav><a href="/m0.html">Menu 0</a><main>
       <h1>Blue Kettle</h1><p>Price $39</p>
       <form role="search" action="/results.html"><input name="q" placeholder="Search"><button>Search</button></form>
       <a href="/details.html">Details</a>
       <form action="/thanks.html"><input name="email" type="email" placeholder="Email">
         <input type="password" name="pw"><button>Buy now</button></form>
-      <div role="button" style="display:none">Hidden</div></body></html>""")
+      <div role="button" style="display:none">Hidden</div></main></body></html>""")
     (site / "details.html").write_text("<title>Details</title><p>1.7 litres</p>")
     (site / "results.html").write_text("<title>Results</title><p>3 kettles</p>")
     handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=str(site), **k)  # noqa: E731
@@ -136,6 +163,10 @@ def test_real_playwright_browser(tmp_path):
             labels = {e["label"]: e for e in snap["elements"]}
             assert "Blue Kettle" in res.content and "Hidden" not in labels
             assert labels["Buy now"]["submits"] and needs_submit(labels["Buy now"])
+            assert sum(1 for e in snap["elements"] if e["label"] == "Menu 0") == 1     # duplicate link dropped
+            listed = res.content.split("Elements (act by number):")[1]
+            assert "“Buy now”" in listed and "more elements not listed" in listed   # main first, nav capped
+            assert labels["Buy now"]["priority"] == 0 and labels["Menu 3"]["priority"] == 2
             assert not needs_submit(labels["Search"])
             q = next(e for e in snap["elements"] if e["tag"] == "input" and e["search"])
             pw = next(e for e in snap["elements"] if e["password"])
