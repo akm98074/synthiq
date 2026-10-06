@@ -65,6 +65,19 @@ class Nudges:
     def exists(self, key: str) -> bool:
         return bool(self.store.query("SELECT 1 FROM nudges WHERE key=?", (key,)))
 
+    def exists_near(self, prefix: str, when: datetime, tolerance_s: int = 300) -> bool:
+        """A nudge for the same event/reminder (key `prefix` + ISO time) within a few minutes. Times
+        come from offsets relative to "now", so the same item can land a minute apart between checks."""
+        like = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        for r in self.store.query("SELECT key FROM nudges WHERE key LIKE ? ESCAPE '\\'", (like,)):
+            try:
+                at = datetime.fromisoformat(r["key"][len(prefix):])
+            except ValueError:
+                continue
+            if abs((at - when).total_seconds()) <= tolerance_s:
+                return True
+        return False
+
     def notified_today(self) -> int:
         start = datetime.fromtimestamp(self.clock()).replace(hour=0, minute=0, second=0, microsecond=0)
         return self.store.query(

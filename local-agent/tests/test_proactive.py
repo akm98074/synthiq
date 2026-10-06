@@ -175,3 +175,21 @@ def test_nudge_seeds_added_on_upgrade(tmp_path):
     n = seed_store(s)
     assert n > 0 and s.count_examples_for("should_nudge", "seed") == 44
     assert seed_store(s) == 0
+
+
+def test_checks_dont_duplicate_when_a_minute_passes(voice_client):
+    """Event/reminder times come from offsets relative to "now", so a later check can compute the
+    same item a minute apart (seen on a slow CI runner). It must still count as the same nudge."""
+    from datetime import datetime, timedelta
+
+    c = voice_client
+    c.runner.outputs["reminders_list"] = "Pay credit card\x1f-7200\x1fBills\x1e"
+    c.post("/api/jobs/checks/run")
+    store = c.app.state.rt.store
+    for r in store.query("SELECT id, key FROM nudges WHERE kind IN ('event','reminder')"):
+        head, stamp = r["key"][:-16], r["key"][-16:]            # "...:" + "YYYY-MM-DDTHH:MM"
+        shifted = (datetime.fromisoformat(stamp) - timedelta(minutes=1)).isoformat(timespec="minutes")
+        store.execute("UPDATE nudges SET key=? WHERE id=?", (head + shifted, r["id"]))
+    before = len(c.get("/api/nudges").json()["items"])
+    c.post("/api/jobs/checks/run")
+    assert len(c.get("/api/nudges").json()["items"]) == before

@@ -96,6 +96,7 @@ def _event_candidates(res: ToolResult | None, now: datetime) -> list[dict]:
         if 0 <= mins <= 60:
             where = f" at {e['location']}" if e.get("location") else ""
             out.append({"kind": "event", "key": f"event:{e['title']}:{e['start']}",
+                        "near": (f"event:{e['title']}:", start),
                         "title": f"{e['title']} in {mins} min",
                         "body": f"{start.strftime('%H:%M')}{where} ({e.get('calendar', '')})",
                         "text": f"Calendar event in {mins} minutes: {e['title']}{where}"})
@@ -117,7 +118,7 @@ def _reminder_candidates(res: ToolResult | None, now: datetime) -> list[dict]:
             late = now - due
             ago = f"{late.days} day(s)" if late.days else f"{int(late.total_seconds() // 3600)} hour(s)"
             when, text = f"overdue by {ago}", f"Reminder overdue by {ago}: {r['title']}"
-        out.append({"kind": "reminder", "key": f"reminder:{r['title']}:{r['due']}",
+        out.append({"kind": "reminder", "key": f"reminder:{r['title']}:{r['due']}", "near": (f"reminder:{r['title']}:", due),
                     "title": r["title"], "body": f"{when} ({r.get('list', '')})", "text": text})
     return out
 
@@ -174,7 +175,7 @@ async def run_checks(rt: "Runtime", manual: bool = False) -> dict:
     candidates = unique
     delivered, skipped = [], 0
     for c in candidates:
-        if rt.nudges.exists(c["key"]):
+        if rt.nudges.exists(c["key"]) or ("near" in c and rt.nudges.exists_near(*c["near"])):
             continue
         # The Jev-style decision: is this worth interrupting for, and how urgent?
         d = await rt.router.decide(c["text"], questions=NUDGE_QUESTIONS, gating=NUDGE_GATING)
