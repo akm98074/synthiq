@@ -58,3 +58,68 @@ def test_token_file_is_private_and_stable(tmp_path):
 def test_host_allowlist(host, ok):
     res = security.check("GET", "/api/x", host, None, "tok" * 11, None, 8765, "tok" * 11)
     assert (res is None) == ok
+
+
+def test_sensitive_settings_need_confirmation_and_are_audited(client):
+    r = client.put("/api/settings", json={"browser_executable": "/tmp/evil", "agent_name": "Juno"})
+    assert r.status_code == 428
+    keys = [c["key"] for c in r.json()["detail"]["confirm"]]
+    assert keys == ["browser_executable"]
+    assert client.get("/api/settings").json()["agent_name"] != "Juno"      # nothing half-applied
+    ok = client.put("/api/settings", json={"browser_executable": "/tmp/evil", "agent_name": "Juno"},
+                    headers={"X-Confirm": "browser_executable"})
+    assert ok.status_code == 200 and ok.json()["browser_executable"] == "/tmp/evil"
+    audit = client.get("/api/audit").json()
+    changed = {a["tool"]: a for a in audit if a["kind"] == "settings_changed"}
+    assert changed["browser_executable"]["outcome"] == "sensitive" and "/tmp/evil" in changed["browser_executable"]["detail"]
+    assert changed["agent_name"]["outcome"] == "ok"
+    nudges = client.get("/api/nudges").json()
+    assert any(n["kind"] == "security" for n in nudges["items"])
+    # Pointing Ollama back at this computer, or switching a feature off, needs no confirmation.
+    assert client.put("/api/settings", json={"ollama_url": "http://127.0.0.1:11434"}).status_code == 200
+    assert client.put("/api/settings", json={"cloud_enabled": False}).status_code == 200
+    assert client.put("/api/settings", json={"ollama_url": "http://10.0.0.5:11434"}).status_code == 428
+
+
+def test_rejected_update_leaves_settings_untouched():
+    from localagent.config import Settings
+
+    s = Settings()
+    with pytest.raises(ValueError):
+        s.update({"agent_name": "Juno", "max_tool_steps": 99})
+    assert s.agent_name != "Juno"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_data_folder_is_private(tmp_path, settings, home):
+    from localagent.runtime import Runtime
+    import asyncio
+
+    (home / "server.log").write_text("x")
+    os.chmod(home, 0o755)
+    os.chmod(home / "server.log", 0o644)
+    rt = Runtime(settings, home)
+    asyncio.run(rt.aclose())
+    assert oct(os.stat(home).st_mode & 0o777) == "0o700"
+    for f in ("localagent.db", "server.log"):
+        assert oct(os.stat(home / f).st_mode & 0o777) == "0o600", f
+
+
+def test_disk_encryption_check_never_raises():
+    on, detail = security.disk_encryption()
+    assert on in (True, False, None) and isinstance(detail, str)
+
+
+def test_new_install_starts_with_personal_connectors_off(tmp_path):
+    from localagent.config import FIRST_RUN_OFF, Settings, load_settings, save_settings
+
+    fresh = load_settings(tmp_path)
+    assert not any(getattr(fresh, k) for k in FIRST_RUN_OFF) and fresh.enable_calendar
+    old = Settings(enable_mail=True, enable_messages=True, agent_name="Juno")     # an upgrade keeps choices
+    save_settings(old, tmp_path)
+    cfg = tmp_path / "config.json"
+    cfg.write_text(cfg.read_text().replace('"max_tool_steps": 5', '"max_tool_steps": 99'))
+    assert '"max_tool_steps": 99' in cfg.read_text()
+    kept = load_settings(tmp_path)
+    assert kept.max_tool_steps == 5
+    assert kept.enable_mail and kept.enable_messages and kept.agent_name == "Juno"   # one bad value isn't fatal

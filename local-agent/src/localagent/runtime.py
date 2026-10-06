@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from .config import Settings, data_dir, save_settings
+from .security import lock_down
 from .decide.prototype import PrototypeClassifier, seed_store
 from .decide.router import DecisionRouter
 from .decide.slm_judge import SLMJudge
@@ -37,6 +38,7 @@ class Runtime:
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
         self.store = Store(self.base / "localagent.db")
+        lock_down(self.base)
         seed_store(self.store)
         self.runner = runner or AppleScriptRunner()
         self.mac_available = runner is not None or AppleScriptRunner.available()

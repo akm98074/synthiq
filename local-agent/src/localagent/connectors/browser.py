@@ -287,6 +287,10 @@ class ChromeProcess:
     async def start(self) -> str:
         """Start (or reuse) Chrome; returns the DevTools endpoint URL."""
         self.profile_dir.mkdir(parents=True, exist_ok=True)
+        # Logged-in sites and cookies live here: only you may read it (and its DevToolsActivePort).
+        from ..security import private_dir
+
+        private_dir(self.profile_dir)
         port = self._read_port()
         if port and self._lock_pid() and _pid_alive(self._lock_pid()) and await self._answering(port):
             log.info("reusing the agent's Chrome already running on port %s", port)

@@ -165,7 +165,7 @@ def test_screen_is_opt_in(action_client):
     conns = {x["id"]: x for x in c.get("/api/connectors").json()}
     assert not conns["screen"]["enabled"] and conns["screen"]["tools"] == []
     assert "screen" not in [j["name"] for j in c.get("/api/jobs").json()["jobs"]]
-    c.put("/api/settings", json={"screen_context_enabled": True})
+    c.put("/api/settings", json={"screen_context_enabled": True}, headers={"X-Confirm": "screen_context_enabled"})
     conns = {x["id"]: x for x in c.get("/api/connectors").json()}
     assert {t["name"] for t in conns["screen"]["tools"]} == {"screen_now", "screen_recent"}
     assert "screen" in [j["name"] for j in c.get("/api/jobs").json()["jobs"]]

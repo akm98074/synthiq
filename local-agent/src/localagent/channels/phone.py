@@ -5,7 +5,10 @@ Twilio needs to reach the Mac, so the phone webhook gets its own tiny listener o
 forwards your public URL to it. The main app is never exposed.
 
 Every request must carry a valid `X-Twilio-Signature` (HMAC-SHA1 with your Twilio auth
-token, kept in the Keychain), and only your own numbers are answered. Speech recognition
+token, kept in the Keychain), and only your own numbers are answered. Caller ID can be faked,
+so every call must also give your PIN (typed or spoken, kept in the Keychain) before anything
+else, three wrong tries end the call, and calls whose caller ID Twilio marks as failing
+verification (STIR/SHAKEN) are refused. Speech recognition
 is Twilio's (cloud): what you say on a call goes through Twilio. By phone the agent can
 look things up and prepare drafts, but never send, change or delete anything.
 
@@ -36,7 +39,24 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 TOKEN = "twilio_auth_token"
+PIN = "phone_pin"
 MAX_WAIT = 90
+MAX_PIN_TRIES = 3
+WORD_DIGITS = {"zero": "0", "oh": "0", "one": "1", "two": "2", "to": "2", "too": "2", "three": "3",
+               "four": "4", "for": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "ate": "8",
+               "nine": "9"}
+
+
+def digits_of(text: str) -> str:
+    """'1 2 3 4', '1234' or 'one two three four' -> '1234'."""
+    out = []
+    for w in text.lower().replace("-", " ").replace(",", " ").replace(".", " ").split():
+        out.append(w if w.isdigit() else WORD_DIGITS.get(w, ""))
+    return "".join(out)
+
+
+def valid_pin(pin: str) -> bool:
+    return pin.isdigit() and 4 <= len(pin) <= 8
 
 
 def signature(token: str, url: str, params: dict) -> str:
@@ -59,9 +79,23 @@ def gather(prompt: str) -> str:
             f"{say(prompt)}</Gather>{say('I did not hear anything. Goodbye.')}<Hangup/>")
 
 
+def ask_pin(prompt: str) -> str:
+    return (f'<Gather input="dtmf speech" action="pin" method="POST" finishOnKey="#" timeout="8" '
+            f'speechTimeout="auto" language="en-US">{say(prompt)}</Gather>'
+            f"{say('I did not get a PIN. Goodbye.')}<Hangup/>")
+
+
 def phone_app(rt: "Runtime") -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     jobs: dict[str, dict] = {}
+    verified: dict[str, float] = {}     # CallSid -> when the PIN was given
+    tries: dict[str, int] = {}
+
+    def signed_in(form: dict) -> bool:
+        now = time.time()
+        for k in [k for k, t in verified.items() if now - t > 3600]:
+            verified.pop(k, None)
+        return form.get("CallSid", "") in verified
 
     async def check(request: Request) -> dict | None:
         """Form params if the request is genuinely from Twilio for an owner's call, else None."""
@@ -88,15 +122,46 @@ def phone_app(rt: "Runtime") -> FastAPI:
             return Response("forbidden", status_code=403)
         if form.get("_stranger"):
             return twiml(say("Sorry, this number is private."), "<Hangup/>")
+        if "failed" in form.get("StirVerstat", "").lower():
+            rt.audit.append("phone_rejected", "phone", outcome="rejected",
+                            detail=f"call from {form.get('From')}: caller ID failed verification ({form['StirVerstat']})")
+            return twiml(say("Sorry, this number is private."), "<Hangup/>")
+        if not valid_pin(rt.vault.get(PIN) or ""):
+            rt.audit.append("phone_rejected", "phone", outcome="rejected", detail="no phone PIN set")
+            return twiml(say("This phone line needs a PIN first. Set one in the app, under Settings, "
+                             "Phone line. Goodbye."), "<Hangup/>")
         rt.audit.append("phone_call", "phone", outcome="ok", detail=f"call from {form.get('From')}")
-        return twiml(gather(f"Hi, it's {rt.settings.agent_name}. What can I do for you?"))
+        return twiml(ask_pin(f"Hi, it's {rt.settings.agent_name}. Please type or say your PIN, then press hash."))
+
+    @app.post("/twilio/pin")
+    async def on_pin(request: Request) -> Response:
+        form = await check(request)
+        if form is None:
+            return Response("forbidden", status_code=403)
+        if form.get("_stranger"):
+            return twiml("<Hangup/>")
+        sid = form.get("CallSid", "")
+        given = digits_of(form.get("Digits") or form.get("SpeechResult") or "")
+        pin = rt.vault.get(PIN) or ""
+        if sid and valid_pin(pin) and hmac.compare_digest(given.encode(), pin.encode()):
+            verified[sid] = time.time()
+            tries.pop(sid, None)
+            rt.audit.append("phone_pin_ok", "phone", outcome="ok", detail=f"call from {form.get('From')}")
+            return twiml(gather("Thanks. What can I do for you?"))
+        tries[sid] = tries.get(sid, 0) + 1
+        rt.audit.append("phone_pin_wrong", "phone", outcome="rejected",
+                        detail=f"wrong PIN from {form.get('From')} (try {tries[sid]})")
+        if tries[sid] >= MAX_PIN_TRIES:
+            tries.pop(sid, None)
+            return twiml(say("That's not right. Goodbye."), "<Hangup/>")
+        return twiml(ask_pin("That's not right. Please try again."))
 
     @app.post("/twilio/gather")
     async def on_speech(request: Request) -> Response:
         form = await check(request)
         if form is None:
             return Response("forbidden", status_code=403)
-        if form.get("_stranger"):
+        if form.get("_stranger") or not signed_in(form):
             return twiml("<Hangup/>")
         text = form.get("SpeechResult", "").strip()
         if not text:
@@ -128,7 +193,7 @@ def phone_app(rt: "Runtime") -> FastAPI:
         form = await check(request)
         if form is None:
             return Response("forbidden", status_code=403)
-        if form.get("_stranger"):
+        if form.get("_stranger") or not signed_in(form):
             return twiml("<Hangup/>")
         job = jobs.get(id)
         if job is None:

@@ -116,17 +116,32 @@ def load_skills(root: Path) -> list[Skill]:
     return out
 
 
-def sandbox_profile(skill: Skill, home: Path) -> str:
+def sandbox_profile(skill: Skill, home: Path, interpreter: list[Path] | None = None) -> str:
+    """macOS sandbox-exec profile. The skill can't read anything in your home folder except its own
+    folder (and the Python it runs on), can write only to its work folder and temp, has no network
+    unless it declares it, and can't drive other apps (no Apple Events, no `open`, no osascript)."""
     work = (skill.folder / "work").resolve()
+    home = home.resolve()
     lines = ["(version 1)", "(allow default)"]
     if not skill.network:
         lines.append("(deny network*)")
     lines += ["(deny file-write*)",
               f'(allow file-write* (subpath "{work}") (subpath "/private/tmp") (subpath "/private/var/folders")'
-              ' (literal "/dev/null") (literal "/dev/tty"))']
-    lines += [f'(deny file-read* (subpath "{(home / p).resolve()}"))' for p in PRIVATE]
-    # The skills folder sits inside the agent's (denied) data folder: re-allow this skill only.
-    lines.append(f'(allow file-read* (subpath "{skill.folder.resolve()}"))')
+              ' (literal "/dev/null") (literal "/dev/tty"))',
+              f'(deny file-read* (subpath "{home}"))',
+              f'(allow file-read-metadata (literal "{home}"))']
+    # Put back only what the skill needs: its own folder and the interpreter installed under home.
+    for p in [skill.folder.resolve(), *(interpreter or [])]:
+        p = p.resolve()
+        if p == home or not (p == home or home in p.parents):
+            continue
+        lines.append(f'(allow file-read* (subpath "{p}"))')
+    # Other apps are a way out too: Mail can send, a browser can load a URL with your data in it.
+    lines += ['(deny mach-lookup (global-name "com.apple.coreservices.appleevents")'
+              ' (global-name "com.apple.coreservices.launchservicesd") (global-name "com.apple.lsd.mapdb")'
+              ' (global-name "com.apple.pasteboard.1"))',
+              '(deny process-exec (literal "/usr/bin/osascript") (literal "/usr/bin/open")'
+              ' (literal "/usr/bin/pbcopy") (literal "/usr/bin/pbpaste") (literal "/usr/bin/shortcuts"))']
     return "\n".join(lines)
 
 
@@ -168,7 +183,9 @@ async def run_skill(skill: Skill, args: dict, require_sandbox: bool = True) -> T
     home = Path.home()
     if sandbox_available():
         if sys.platform == "darwin":
-            cmd = ["sandbox-exec", "-p", sandbox_profile(skill, home), *cmd]
+            exe = Path(shutil.which(cmd[0]) or cmd[0])
+            interp = [Path(sys.prefix), Path(sys.base_prefix), exe.resolve().parent.parent]
+            cmd = ["sandbox-exec", "-p", sandbox_profile(skill, home, interp), *cmd]
         else:
             cmd = bwrap_command(skill, home, cmd)
     elif require_sandbox:

@@ -40,6 +40,43 @@ def private_dir(path: Path) -> None:
         os.chmod(path, stat.S_IRWXU)
 
 
+PRIVATE_FILES = ("localagent.db", "localagent.db-wal", "localagent.db-shm", "server.log", "secrets.json",
+                 TOKEN_FILE, "config.json", "about-me.md")
+
+
+def lock_down(base: Path) -> None:
+    """Only you can read the agent's data: the folder 0700, its files 0600 (POSIX). On Windows the
+    folder lives in your own profile (LocalAppData), which other users can't read."""
+    private_dir(base)
+    for name in PRIVATE_FILES:
+        private_file(base / name)
+    for sub in ("browser-profile", "identity", "skills"):
+        private_dir(base / sub)
+
+
+def disk_encryption() -> tuple[bool | None, str]:
+    """(on?, detail). None when it can't be told. Full-disk encryption protects the data if the
+    computer is lost or stolen; the agent's files aren't encrypted separately."""
+    import shutil
+    import subprocess
+
+    try:
+        if sys.platform == "darwin" and shutil.which("fdesetup"):
+            out = subprocess.run(["fdesetup", "status"], capture_output=True, text=True, timeout=5).stdout
+            return ("On" in out), out.strip() or "unknown"
+        if sys.platform == "win32" and shutil.which("manage-bde"):
+            out = subprocess.run(["manage-bde", "-status", "C:"], capture_output=True, text=True, timeout=10).stdout
+            on = "Protection On" in out
+            return on, "BitLocker on" if on else "BitLocker off (or not readable without admin)"
+        if sys.platform.startswith("linux") and shutil.which("lsblk"):
+            out = subprocess.run(["lsblk", "-o", "TYPE"], capture_output=True, text=True, timeout=5).stdout
+            on = "crypt" in out.split()
+            return on, "an encrypted (LUKS) volume is present" if on else "no encrypted volume found"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None, "couldn't tell"
+
+
 def api_token(base: Path) -> str:
     """The per-install API secret, created on first use."""
     f = base / TOKEN_FILE

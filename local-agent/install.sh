@@ -116,6 +116,11 @@ if [ "$OS" = "Darwin" ]; then
   fi
 fi
 
+if [ "$OS" = "Darwin" ]; then
+  say "Creating the LocalAIAgent app (so macOS gives permissions to it, not to Terminal)"
+  "$AGENT" app install || warn "couldn't create the app; the agent still runs from Terminal."
+fi
+
 if [ "$(uname -s)" = "Darwin" ]; then
   say "Adding the calendar and screen add-ons (EventKit, on-device text recognition)"
   pipx inject localaiagent "pyobjc-framework-EventKit>=10" || warn "calendar add-on failed; Calendar falls back to AppleScript."

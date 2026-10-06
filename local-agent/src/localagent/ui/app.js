@@ -17,14 +17,26 @@ const el = (tag, attrs = {}, ...children) => {
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
     ...opts,
+    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
     body: opts.body && typeof opts.body !== "string" ? JSON.stringify(opts.body) : opts.body,
   });
+  if (res.status === 428 && !opts._confirmed) {
+    // A security-sensitive change: show what each one risks and ask before resending.
+    let d = {};
+    try { d = (await res.json()).detail || {}; } catch (_) {}
+    const items = d.confirm || [];
+    const text = items.map((c) => `• ${c.key}: ${JSON.stringify(c.from)} → ${JSON.stringify(c.to)}\n  ${c.risk}`).join("\n\n");
+    if (!window.confirm(`${d.message || "Confirm these changes."}\n\n${text}\n\nMake these changes?`)) {
+      throw new Error("Not changed.");
+    }
+    return api(path, { ...opts, _confirmed: true,
+      headers: { ...(opts.headers || {}), "X-Confirm": items.map((c) => c.key).join(",") } });
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail || detail; } catch (_) {}
-    throw new Error(detail);
+    throw new Error(typeof detail === "string" ? detail : (detail.message || JSON.stringify(detail)));
   }
   const type = res.headers.get("content-type") || "";
   return type.includes("json") ? res.json() : res.text();
@@ -212,8 +224,10 @@ function approvalCard(ap, onDecided) {
     el("div", { class: "approval-head" },
       el("span", { class: `badge tier-${ap.tier}` }, `${ap.tier} · ${TIER_LABEL[ap.tier] || ""}`),
       el("strong", {}, ap.summary)),
-    el("details", {}, el("summary", {}, "Details"),
-      el("pre", {}, `${ap.tool}\n${JSON.stringify(ap.args, null, 2)}`)),
+    ap.reason ? el("div", { class: "approval-why muted" }, `Why it asks: ${ap.reason}`) : null,
+    // The full payload, open by default: you approve exactly what will be sent or changed.
+    el("details", { open: "" }, el("summary", {}, `What exactly happens (${ap.tool})`),
+      el("pre", { class: "approval-preview" }, ap.preview || JSON.stringify(ap.args, null, 2))),
     el("div", { class: "row approval-actions" }, scope, approve, decline, status));
   const go = async (yes) => {
     approve.disabled = decline.disabled = scope.disabled = true;
@@ -527,7 +541,7 @@ $("#settings-form").addEventListener("submit", async (e) => {
 });
 
 /* ── nudges ───────────────────────────────────────────────────────────── */
-const KIND_ICON = { brief: "☀️", event: "📅", reminder: "⏰", followup: "✉️", dream: "🌙", peer: "🤝" };
+const KIND_ICON = { brief: "☀️", event: "📅", reminder: "⏰", followup: "✉️", dream: "🌙", peer: "🤝", security: "🛡️" };
 
 async function refreshNudgeBadge() {
   try {
@@ -694,12 +708,18 @@ async function loadPhone() {
   try {
     const p = await api("/api/phone");
     $("#phone-status").textContent = !p.enabled ? "Off."
-      : `${p.listening ? `Listening on 127.0.0.1:${p.port}` : "Not listening (restart the agent)"} · token ${p.has_token ? "saved" : "missing"}`
+      : `${p.listening ? `Listening on 127.0.0.1:${p.port}` : "Not listening (restart the agent)"} · token ${p.has_token ? "saved" : "missing"} · PIN ${p.has_pin ? "set" : "missing (calls are refused)"}`
         + (p.webhook ? ` · Twilio "A call comes in" webhook: ${p.webhook}` : " · add the public URL");
   } catch (_) {}
 }
 $("#phone-token-save").addEventListener("click", async () => {
   try { await api("/api/phone/token", { method: "PUT", body: { token: $("#phone-token").value.trim() } }); $("#phone-token").value = ""; }
+  catch (err) { $("#phone-status").textContent = err.message; return; }
+  loadPhone();
+});
+
+$("#phone-pin-save").addEventListener("click", async () => {
+  try { await api("/api/phone/pin", { method: "PUT", body: { pin: $("#phone-pin").value.trim() } }); $("#phone-pin").value = ""; }
   catch (err) { $("#phone-status").textContent = err.message; return; }
   loadPhone();
 });
@@ -731,6 +751,16 @@ async function loadPeers() {
           await api(`/api/peers/${x.id}`, { method: "DELETE" }); loadPeers();
         } }, "Remove")),
       el("div", { class: "muted small" }, x.addr),
+      el("div", { class: "row small", style: "margin:6px 0;flex-wrap:wrap" },
+        el("span", {}, `Safety code: `, el("strong", { class: "safety-code" }, x.safety_code)),
+        x.verified ? el("span", { class: "badge tier-read" }, "verified")
+          : el("button", { type: "button", class: "secondary", onclick: async () => {
+              if (!confirm(`Does ${x.owner || x.name} see exactly ${x.safety_code} on their screen? `
+                + "Check together in person or on a call, not by text.")) return;
+              await api(`/api/peers/${x.id}/verify`, { method: "POST" }); loadPeers();
+            } }, "They match")),
+      x.verified ? null : el("div", { class: "muted small" },
+        "Not verified yet: nothing is answered for this agent automatically, and you can't ask it things."),
       ...Object.entries(p.scopes).map(([k, label]) => {
         const cb = el("input", { type: "checkbox" }); cb.checked = x.scopes.includes(k);
         cb.addEventListener("change", async () => {

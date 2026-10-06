@@ -64,7 +64,39 @@ SCOPES = {
 }
 ALLOWED_SCOPES = {"write": list(SCOPES), "danger": ["once"]}
 DURATIONS = {"hour": 3600, "day": 86400}
+ALWAYS_DAYS = 30            # "always" is reviewed again after a month
 GENESIS = "0" * 64
+
+
+REASONS = {
+    "write": "It sends, changes or shares something.",
+    "danger": "It can't be undone (or spends, submits or deletes), so it asks every time.",
+}
+
+
+def preview_of(tool: Tool, args: dict) -> str:
+    """Everything the action will do or send, in full, for the approval card (never truncated)."""
+    from ..safety.egress import describe
+
+    e = describe(tool, args)
+    lines = []
+    if e:
+        lines.append(f"Goes to: {e.get('to') or '?'}  ({e.get('what', '')})")
+        if e.get("url"):
+            lines.append(f"Address: {e['url']}")
+    for k, v in args.items():
+        text = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+        lines.append(f"{k}: {text}" if "\n" not in text else f"{k}:\n{text}")
+    return "\n".join(lines)
+
+
+def target_of(tool: Tool, args: dict) -> str | None:
+    """Who or where a call reaches (recipient, chat, web site, friend's agent), for per-target grants."""
+    from ..safety.egress import describe
+
+    e = describe(tool, args)
+    to = (e or {}).get("to")
+    return str(to).strip().lower() or None if to else None
 
 
 class ApprovalError(ValueError):
@@ -76,6 +108,11 @@ class Policy:
         self.store = store
         self.boot_id = uuid.uuid4().hex
         store.db.executescript(SCHEMA)
+        for table, new in (("grants", ("target",)), ("approvals", ("target", "preview", "reason"))):
+            cols = {r["name"] for r in store.db.execute(f"PRAGMA table_info({table})")}
+            for col in new:
+                if col not in cols:
+                    store.db.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
         store.db.commit()
         # Approvals left pending by a previous run can't be resumed.
         store.execute("UPDATE approvals SET status='expired' WHERE status='pending'")
@@ -93,14 +130,16 @@ class Policy:
         if tier == "danger" or tainted:
             # After a suspected prompt injection, standing grants don't apply.
             return True
-        return self.matching_grant(tool.name, task_id) is None
+        return self.matching_grant(tool.name, task_id, target_of(tool, args or {})) is None
 
-    def matching_grant(self, tool_name: str, task_id: int | None) -> dict | None:
+    def matching_grant(self, tool_name: str, task_id: int | None, target: str | None = None) -> dict | None:
+        """A standing permission for this tool *and this target*: allowing emails to Priya doesn't
+        allow emails to anyone else."""
         now = time.time()
         for g in self.active_grants():
-            if g["tool"] != tool_name:
+            if g["tool"] != tool_name or (g.get("target") or None) != target:
                 continue
-            if g["scope"] == "always":
+            if g["scope"] == "always" and (g["expires_at"] is None or g["expires_at"] > now):
                 return g
             if g["scope"] == "session" and g["boot_id"] == self.boot_id:
                 return g
@@ -114,11 +153,13 @@ class Policy:
     def request(self, tool: Tool, args: dict, task_id: int | None, state: dict,
                 note: str | None = None) -> dict:
         summary = tool.summary(args) + (f" ⚠ {note}" if note else "")
+        tier = tool.tier_for(args)
+        reason = note or REASONS.get(tier, "It needs your OK.")
         cur = self.store.execute(
-            "INSERT INTO approvals(created_at, tool, tier, args, summary, task_id, state)"
-            " VALUES (?,?,?,?,?,?,?)",
-            (time.time(), tool.name, tool.tier_for(args), json.dumps(args), summary, task_id,
-             json.dumps(state)),
+            "INSERT INTO approvals(created_at, tool, tier, args, summary, task_id, state, target, preview, reason)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (time.time(), tool.name, tier, json.dumps(args), summary, task_id,
+             json.dumps(state), target_of(tool, args), preview_of(tool, args), reason),
         )
         return self.get(int(cur.lastrowid))
 
@@ -148,11 +189,12 @@ class Policy:
             (status, scope if approve else None, time.time(), approval_id),
         )
         if approve and scope != "once":
+            expires = (time.time() + DURATIONS[scope] if scope in DURATIONS
+                       else time.time() + ALWAYS_DAYS * 86400 if scope == "always" else None)
             self.store.execute(
-                "INSERT INTO grants(tool, scope, task_id, boot_id, expires_at, created_at)"
-                " VALUES (?,?,?,?,?,?)",
-                (ap["tool"], scope, ap["task_id"], self.boot_id,
-                 time.time() + DURATIONS[scope] if scope in DURATIONS else None, time.time()),
+                "INSERT INTO grants(tool, scope, task_id, boot_id, expires_at, created_at, target)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (ap["tool"], scope, ap["task_id"], self.boot_id, expires, time.time(), ap.get("target")),
             )
         ap.update(status=status, scope=scope if approve else None)
         return ap
@@ -176,9 +218,11 @@ class Policy:
             g = dict(r)
             if g["scope"] in DURATIONS and (g["expires_at"] or 0) <= now:
                 continue
+            if g["scope"] == "always" and g["expires_at"] is not None and g["expires_at"] <= now:
+                continue
             if g["scope"] == "session" and g["boot_id"] != self.boot_id:
                 continue
-            g["label"] = SCOPES.get(g["scope"], g["scope"])
+            g["label"] = SCOPES.get(g["scope"], g["scope"]) + (f" · {g['target']}" if g.get("target") else "")
             out.append(g)
         return out
 

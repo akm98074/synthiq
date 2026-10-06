@@ -209,7 +209,9 @@
           <label>Public URL from the tunnel <input name="phone_public_url" placeholder="https://abc.trycloudflare.com"></label>
           <label>Local port for the tunnel <input name="phone_port" type="number" min="1024" max="65535"></label>
           <label>Twilio auth token <input id="phone-token" type="password" placeholder="32 characters" autocomplete="off"></label>
+          <label>Phone PIN (4–8 digits; asked on every call, because caller ID can be faked) <input id="phone-pin" type="password" inputmode="numeric" placeholder="e.g. 2468" autocomplete="off"></label>
           <div class="row" style="margin-top:10px;flex-wrap:wrap"><button type="button" class="secondary" id="phone-token-save">Save token</button>
+            <button type="button" class="secondary" id="phone-pin-save">Save PIN</button>
             <span id="phone-status" class="muted small"></span></div>
         </fieldset>
         <fieldset><legend>Trusted agents</legend>

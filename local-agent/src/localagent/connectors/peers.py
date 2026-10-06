@@ -38,7 +38,8 @@ log = logging.getLogger(__name__)
 PRIVATE = "peer_private_key"
 MAX_SKEW = 300
 RATE_PER_MIN = 30
-INVITE_TTL = 7 * 86400
+INVITE_TTL = 86400            # an intercepted code is only useful for a day
+EMOJI = "🍎🍌🍇🍉🍒🍋🥕🌽🍄🌵🌻🌙⭐🔥💧⚡🎈🎁🎵🎲🚲🚀⛵🏠🔑🔔📚✏️🧭⚓🐢🐙🦊🐼🐝🦋🐳"
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS peers (
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, owner TEXT NOT NULL DEFAULT '',
@@ -81,6 +82,10 @@ class Peers:
 
         self.rt = rt
         rt.store.db.executescript(SCHEMA)
+        cols = {r["name"] for r in rt.store.db.execute("PRAGMA table_info(peers)")}
+        if "verified" not in cols:
+            # Pairings from before 0.16 must be confirmed with the safety code once.
+            rt.store.db.execute("ALTER TABLE peers ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
         rt.store.db.commit()
         raw = rt.vault.get(PRIVATE)
         if not raw:
@@ -100,6 +105,23 @@ class Peers:
 
         h = hashlib.sha256(bytes(self.key.public_key)).hexdigest()[:16]
         return " ".join(h[i:i + 4] for i in range(0, 16, 4))
+
+    def safety_code(self, other_key: str) -> str:
+        """Four emoji both people see for their pairing. Compare them (in person or on a call): if they
+        match, nobody swapped in another agent's key by intercepting the invite."""
+        import hashlib
+
+        a, b = sorted([self.public, other_key])
+        h = hashlib.sha256(f"{a}|{b}".encode()).digest()
+        emoji = list(EMOJI.replace("\ufe0f", ""))
+        return " ".join(emoji[x % len(emoji)] for x in h[:4])
+
+    def verify(self, pid: int) -> dict | None:
+        self.rt.store.execute("UPDATE peers SET verified=1 WHERE id=?", (pid,))
+        peer = self.get(pid)
+        if peer:
+            self.rt.audit.append("peer_verified", "peers", outcome="ok", detail=f"{peer['name']} safety code confirmed")
+        return peer
 
     def address(self) -> str:
         s_ = self.rt.settings
@@ -158,6 +180,8 @@ class Peers:
     def _row(self, r) -> dict:
         d = dict(r)
         d["scopes"] = json.loads(d["scopes"])
+        d["verified"] = bool(d.get("verified"))
+        d["safety_code"] = self.safety_code(d["key"])
         return d
 
     def list(self) -> list[dict]:
@@ -264,6 +288,10 @@ class Peers:
         if kind == "ask":
             ask = body.get("kind", "question")
             text = str(body.get("text", ""))[:2000]
+            if not peer["verified"]:
+                # Until you've compared safety codes, nothing is answered automatically.
+                who += " (not verified yet)"
+                ask = "question"
             if ask == "freebusy" and "freebusy" in peer["scopes"]:
                 busy = await self._busy(str(body.get("start", "")), str(body.get("end", "")))
                 self.rt.audit.append("peer_answered", "peers", outcome="ok",
@@ -342,6 +370,9 @@ def peer_tools(peers: Peers) -> list[Tool]:
 
     async def ask(a: dict) -> ToolResult:
         peer = peers.find(a.get("peer", ""))
+        if not peer["verified"]:
+            raise ToolError(f"{peer['owner'] or peer['name']}'s agent isn't verified yet. Compare the safety code "
+                            f"({peer['safety_code']}) with them, then press 'They match' in Settings → Trusted agents.")
         kind = a.get("kind", "question")
         ask_id = secrets.token_hex(6)
         body = {"type": "ask", "id": ask_id, "kind": kind, "text": a.get("text", ""),

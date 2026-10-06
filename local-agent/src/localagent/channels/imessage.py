@@ -199,7 +199,11 @@ class IMessageChannel:
                 self.rt.store.meta_set("imessage_channel_approval", str(ap["id"]))
                 how = ("Reply yes or no." if ap["tier"] == "danger"
                        else "Reply yes, yes 1h, always, or no.")
-                notes.append(f"Needs your OK: {ap['summary']}\n{how}")
+                preview = (ap.get("preview") or "").strip()
+                if len(preview) > 600:
+                    preview = preview[:600] + "… (open the app to see all of it)"
+                notes.append(f"Needs your OK: {ap['summary']}\nWhy: {ap.get('reason') or ''}"
+                             + (f"\n---\n{preview}\n---" if preview else "") + f"\n{how}")
             elif t == "error":
                 notes.append(f"Problem: {ev['message']}")
         return plain("".join(parts).strip() or default) + ("\n\n" + "\n\n".join(notes) if notes else "")

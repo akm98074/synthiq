@@ -40,6 +40,21 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
     except OSError as exc:
         add("data directory", False, f"{base}: {exc}")
 
+    from .security import disk_encryption
+
+    enc, enc_detail = disk_encryption()
+    add("disk encryption", bool(enc), enc_detail + ("" if enc else " - turn on FileVault / BitLocker / LUKS so "
+                                                    "your agent's data is protected if the computer is lost"),
+        warn=True)
+
+    if sys.platform == "darwin":
+        from . import macapp
+
+        add("permissions identity", macapp.installed(),
+            "LocalAIAgent.app (permissions are granted to the app)" if macapp.installed()
+            else "Terminal/Python - permissions you grant also apply to everything run there; "
+                 "run: localagent app install", warn=True)
+
     if sys.platform == "darwin":
         from .connectors.eventkit import EventKitCalendar
 

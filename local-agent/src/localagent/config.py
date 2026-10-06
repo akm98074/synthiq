@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 
 import platformdirs
@@ -143,6 +143,15 @@ class Settings:
     wake_model: str = "mlx-community/whisper-tiny.en-mlx"
 
     def update(self, values: dict) -> "Settings":
+        """Apply and validate on a copy first, so a rejected update leaves nothing half-applied."""
+        trial = replace(self)
+        trial._apply(values)
+        trial._validate()
+        for f in fields(self):
+            setattr(self, f.name, getattr(trial, f.name))
+        return self
+
+    def _apply(self, values: dict) -> None:
         known = {f.name: f.type for f in fields(self)}
         for key, value in values.items():
             if key not in known:
@@ -157,6 +166,8 @@ class Settings:
             else:
                 value = str(value)
             setattr(self, key, value)
+
+    def _validate(self) -> None:
         if self.decision_backend not in DECISION_BACKENDS:
             raise ValueError(f"decision_backend must be one of {DECISION_BACKENDS}")
         if not 0.0 <= self.confidence_threshold <= 1.0:
@@ -182,10 +193,56 @@ class Settings:
             raise ValueError("screen_retention_minutes must be between 5 and 1440")
         if not 80 <= self.tts_rate <= 400:
             raise ValueError("tts_rate must be between 80 and 400")
-        return self
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+# Changing these can expose your data or let someone else act through the agent, so the app
+# asks you to confirm each change (with this text) and records it in Activity.
+SENSITIVE_SETTINGS = {
+    "browser_executable": "The browser program the agent starts. Any program set here will be run.",
+    "ollama_url": "Where every prompt goes, including your memories and messages. Anything other than "
+                  "this computer sends them over the network.",
+    "host": "Which network address the app listens on. Anything other than 127.0.0.1 exposes it to your network.",
+    "skills_require_sandbox": "Turning this off lets custom skill scripts run without a sandbox, with "
+                              "full access to your files.",
+    "imessage_owner_handles": "Who may give the agent orders by iMessage.",
+    "enable_imessage_channel": "Lets the agent be controlled by iMessage.",
+    "phone_enabled": "Lets the agent answer phone calls (speech passes through Twilio).",
+    "phone_owner_numbers": "Which phone numbers may call the agent.",
+    "phone_public_url": "The public address calls arrive at.",
+    "a2a_enabled": "Lets friends' agents contact this computer over the network.",
+    "a2a_host": "Which network address friends' agents connect to.",
+    "a2a_public_addr": "The address friends' agents are told to use.",
+    "cloud_enabled": "Lets questions be sent to the cloud model (each still needs your OK).",
+    "cloud_auto_hard": "Offers the cloud model for every hard question.",
+    "cloud_send_memories": "Includes your memories in what's sent to the cloud model.",
+    "screen_context_enabled": "Lets the agent read your screen every few minutes.",
+}
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
+
+
+def sensitive_changes(old: "Settings", values: dict) -> dict:
+    """{key: (old, new)} for sensitive settings this update would actually change (and make riskier)."""
+    out = {}
+    for key, new in values.items():
+        if key not in SENSITIVE_SETTINGS or not hasattr(old, key):
+            continue
+        before = getattr(old, key)
+        trial = replace(old)
+        trial._apply({key: new})
+        after = getattr(trial, key)
+        if after == before:
+            continue
+        if key == "ollama_url" and any(f"//{h}" in str(after) for h in LOCAL_HOSTS):
+            continue                                   # pointing back at this computer is never riskier
+        if key == "skills_require_sandbox" and after:
+            continue
+        if isinstance(after, bool) and not after:
+            continue                                   # switching something off is never riskier
+        out[key] = (before, after)
+    return out
 
 
 def _valid_hhmm(value: str) -> bool:
@@ -200,14 +257,30 @@ def config_path(base: Path | None = None) -> Path:
     return (base or data_dir()) / "config.json"
 
 
+# A new install starts with the connectors that read other people's words or act in your apps
+# switched off; you turn them on in the Trust center when you want them. Upgrades keep your
+# saved choices (config.json stores every setting).
+FIRST_RUN_OFF = ("enable_messages", "enable_whatsapp", "enable_mail", "enable_contacts", "enable_apps")
+
+
 def load_settings(base: Path | None = None) -> Settings:
     path = config_path(base)
     settings = Settings()
-    if path.exists():
-        try:
-            settings.update(json.loads(path.read_text()))
-        except (ValueError, json.JSONDecodeError):
-            pass
+    if not path.exists():
+        settings.update({k: False for k in FIRST_RUN_OFF})
+        return settings
+    try:
+        saved = json.loads(path.read_text())
+    except (ValueError, json.JSONDecodeError):
+        return settings
+    try:
+        settings.update(saved)
+    except ValueError:
+        for key, value in saved.items():        # keep every valid saved value, drop only the bad one
+            try:
+                settings.update({key: value})
+            except (ValueError, TypeError):
+                pass
     return settings
 
 

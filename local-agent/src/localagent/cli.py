@@ -217,8 +217,21 @@ def start(
     pid = _running_pid()
     if _healthy(url):
         typer.echo(f"Already running at {url}" + (f" (pid {pid})" if pid else " (started at login)"))
+    elif sys.platform == "darwin" and _mac_app_installed():
+        # Run as LocalAIAgent.app, so macOS gives the permissions to that app, not to Terminal.
+        from . import macapp
+
+        subprocess.run(["open", "-g", "-a", str(macapp.app_path()), "--args", "--no-open"], check=False)
+        for _ in range(150):
+            if _healthy(url):
+                break
+            time.sleep(0.2)
+        else:
+            typer.secho(f"The app didn't start; see {_log_file()}", fg="red")
+            raise typer.Exit(1)
+        typer.secho(f"Started LocalAIAgent.app at {url}", fg="green")
     else:
-        log = open(_log_file(), "a")
+        log = os.fdopen(os.open(_log_file(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a")
         detach = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
                   if sys.platform == "win32" else {"start_new_session": True})
         proc = subprocess.Popen(
@@ -239,6 +252,40 @@ def start(
         typer.secho(f"Started (pid {proc.pid}) at {url}", fg="green")
     if open_browser:
         webbrowser.open(_signin_url())
+
+
+def _mac_app_installed() -> bool:
+    from . import macapp
+
+    return macapp.installed()
+
+
+app_cli = typer.Typer(help="The LocalAIAgent app (macOS): its own identity for privacy permissions.",
+                      no_args_is_help=True)
+app.add_typer(app_cli, name="app")
+
+
+@app_cli.command("install")
+def app_install() -> None:
+    """Create ~/Applications/LocalAIAgent.app, so permissions go to it instead of Terminal."""
+    if sys.platform != "darwin":
+        typer.echo("Only needed on macOS.")
+        return
+    from . import macapp
+
+    path, note = macapp.install()
+    typer.secho(f"Installed {path} ({note}).", fg="green")
+    typer.echo("From now on `localagent start` runs the agent as this app. macOS will ask once for each\n"
+               "permission under the name LocalAIAgent; you can remove Terminal's Full Disk Access if you\n"
+               "only gave it for the agent (System Settings > Privacy & Security).")
+
+
+@app_cli.command("status")
+def app_status() -> None:
+    """Show whether the app is installed."""
+    from . import macapp
+
+    typer.echo(f"{macapp.app_path()}: {'installed' if macapp.installed() else 'not installed'}")
 
 
 @app.command("open")
@@ -339,7 +386,8 @@ def plist_path() -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCH_LABEL}.plist"
 
 
-def plist_xml(python: str, log_file: Path, home: str | None = None) -> str:
+def plist_xml(python: str, log_file: Path, home: str | None = None, program: list[str] | None = None) -> str:
+    args = "".join(f"<string>{a}</string>" for a in (program or [python, "-m", "localagent.server"]))
     env = (f"""
   <key>EnvironmentVariables</key>
   <dict><key>LOCALAGENT_HOME</key><string>{home}</string></dict>""" if home else "")
@@ -349,7 +397,7 @@ def plist_xml(python: str, log_file: Path, home: str | None = None) -> str:
 <dict>
   <key>Label</key><string>{LAUNCH_LABEL}</string>
   <key>ProgramArguments</key>
-  <array><string>{python}</string><string>-m</string><string>localagent.server</string></array>
+  <array>{args}</array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>StandardOutPath</key><string>{log_file}</string>
@@ -400,17 +448,22 @@ def autostart(action: str = typer.Argument("status", help="on | off | status")) 
     launchctl = shutil.which("launchctl")
     if action == "on":
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(plist_xml(sys.executable, _log_file(), os.environ.get("LOCALAGENT_HOME")))
+        from . import macapp
+
+        program = [str(macapp.executable()), "--no-open"] if macapp.installed() else None
+        path.write_text(plist_xml(sys.executable, _log_file(), os.environ.get("LOCALAGENT_HOME"), program))
         if launchctl:
             if _running_pid():
                 stop()
             subprocess.run([launchctl, "bootout", f"gui/{uid}", str(path)], capture_output=True)
             subprocess.run([launchctl, "bootstrap", f"gui/{uid}", str(path)], capture_output=True)
         typer.secho(f"Autostart on ({path}). The agent now starts when you log in.", fg="green")
-        typer.echo("Note: macOS treats the auto-started agent as a different app from Terminal, so\n"
-                   "Calendar/Contacts/Mail may ask for permission again (or need switching on under\n"
-                   "System Settings > Privacy & Security > Automation). Run `localagent autostart off`\n"
-                   "to go back to starting it from Terminal.")
+        if program:
+            typer.echo("It starts as the LocalAIAgent app, so it keeps the permissions you gave that app.")
+        else:
+            typer.echo("Note: macOS treats the auto-started agent as a different app from Terminal, so\n"
+                       "Calendar/Contacts/Mail may ask for permission again. Install the app first for\n"
+                       "one consistent identity: localagent app install")
     elif action == "off":
         if launchctl and path.exists():
             subprocess.run([launchctl, "bootout", f"gui/{uid}", str(path)], capture_output=True)
@@ -625,6 +678,16 @@ def phone_setup() -> None:
             typer.secho(r.json().get("detail", r.text), fg="red")
             raise typer.Exit(1)
         status = r.json()
+    pin = getpass.getpass("Phone PIN, 4-8 digits, asked on every call" +
+                          (" (Enter to keep the saved one): " if status.get("has_pin") else ": ")).strip()
+    if pin:
+        r = _api("put", "/api/phone/pin", json={"pin": pin}, timeout=10)
+        if r.status_code != 200:
+            typer.secho(r.json().get("detail", r.text), fg="red")
+            raise typer.Exit(1)
+        status = r.json()
+    elif not status.get("has_pin"):
+        typer.secho("Calls are refused until a PIN is set.", fg="yellow")
     port = status["port"]
     typer.echo(f"""
 1. Run a tunnel to the phone listener (keep it running):

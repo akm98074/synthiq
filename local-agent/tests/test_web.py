@@ -239,14 +239,21 @@ def test_run_skill_and_errors(tmp_path):
 
 
 def test_sandbox_profile(tmp_path):
-    sk = parse_skill(scaffold(tmp_path, "word-count"))
-    prof = sandbox_profile(sk, Path("/Users/me"))
+    home = tmp_path / "home"
+    sk = parse_skill(scaffold(home / ".local/share/LocalAIAgent/skills", "word-count"))
+    venv = home / ".local/pipx/venvs/localaiagent"
+    venv.mkdir(parents=True)
+    prof = sandbox_profile(sk, home, [venv, Path("/opt/homebrew")])
+    lines = prof.splitlines()
     assert "(deny network*)" in prof and "(deny file-write*)" in prof
     assert f'(subpath "{(sk.folder / "work").resolve()}")' in prof
-    assert '(deny file-read* (subpath "/Users/me/Library/Messages"))' in prof
-    assert prof.rstrip().endswith(f'(allow file-read* (subpath "{sk.folder.resolve()}"))')   # after the denies
+    deny_home = lines.index(f'(deny file-read* (subpath "{home.resolve()}"))')        # the whole home folder
+    for allowed in (sk.folder.resolve(), venv.resolve()):                                # … then only these back
+        assert lines.index(f'(allow file-read* (subpath "{allowed}"))') > deny_home
+    assert "/opt/homebrew" not in prof                                                   # outside home: not needed
+    assert "com.apple.coreservices.appleevents" in prof and '(literal "/usr/bin/osascript")' in prof
     sk.network = True
-    assert "(deny network*)" not in sandbox_profile(sk, Path("/Users/me"))
+    assert "(deny network*)" not in sandbox_profile(sk, home)
 
 
 def test_skill_used_in_chat_and_listed(web_client):

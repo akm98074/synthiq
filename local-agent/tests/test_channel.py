@@ -117,7 +117,8 @@ def test_channel_api(messages_client):
     c = messages_client
     assert c.get("/api/channels").json()["imessage"]["enabled"] is False
     assert c.post("/api/channels/imessage/test").status_code == 400
-    c.put("/api/settings", json={"enable_imessage_channel": True, "imessage_owner_handles": OWNER})
+    c.put("/api/settings", json={"enable_imessage_channel": True, "imessage_owner_handles": OWNER},
+          headers={"X-Confirm": "enable_imessage_channel,imessage_owner_handles"})
     r = c.post("/api/channels/imessage/test").json()
     assert r["ok"] and any(x[0] == "messages_send" for x in c.runner.calls)
     assert c.put("/api/settings", json={"imessage_channel_mode": "telegram"}).status_code == 400

@@ -72,3 +72,26 @@ def test_running_pid_uses_psutil(home):
     assert _running_pid() == os.getpid()
     _pid_file().write_text("99999999")
     assert _running_pid() is None and not _pid_file().exists()
+
+
+def test_mac_app_bundle(tmp_path):
+    import plistlib
+
+    from localagent import macapp
+
+    path, note = macapp.install(python="/opt/py/bin/python3", home=tmp_path, sign=False)
+    info = plistlib.loads((path / "Contents" / "Info.plist").read_bytes())
+    assert info["CFBundleIdentifier"] == "ai.localagent.app" and info["CFBundleExecutable"] == "LocalAIAgent"
+    assert "NSAppleEventsUsageDescription" in info and info["LSUIElement"] is True
+    exe = macapp.executable(tmp_path)
+    assert exe.read_text().startswith("#!/bin/sh") and '"/opt/py/bin/python3" -m localagent.launcher' in exe.read_text()
+    assert macapp.installed(tmp_path) and note.startswith("not signed")
+
+
+def test_autostart_plist_uses_app_when_present(tmp_path):
+    import plistlib
+
+    from localagent.cli import plist_xml
+
+    xml = plist_xml("/py", tmp_path / "log", None, ["/Users/me/Applications/LocalAIAgent.app/Contents/MacOS/LocalAIAgent", "--no-open"])
+    assert plistlib.loads(xml.encode())["ProgramArguments"][1] == "--no-open"

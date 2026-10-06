@@ -56,6 +56,20 @@ async def test_pair_and_encrypted_round_trips(pair):
     b.build_tools()
     ask = b.tools["peer_ask"]
     assert ask.tier == "write"
+    # Both sides see the same safety code; until each confirms it, nothing is automatic.
+    pa, pb = a.peers.list()[0], b.peers.list()[0]
+    assert pa["safety_code"] == pb["safety_code"] and len(pa["safety_code"].split()) == 4
+    assert not pa["verified"] and not pb["verified"]
+    with pytest.raises(ToolError, match="isn't verified"):
+        await ask.run({"peer": "Abhishek", "kind": "message", "text": "hi"})
+    a.peers.set_scopes(pa["id"], ["freebusy", "message"])
+    b.peers.verify(pb["id"])
+    res = await ask.run({"peer": "Abhishek", "kind": "freebusy", "start": "2030-01-01", "end": "2030-01-01"})
+    assert "passed this on" in res.content                               # a hasn't verified b: no auto-answer
+    a.peers.verify(pa["id"])
+    a.peers.set_scopes(pa["id"], ["message"])
+    for w in a.peers.waiting():
+        a.store.execute("UPDATE peer_inbox SET status='answered' WHERE id=?", (w["id"],))
     # free/busy isn't allowed until Abhishek allows it: the question waits for him
     res = await ask.run({"peer": "Abhishek", "kind": "freebusy", "start": "2030-01-01", "end": "2030-01-01"})
     assert "passed this on" in res.content and res.untrusted

@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import logging
+import time
 from contextlib import asynccontextmanager
 from importlib import resources
 from pathlib import Path
@@ -20,7 +21,7 @@ from .policy.engine import ApprovalError
 from .tools.base import ToolError
 from .tools.registry import TEST_CALLS
 from .voice.stt import AudioError, read_wav
-from .config import Settings, data_dir, load_settings
+from .config import SENSITIVE_SETTINGS, Settings, data_dir, load_settings, sensitive_changes
 from .decide.questions import BY_NAME
 from .doctor import run_checks
 from .llm import models as model_mgr
@@ -382,6 +383,13 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             raise HTTPException(404, "Not found")
         return r.peers.set_scopes(peer_id, list(body.get("scopes", [])))
 
+    @app.post("/api/peers/{peer_id}/verify")
+    async def peers_verify(peer_id: int) -> dict:
+        peer = rt().peers.verify(peer_id)
+        if peer is None:
+            raise HTTPException(404, "Not found")
+        return peer
+
     @app.delete("/api/peers/{peer_id}")
     async def peers_remove(peer_id: int) -> dict:
         r = rt()
@@ -407,7 +415,9 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
 
         r = rt()
         s_ = r.settings
-        return {"enabled": s_.phone_enabled, "has_token": r.vault.has(TOKEN),
+        from .channels.phone import PIN
+
+        return {"enabled": s_.phone_enabled, "has_token": r.vault.has(TOKEN), "has_pin": r.vault.has(PIN),
                 "listening": getattr(r, "_phone", None) is not None, "port": s_.phone_port,
                 "webhook": (s_.phone_public_url.rstrip("/") + "/twilio/voice") if s_.phone_public_url else "",
                 "owners": [n.strip() for n in s_.phone_owner_numbers.split(",") if n.strip()]}
@@ -425,6 +435,18 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         else:
             r.vault.delete(TOKEN)
         r.audit.append("phone_token_" + ("set" if token else "removed"), "phone", outcome="ok")
+        return await phone_status()
+
+    @app.put("/api/phone/pin")
+    async def phone_pin(body: dict) -> dict:
+        from .channels.phone import PIN, valid_pin
+
+        r = rt()
+        pin = str(body.get("pin", "")).strip()
+        if not valid_pin(pin):
+            raise HTTPException(400, "The PIN must be 4 to 8 digits.")
+        r.vault.set(PIN, pin)
+        r.audit.append("phone_pin_set", "phone", outcome="ok")
         return await phone_status()
 
     # ── cloud key ─────────────────────────────────────────────────────────
@@ -737,12 +759,30 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         return rt().settings.to_dict()
 
     @app.put("/api/settings")
-    async def put_settings(values: dict) -> dict:
+    async def put_settings(values: dict, request: Request) -> dict:
+        r = rt()
+        risky = sensitive_changes(r.settings, values)
+        confirmed = {k.strip() for k in request.headers.get("x-confirm", "").split(",") if k.strip()}
+        missing = [k for k in risky if k not in confirmed]
+        if missing:
+            # 428: the UI shows what each change risks and resends with X-Confirm once you agree.
+            raise HTTPException(428, {"message": "Please confirm these security-sensitive changes.",
+                                      "confirm": [{"key": k, "risk": SENSITIVE_SETTINGS[k],
+                                                   "from": risky[k][0], "to": risky[k][1]} for k in missing]})
+        before = r.settings.to_dict()
         try:
-            s = await rt().apply_settings(values)
+            s = await r.apply_settings(values)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-        return s.to_dict()
+        after = s.to_dict()
+        changed = {k: (before[k], after[k]) for k in after if before.get(k) != after[k]}
+        for k, (old, new) in changed.items():
+            r.audit.append("settings_changed", k, outcome="sensitive" if k in risky else "ok",
+                           detail=f"{old!r} → {new!r}"[:500])
+        if risky:
+            await r.nudges.deliver("security", f"security:{time.time()}", "A security setting changed",
+                                   "; ".join(f"{k}: {v[0]!r} → {v[1]!r}" for k, v in risky.items())[:300], 2)
+        return after
 
     return app
 

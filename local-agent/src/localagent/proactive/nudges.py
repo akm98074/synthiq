@@ -31,9 +31,10 @@ CREATE TABLE IF NOT EXISTS nudges (
 );
 """
 
-INTERRUPTING = {"event", "reminder", "followup", "peer"}
+INTERRUPTING = {"event", "reminder", "followup", "peer"}   # security alerts ignore quiet hours
 KIND_LABEL = {"brief": "Morning brief", "event": "Coming up", "reminder": "Reminder",
-              "followup": "Waiting on your reply", "dream": "Overnight", "peer": "From a trusted agent"}
+              "followup": "Waiting on your reply", "dream": "Overnight", "peer": "From a trusted agent",
+              "security": "Security"}
 
 
 def _minutes(hhmm: str) -> int:

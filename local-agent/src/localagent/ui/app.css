@@ -149,6 +149,8 @@ input, select {
 .approval-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .approval pre, .card pre { margin: 6px 0 0; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .approval-actions { flex-wrap: wrap; }
+.approval-why { margin-top: 4px; font-size: 13px; }
+.approval-preview { max-height: 260px; overflow: auto; background: var(--bg-soft, rgba(127,127,127,.08)); padding: 6px; border-radius: 6px; }
 .count { background: var(--t-danger); color: #fff; border-radius: 999px; font-size: 11px; padding: 0 6px; margin-left: 2px; }
 details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 

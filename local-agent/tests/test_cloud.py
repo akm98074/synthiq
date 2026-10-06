@@ -39,7 +39,7 @@ def test_approval_then_streamed_answer(cloud_client):
     c = cloud_client
     c.put("/api/cloud/key", json={"key": "sk-ant-test"})
     c.post("/api/memories", json={"text": "The user believes the meaning of life is family", "kind": "fact"})
-    c.put("/api/settings", json={"cloud_enabled": True})
+    c.put("/api/settings", json={"cloud_enabled": True}, headers={"X-Confirm": "cloud_enabled"})
     ev = chat(c, "think harder: what is the meaning of life?")
     ap = next(e for e in ev if e["type"] == "approval_required")["approval"]
     assert ap["tool"] == "cloud_ask" and "claude-opus-5-5" in ap["summary"] and "meaning of life" in ap["summary"]
@@ -65,7 +65,8 @@ def test_approval_then_streamed_answer(cloud_client):
 def test_decline_errors_and_refusal(cloud_client):
     c = cloud_client
     c.put("/api/cloud/key", json={"key": "sk-ant-test"})
-    c.put("/api/settings", json={"cloud_enabled": True, "cloud_send_memories": False})
+    c.put("/api/settings", json={"cloud_enabled": True, "cloud_send_memories": False},
+          headers={"X-Confirm": "cloud_enabled"})
     ev = chat(c, "use the cloud: plan my week")
     ap = next(e for e in ev if e["type"] == "approval_required")["approval"]
     r, ev = decide(c, ap["id"], approve=False)

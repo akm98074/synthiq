@@ -167,14 +167,15 @@ def file_tools(space: FileSpace) -> list[Tool]:
         items = space.search(a.get("query", ""), a.get("folder"), a.get("extension"), int(a.get("limit", 20)))
         if not items:
             return ToolResult("No matching files.", "No matching files", [])
-        return ToolResult("Matching files (newest first):\n" + fmt(items), f"Found {len(items)} file(s)", items)
+        return ToolResult("Matching files (newest first):\n" + fmt(items), f"Found {len(items)} file(s)", items,
+                          untrusted=True)   # file names come from downloads, senders, …
 
     def listing(a: dict) -> ToolResult:
         items = space.listing(a["folder"], int(a.get("limit", 50)))
         if not items:
             return ToolResult("The folder is empty.", "Empty folder", [])
         return ToolResult(f"Contents of {a['folder']} (newest first):\n" + fmt(items),
-                          f"{len(items)} item(s) in {a['folder']}", items)
+                          f"{len(items)} item(s) in {a['folder']}", items, untrusted=True)
 
     def move(a: dict) -> ToolResult:
         moved = space.move(_paths_arg(a), a["destination"])

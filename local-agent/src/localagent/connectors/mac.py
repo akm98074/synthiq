@@ -98,7 +98,8 @@ def calendar_tools(runner: Runner, eventkit=None, backend: str = "auto") -> list
             return ToolResult(f"No events between {span}.{note}", f"No events ({span}) via {source}", [])
         body = "\n".join(_event_line(e) for e in events)
         return ToolResult(f"All {len(events)} events between {span} (list every one):\n{body}{note}",
-                          f"Found {len(events)} event(s) via {source}", events)
+                          f"Found {len(events)} event(s) via {source}", events,
+                          untrusted=True)   # invites are written by other people
 
     async def create_event(a: dict) -> ToolResult:
         now = datetime.now()
@@ -152,7 +153,8 @@ def reminder_tools(runner: Runner) -> list[Tool]:
             return ToolResult("No open reminders.", "No open reminders", [])
         lines = [f"- {r['title']}" + (f" (due {r['due'].replace('T', ' ')})" if r["due"] else "")
                  + f" [{r['list']}]" for r in items]
-        return ToolResult("Open reminders:\n" + "\n".join(lines), f"{len(items)} open reminder(s)", items)
+        return ToolResult("Open reminders:\n" + "\n".join(lines), f"{len(items)} open reminder(s)", items,
+                          untrusted=True)   # shared lists
 
     async def create_reminder(a: dict) -> ToolResult:
         now = datetime.now()
@@ -185,7 +187,7 @@ def notes_tools(runner: Runner) -> list[Tool]:
         if not notes:
             return ToolResult(f"No notes matching '{a['query']}'.", "No matching notes", [])
         body = "\n\n".join(f"## {n['title']}\n{n['text']}" for n in notes)
-        return ToolResult(body, f"Found {len(notes)} note(s)", notes)
+        return ToolResult(body, f"Found {len(notes)} note(s)", notes, untrusted=True)   # shared notes, pasted text
 
     async def create(a: dict) -> ToolResult:
         lines = html.escape(a["body"]).splitlines() or [""]
@@ -314,7 +316,8 @@ def contacts_tools(runner: Runner) -> list[Tool]:
             return ToolResult(f"No contact matching '{a['name']}'.", "No matching contact", [])
         lines = [f"- {p['name']}: emails {', '.join(p['emails']) or 'none'}; phones {', '.join(p['phones']) or 'none'}"
                  for p in people]
-        return ToolResult("Contacts:\n" + "\n".join(lines), f"Found {len(people)} contact(s)", people)
+        return ToolResult("Contacts:\n" + "\n".join(lines), f"Found {len(people)} contact(s)", people,
+                          untrusted=True)   # cards can come from others
 
     return [
         Tool("contacts_find", "Look up a person's email addresses and phone numbers in Contacts.",
