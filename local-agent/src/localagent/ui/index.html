@@ -202,6 +202,13 @@
           <label>Overnight memory review at <input name="dream_time" type="time"></label>
           <label class="check"><input type="checkbox" name="notify_macos"> Show macOS notifications</label>
         </fieldset>
+        <fieldset><legend>Trusted agents</legend>
+          <p class="muted small" style="margin:6px 0 0">Let your agent talk to a friend's or family member's agent, end-to-end encrypted. Their agent can see when you're busy (if you allow it) and leave you messages; anything else waits for your answer.</p>
+          <label class="check"><input type="checkbox" name="a2a_enabled"> Turn on trusted agents</label>
+          <label>Listen on port <input name="a2a_port" type="number" min="1024" max="65535"></label>
+          <label>How friends reach this Mac (optional, e.g. a Tailscale address) <input name="a2a_public_addr" placeholder="http://100.x.y.z:8766"></label>
+          <div id="peers-box" class="peers"></div>
+        </fieldset>
         <fieldset><legend>Cloud model (optional)</legend>
           <p class="muted small" style="margin:6px 0 0">Off by default. With your own Anthropic API key, say “think harder” (or “ask Claude”) and the question goes to Claude in the cloud, after you approve exactly what will be sent.</p>
           <label class="check"><input type="checkbox" name="cloud_enabled"> Allow asking the cloud model</label>

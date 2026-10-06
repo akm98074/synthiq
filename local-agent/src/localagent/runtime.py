@@ -58,6 +58,11 @@ class Runtime:
                                    ("permission", screen_permission)) if v is not None}
         self.screen = ScreenContext(self.store, self.runner, settings.screen_blocklist,
                                     settings.screen_retention_minutes, clock=clock, **extra)
+        from .connectors.peers import Peers
+
+        self.peers = Peers(self)
+        self._a2a = None
+        self._a2a_lifecycle = False   # set by the server: only then does a settings change (re)start it
         self.policy = Policy(self.store)
         self.audit = Audit(self.store)
         self.build_tools()
@@ -107,6 +112,10 @@ class Runtime:
                             self.browser, self.skills_dir, self.screen, self.web_fetch)
         if self.settings.enable_browser:
             tools.update({t.name: t for t in form_tools(self)})
+        if self.settings.a2a_enabled:
+            from .connectors.peers import peer_tools
+
+            tools.update({t.name: t for t in peer_tools(self.peers)})
         if self.settings.enable_gmail and self.gmail.connected():
             tools.update({t.name: t for t in gmail_tools(self.gmail)})
         self.tools = tools
@@ -158,6 +167,9 @@ class Runtime:
         if isinstance(self.wake_stt, MLXWhisper) and self.wake_stt is not self.stt:
             self.wake_stt.model = self.settings.wake_model
         self.gmail.client_id = self.gmail_auth.client_id = self.settings.gmail_client_id
+        if self._a2a_lifecycle and (self.settings.a2a_enabled != (self._a2a is not None)
+                                    or self.settings.a2a_enabled):
+            await self.start_a2a()
         self.screen.blocklist = {x.strip().lower() for x in self.settings.screen_blocklist.split(",") if x.strip()}
         self.screen.retention = self.settings.screen_retention_minutes * 60
         if not self.settings.screen_context_enabled:
@@ -172,7 +184,34 @@ class Runtime:
             self.tts.voice, self.tts.rate = self.settings.tts_voice, self.settings.tts_rate
         return self.settings
 
+    async def start_a2a(self) -> None:
+        """Run the agent-to-agent listener (only while trusted agents are switched on)."""
+        await self.stop_a2a()
+        if not self.settings.a2a_enabled:
+            return
+        import asyncio
+
+        import uvicorn
+
+        from .connectors.peers_server import a2a_app
+
+        server = uvicorn.Server(uvicorn.Config(a2a_app(self), host=self.settings.a2a_host,
+                                               port=self.settings.a2a_port, log_level="warning"))
+        server.install_signal_handlers = lambda: None
+        self._a2a = (server, asyncio.create_task(server.serve()))
+
+    async def stop_a2a(self) -> None:
+        if self._a2a is not None:
+            server, task = self._a2a
+            server.should_exit = True
+            try:
+                await task
+            except Exception:  # noqa: BLE001
+                pass
+            self._a2a = None
+
     async def aclose(self) -> None:
+        await self.stop_a2a()
         try:
             await self.browser.close()
         except Exception:  # noqa: BLE001 - closing a browser that already went away

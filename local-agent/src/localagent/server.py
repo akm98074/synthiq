@@ -103,6 +103,11 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         tasks = [asyncio.create_task(_warm_up(app.state.rt))]
         if scheduler:
             tasks.append(asyncio.create_task(app.state.rt.scheduler.loop()))
+            app.state.rt._a2a_lifecycle = True
+            try:
+                await app.state.rt.start_a2a()
+            except Exception:  # noqa: BLE001 - e.g. the port is taken; the rest of the app still runs
+                log.exception("agent-to-agent listener didn't start")
             if app.state.rt.mac_available:
                 tasks.append(asyncio.create_task(app.state.rt.imessage_channel.loop()))
         yield
@@ -298,6 +303,60 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             return {"ok": False, "message": str(exc)}
         r.audit.append("connector_test", name, tool.tier, args, "ok", result.display)
         return {"ok": True, "message": result.display}
+
+    # ── trusted agents ────────────────────────────────────────────────────
+    @app.get("/api/peers")
+    async def peers_status() -> dict:
+        from .connectors.peers import SCOPES
+
+        r = rt()
+        return {"enabled": r.settings.a2a_enabled, "listening": r._a2a is not None,
+                "me": {**r.peers.card(), "fingerprint": r.peers.fingerprint},
+                "peers": r.peers.list(), "waiting": r.peers.waiting(), "scopes": SCOPES}
+
+    @app.post("/api/peers/invite")
+    async def peers_invite() -> dict:
+        r = rt()
+        if not r.settings.a2a_enabled:
+            raise HTTPException(409, "Turn on Trusted agents first.")
+        return {"code": r.peers.invite(), "addr": r.peers.address()}
+
+    @app.post("/api/peers/accept")
+    async def peers_accept(body: dict) -> dict:
+        r = rt()
+        if not r.settings.a2a_enabled:
+            raise HTTPException(409, "Turn on Trusted agents first.")
+        try:
+            peer = await r.peers.accept(str(body.get("code", "")))
+        except ToolError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        r.build_tools()
+        return peer
+
+    @app.put("/api/peers/{peer_id}")
+    async def peers_scopes(peer_id: int, body: dict) -> dict:
+        r = rt()
+        if r.peers.get(peer_id) is None:
+            raise HTTPException(404, "Not found")
+        return r.peers.set_scopes(peer_id, list(body.get("scopes", [])))
+
+    @app.delete("/api/peers/{peer_id}")
+    async def peers_remove(peer_id: int) -> dict:
+        r = rt()
+        ok = r.peers.remove(peer_id)
+        r.audit.append("peer_removed", "peers", outcome="ok" if ok else "missing", detail=str(peer_id))
+        return {"ok": ok}
+
+    @app.post("/api/peers/inbox/{inbox_id}/reply")
+    async def peers_reply(inbox_id: int, body: dict) -> dict:
+        r = rt()
+        text = str(body.get("text", "")).strip()
+        if not text:
+            raise HTTPException(400, "Write a reply first.")
+        try:
+            return await r.peers.reply(inbox_id, text)
+        except ToolError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     # ── cloud key ─────────────────────────────────────────────────────────
     @app.get("/api/cloud")

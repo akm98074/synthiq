@@ -2,6 +2,28 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.12.0 to 0.13.0 (Step 7e: trusted agents)
+
+```bash
+bash install.sh localaiagent-0.13.0-py3-none-any.whl
+localagent start
+```
+
+Off by default. To pair with a friend who also runs LocalAIAgent:
+
+1. Both of you: **Settings → Trusted agents → Turn on trusted agents**, then **Save**. macOS may ask whether Python may accept incoming connections; click **Allow**.
+2. You: press **Create an invite** and send the code (it starts with `la1-`) to your friend, by iMessage for example. It works once, for 7 days.
+3. Your friend pastes it under **Accept** and presses **Accept**. You each now see the other's agent.
+4. Tick what the friend's agent may do without asking you: **See when you're busy** (times only, never titles) and/or **Leave you messages**.
+
+Both Macs must reach each other: the same Wi-Fi, or both on [Tailscale](https://tailscale.com) (free), which works anywhere. With Tailscale, put your Tailscale address in **How friends reach this Mac**, e.g. `http://100.101.102.103:8766`, before creating the invite.
+
+### What changed in 0.13.0
+
+- **Ask a friend's agent:** "is Sam free Thursday afternoon?", "leave Sam's agent a message that I'll be late", "ask Sam if he can do dinner Friday". Sending always shows an approval card first.
+- **What their agent can do without you:** see your busy times (if allowed) and leave you messages (a nudge). Any other question becomes a nudge **"Sam's agent asks …"** with a **Reply** button; nothing is answered for you.
+- **End-to-end encrypted** with keys that never leave your Macs (yours is in the Keychain). Messages that are tampered with, replayed, older than 5 minutes, or from agents you haven't paired are rejected and logged in **Activity**.
+
 ## From 0.11.0 to 0.12.0 (Step 7d: a face that talks)
 
 ```bash

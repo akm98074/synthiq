@@ -493,6 +493,7 @@ async function loadSettings() {
   loadChannelStatus();
   loadGmailStatus();
   loadCloudStatus();
+  loadPeers();
   document.querySelectorAll(".agent-name-inline").forEach((n) => { n.textContent = settings.agent_name; });
   const form = $("#settings-form");
   try {
@@ -525,7 +526,7 @@ $("#settings-form").addEventListener("submit", async (e) => {
 });
 
 /* ── nudges ───────────────────────────────────────────────────────────── */
-const KIND_ICON = { brief: "☀️", event: "📅", reminder: "⏰", followup: "✉️", dream: "🌙" };
+const KIND_ICON = { brief: "☀️", event: "📅", reminder: "⏰", followup: "✉️", dream: "🌙", peer: "🤝" };
 
 async function refreshNudgeBadge() {
   try {
@@ -568,6 +569,13 @@ async function loadNudges() {
       n.body ? el("div", { class: "nudge-body" }, n.body) : null,
       n.data?.silent_reason ? el("div", { class: "muted small" }, `Not notified: ${n.data.silent_reason}`) : null,
       el("div", { class: "row nudge-actions" },
+        n.data?.peer_inbox_id ? el("button", { class: "ghost", onclick: async () => {
+          const text = prompt(`Your answer to ${n.title}:\n\n${n.body}`);
+          if (!text) return;
+          try { await api(`/api/peers/inbox/${n.data.peer_inbox_id}/reply`, { method: "POST", body: { text } });
+            await api(`/api/nudges/${n.id}/dismiss`, { method: "POST" }); } catch (err) { alert(err.message); }
+          loadNudges(); refreshNudgeBadge();
+        } }, "Reply") : null,
         el("button", { class: "ghost", onclick: () => {
           input.value = `About "${n.title}" (${n.body.split("\n")[0]}): `;
           document.querySelector("button[data-tab=chat]").click(); input.focus(); autosize();
@@ -680,6 +688,51 @@ $("#roots-form").addEventListener("submit", async (e) => {
   settings = await api("/api/settings", { method: "PUT", body: { file_roots: $("#file-roots").value } });
   loadConnectors();
 });
+
+async function loadPeers() {
+  const box = $("#peers-box");
+  let p;
+  try { p = await api("/api/peers"); } catch (_) { return; }
+  if (!p.enabled) { box.replaceChildren(el("p", { class: "muted small" }, "Off. Tick the box and Save to pair agents.")); return; }
+  const code = el("textarea", { class: "invite-code hidden", readonly: "", rows: "3" });
+  const accept = el("input", { placeholder: "Paste a friend's invite code (la1-…)" });
+  const status = el("span", { class: "muted small" });
+  box.replaceChildren(
+    el("div", { class: "muted small" }, `This agent: ${p.me.name} at ${p.me.addr} · ${p.listening ? "listening" : "not listening (restart the agent)"} · fingerprint ${p.me.fingerprint}`),
+    el("div", { class: "row", style: "margin-top:8px;flex-wrap:wrap" },
+      el("button", { type: "button", class: "secondary", onclick: async () => {
+        try { const r = await api("/api/peers/invite", { method: "POST" }); code.value = r.code; code.classList.remove("hidden"); code.select();
+          status.textContent = "Send this code to your friend (it works once, for 7 days)."; } catch (err) { status.textContent = err.message; }
+      } }, "Create an invite"), status),
+    code,
+    el("div", { class: "inline-form" }, accept, el("button", { type: "button", class: "secondary", onclick: async () => {
+      try { const peer = await api("/api/peers/accept", { method: "POST", body: { code: accept.value } });
+        status.textContent = `Paired with ${peer.owner || peer.name}'s agent.`; loadPeers(); } catch (err) { status.textContent = err.message; }
+    } }, "Accept")),
+    ...p.peers.map((x) => el("div", { class: "card" },
+      el("div", { class: "card-row" }, el("strong", {}, `${x.owner || x.name}'s agent (${x.name})`),
+        el("button", { type: "button", class: "ghost", onclick: async () => {
+          if (!confirm(`Unpair ${x.name}?`)) return;
+          await api(`/api/peers/${x.id}`, { method: "DELETE" }); loadPeers();
+        } }, "Remove")),
+      el("div", { class: "muted small" }, x.addr),
+      ...Object.entries(p.scopes).map(([k, label]) => {
+        const cb = el("input", { type: "checkbox" }); cb.checked = x.scopes.includes(k);
+        cb.addEventListener("change", async () => {
+          const scopes = Object.keys(p.scopes).filter((s) => (s === k ? cb.checked : x.scopes.includes(s)));
+          x.scopes = (await api(`/api/peers/${x.id}`, { method: "PUT", body: { scopes } })).scopes;
+        });
+        return el("label", { class: "check" }, cb, ` ${label}`);
+      }))),
+    ...p.waiting.map((w) => {
+      const reply = el("input", { placeholder: "Your answer" });
+      return el("div", { class: "card nudge kind-peer" },
+        el("div", {}, el("strong", {}, `${w.owner || w.name}'s agent asks: `), w.text),
+        el("div", { class: "inline-form" }, reply, el("button", { type: "button", class: "secondary", onclick: async () => {
+          await api(`/api/peers/inbox/${w.id}/reply`, { method: "POST", body: { text: reply.value } }); loadPeers();
+        } }, "Send answer")));
+    }));
+}
 
 async function loadCloudStatus() {
   try {

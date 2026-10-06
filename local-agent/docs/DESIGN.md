@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.12.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.13.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -307,6 +307,22 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 
 ---
 
+### 6.2 Trusted agents (Step 7e, `connectors/peers.py`, `peers_server.py`)
+
+- **Identity:** an X25519 key pair per agent (PyNaCl). The private key is in the vault; the public key and a 16-hex fingerprint are shown in Settings.
+- **Pairing:** `invite()` stores a one-time token (7-day lifetime) and returns `la1-` + base64url(JSON {name, owner, key, addr, token}). The acceptor stores the peer and sends an encrypted `hello` {token, its card}. The inviter accepts a `hello` from an unknown key only with an unused, unexpired token (the box must still open with the sender's claimed key, which proves possession), then stores the acceptor.
+- **Envelope:** `{from: public key, box: Box(sender_sk, recipient_pk).encrypt(JSON{…, ts, nonce})}`. Authenticated encryption, so only the paired agent can read it and only it could have written it.
+  - Rejected: decryption failures, |ts − now| > 300 s, a repeated nonce (kept in `peer_nonces`), unknown senders, and more than 30 messages per minute per peer. Each rejection is audited as `peer_rejected`.
+  - Responses are sealed the same way.
+- **Policy:**
+  - `ask/freebusy` is answered automatically only with the `freebusy` scope: busy blocks within at most 14 days, no titles, declined events excluded.
+  - `ask/message` with the `message` scope becomes a nudge.
+  - Anything else is stored in `peer_inbox` and shown as a "peer" nudge with **Reply**. The owner's reply is sent as a sealed `reply`, which arrives at the asker as a nudge.
+  - Outbound `peer_ask` is a write tool (approval). Answers are `untrusted`.
+- **Transport:** a separate uvicorn server (`a2a_app`, one POST route, no docs) on `a2a_host:a2a_port`, started only when `a2a_enabled` (restarted on settings changes). The main UI stays bound to 127.0.0.1. The address in invites is `a2a_public_addr`, or the LAN address found without sending packets (a UDP connect).
+
+---
+
 ## 7. Policy, approvals and audit
 
 - **Tiers (declared per tool, enforced by `policy/engine.py`):**
@@ -419,6 +435,7 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 | Calendar/Mail/Contacts content | Read on demand through the Apple apps; only what a tool returns is kept (in messages or the audit summary) | No |
 | Gmail | Read on demand from Google's Gmail API (it's your mail at Google); refresh token in the Keychain | Only the requests you make to Gmail |
 | Cloud questions (opt-in) | Sent to Anthropic only after approval: the question, up to 6 earlier messages, and (setting) recalled memories | **Yes**, exactly what the approval card lists |
+| Trusted-agent messages (opt-in) | Sent directly to the paired agent, end-to-end encrypted; only what you approve (outbound) or allowed by scope (inbound) | Only to the paired Mac |
 | Web search queries | Sent to DuckDuckGo (search words only, no account or cookies) | **Yes**, the query; turn off with `enable_web_search` |
 | Screen text (opt-in) | `screen_snapshots` table, deleted after 2 hours; screenshots are deleted immediately after OCR | No |
 | iMessage/WhatsApp history | Read on demand, read-only, from the apps' own databases; never copied in bulk | No (a sent iMessage goes through Apple, as if you sent it) |
@@ -440,6 +457,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
 | `enable_web_search` | on | Web look-ups |
+| `a2a_enabled` / `a2a_host` / `a2a_port` / `a2a_public_addr` | off / 0.0.0.0 / 8766 / (LAN address) | Trusted agents |
 | `cloud_enabled` / `cloud_model` / `cloud_effort` / `cloud_send_memories` / `cloud_auto_hard` | off / claude-opus-5-5 / high / on / off | Cloud escalation; the API key is in the vault |
 | `enable_gmail` / `gmail_client_id` / `gmail_account` | on / (yours) / (set on sign-in) | Gmail; the secret and tokens are in the vault |
 | `enable_imessage_channel` / `imessage_channel_mode` / `imessage_owner_handles` / `imessage_forward_nudges` | off / self / (empty) / on | iMessage channel |
@@ -459,7 +477,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 156 pytest tests (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 159 pytest tests (two real agents in one process pair and exchange encrypted messages) (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

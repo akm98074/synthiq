@@ -84,6 +84,12 @@ class Settings:
     cloud_auto_hard: bool = False       # also offer it for the hardest questions (complexity 5)
     cloud_send_memories: bool = True
 
+    # Trusted agents (Step 7e): off unless you turn it on
+    a2a_enabled: bool = False
+    a2a_host: str = "0.0.0.0"           # where the agent-to-agent listener listens (e.g. a Tailscale IP)
+    a2a_port: int = 8766
+    a2a_public_addr: str = ""           # how friends reach you; empty: http://<this Mac's LAN address>:port
+
     # iMessage channel (Step 6): talk to the agent from your phone
     enable_imessage_channel: bool = False
     imessage_channel_mode: str = "self"        # self (text yourself) | account (agent's own Apple ID)

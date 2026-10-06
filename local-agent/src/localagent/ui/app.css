@@ -221,3 +221,9 @@ body.woke .mic { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 35%, tra
 @keyframes av-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .avatar svg { animation: none; } }
 .read-aloud { padding: 0 6px; font-size: 12px; line-height: 18px; }
+
+/* 0.13.0: trusted agents */
+.peers .card { margin-top: 8px; }
+.invite-code { width: 100%; margin-top: 8px; font: 12px ui-monospace, Menlo, monospace; border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px; background: var(--surface-2); color: var(--text); }
+.nudge.kind-peer { border-left-color: var(--accent); }
