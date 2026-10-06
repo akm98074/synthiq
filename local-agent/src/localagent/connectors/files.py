@@ -35,6 +35,25 @@ def _human_size(n: int) -> str:
     return f"{n:.1f} TB"
 
 
+# Opening these with the default app runs code (.command opens in Terminal, .exe/.bat run directly,
+# .desktop launches its Exec line, .app/.pkg install or start programs, …).
+EXECUTABLE_EXT = {
+    ".app", ".command", ".tool", ".sh", ".bash", ".zsh", ".csh", ".fish", ".pkg", ".mpkg", ".dmg", ".scpt",
+    ".applescript", ".workflow", ".terminal", ".webloc", ".inetloc", ".url", ".exe", ".bat", ".cmd", ".com",
+    ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".hta", ".msi", ".msp", ".lnk", ".scr",
+    ".cpl", ".reg", ".jar", ".py", ".pyw", ".pl", ".rb", ".php", ".desktop", ".appimage", ".run", ".bin",
+    ".deb", ".rpm", ".snap", ".flatpakref", ".action", ".prefpane", ".kext", ".mobileconfig", ".shortcut",
+}
+
+
+def launches_code(p: Path) -> bool:
+    if p.suffix.lower() in EXECUTABLE_EXT or any(s.lower() in (".app", ".pkg") for s in p.suffixes):
+        return True
+    if p.is_dir():
+        return False
+    return sys.platform != "win32" and os.access(p, os.X_OK)
+
+
 class FileSpace:
     def __init__(self, roots: list[Path], trash_dir: Path | None = None):
         self.roots = roots
@@ -169,6 +188,9 @@ def file_tools(space: FileSpace) -> list[Tool]:
 
     def open_file(a: dict) -> ToolResult:
         p = space.resolve(a["path"])
+        if launches_code(p):
+            raise ToolError(f"{p.name} is a program or script, and opening it would run it. For your safety "
+                            "the agent never opens those; open it yourself in Finder/Explorer if you trust it.")
         cmd = ["open", str(p)] if sys.platform == "darwin" else ["xdg-open", str(p)]
         try:
             if sys.platform == "win32":

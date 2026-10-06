@@ -10,6 +10,24 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fake_ollama import FakeOllama  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def signed_in_test_clients(monkeypatch):
+    """TestClients for the main app talk to 127.0.0.1:<port> with this install's secret, like the
+    real UI does after /auth. Tests of the guard itself drop the header or change the Host."""
+    from fastapi.testclient import TestClient
+
+    original = TestClient.__init__
+
+    def init(self, app, *args, **kwargs):
+        token = getattr(getattr(app, "state", None), "api_token", None)
+        if token and "base_url" not in kwargs:
+            kwargs["base_url"] = f"http://127.0.0.1:{app.state.port}"
+            kwargs["headers"] = {"Authorization": f"Bearer {token}", **(kwargs.get("headers") or {})}
+        original(self, app, *args, **kwargs)
+
+    monkeypatch.setattr(TestClient, "__init__", init)
+
+
 @pytest.fixture(scope="session")
 def fake_ollama():
     with FakeOllama() as fake:

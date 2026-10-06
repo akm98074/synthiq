@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, AsyncIterator
 
 from ..llm.ollama import RESET, OllamaError, strip_think
+from ..safety import egress
 from ..safety.injection import fence
 from ..tools.base import Tool, ToolError, ToolResult, validate_args
 
@@ -81,7 +82,7 @@ def _parse_args(raw) -> dict:
 
 class ActionRun:
     def __init__(self, rt: "Runtime", task_id: int, tools: list[Tool], messages: list[dict],
-                 model: str, step: int = 0, tainted: bool = False):
+                 model: str, step: int = 0, tainted: bool = False, read_untrusted: bool = False):
         self.rt = rt
         self.task_id = task_id
         self.tools = {t.name: t for t in tools}
@@ -92,17 +93,21 @@ class ActionRun:
         self.paused = False
         # Set once an untrusted result looked like an injection attempt (see safety/injection.py).
         self.tainted = tainted
+        # Set once any result written by other people (mail, chats, web, …) entered the conversation:
+        # from then on, egress is gated by data flow (safety/egress.py), not only by pattern hits.
+        self.read_untrusted = read_untrusted
 
     # ── persistence of a paused run (stored with the approval) ───────────
     def state(self, pending_calls: list[dict]) -> dict:
         return {"messages": self.messages, "pending_calls": pending_calls, "step": self.step,
-                "tools": list(self.tools), "model": self.model, "tainted": self.tainted}
+                "tools": list(self.tools), "model": self.model, "tainted": self.tainted,
+                "read_untrusted": self.read_untrusted}
 
     @classmethod
     def from_state(cls, rt: "Runtime", task_id: int, state: dict) -> "ActionRun":
         tools = [rt.tools[n] for n in state["tools"] if n in rt.tools]
         return cls(rt, task_id, tools, state["messages"], state["model"], state["step"],
-                   state.get("tainted", False))
+                   state.get("tainted", False), state.get("read_untrusted", False))
 
     # ── execution ─────────────────────────────────────────────────────────
     async def execute(self, tool: Tool, args: dict, approval_id: int | None = None) -> ToolResult:
@@ -114,6 +119,7 @@ class ActionRun:
             log.exception("tool %s crashed", tool.name)
             result = ToolResult(f"Error: {exc.__class__.__name__}: {exc}", f"{tool.name} failed", ok=False)
         if result.untrusted and result.ok:
+            self.read_untrusted = True
             result.content, hits = fence(tool.connector, result.content)
             if hits:
                 self.tainted = True
@@ -124,6 +130,12 @@ class ActionRun:
                              "ok" if result.ok else "error", result.display,
                              approval_id, self.task_id)
         return result
+
+    def _user_text(self) -> str:
+        return "\n".join(m.get("content") or "" for m in self.messages if m.get("role") == "user")
+
+    def _seen_text(self) -> str:
+        return "\n".join(m.get("content") or "" for m in self.messages if m.get("role") in ("user", "tool"))
 
     def _tool_message(self, name: str, content: str) -> None:
         self.messages.append({"role": "tool", "tool_name": name, "content": content})
@@ -143,9 +155,12 @@ class ActionRun:
                 yield {"type": "tool_result", "tool": name, "tier": tool.tier, "ok": False,
                        "display": f"{name}: {exc}", "args": fn.get("arguments")}
                 continue
-            if self.rt.policy.needs_approval(tool, self.task_id, tainted=self.tainted, args=args):
+            risk = egress.risky(tool, args, tool.tier_for(args), self.read_untrusted,
+                                self._user_text(), self._seen_text())
+            if self.rt.policy.needs_approval(tool, self.task_id, tainted=self.tainted, args=args,
+                                             egress_risk=risk):
                 note = ("Asked after reading content that tried to instruct the agent; check it carefully."
-                        if self.tainted and tool.tier in ("write", "danger") else None)
+                        if self.tainted and tool.tier in ("write", "danger") else risk)
                 ap = self.rt.policy.request(tool, args, self.task_id, self.state(calls[idx + 1:]), note)
                 self.rt.audit.append("approval_requested", tool.name, tool.tier, args,
                                      "pending", ap["summary"], ap["id"], self.task_id)

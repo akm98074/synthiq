@@ -82,8 +82,12 @@ class Policy:
 
     # ── decisions ─────────────────────────────────────────────────────────
     def needs_approval(self, tool: Tool, task_id: int | None, tainted: bool = False,
-                       args: dict | None = None) -> bool:
+                       args: dict | None = None, egress_risk: str | None = None) -> bool:
         tier = tool.tier_for(args or {})
+        if egress_risk:
+            # Data could leave after untrusted content was read (safety/egress.py): a person decides,
+            # whatever the tier and whatever standing permission exists.
+            return True
         if tier in ("read", "draft"):
             return False
         if tier == "danger" or tainted:

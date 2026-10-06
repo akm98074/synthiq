@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import __version__
+from . import __version__, security
 from .agent.chat import handle_turn, resume_after_decision
 from .policy.engine import ApprovalError
 from .tools.base import ToolError
@@ -91,9 +91,11 @@ async def _warm_up(rt: Runtime) -> None:
 
 def create_app(settings: Settings | None = None, base: Path | None = None, runner=None,
                stt=None, tts=None, scheduler: bool = True, eventkit=None, browser=None,
-               web_fetch=None, wake_stt=None, vault=None, google=None, cloud_base_url=None) -> FastAPI:
+               web_fetch=None, wake_stt=None, vault=None, google=None, cloud_base_url=None,
+               auth: bool = True) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
+    token = security.api_token(base)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -120,7 +122,43 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         await app.state.rt.tts.stop()
         await app.state.rt.aclose()
 
-    app = FastAPI(title="LocalAIAgent", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="LocalAIAgent", version=__version__, lifespan=lifespan,
+                  docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.api_token = token
+    app.state.port = settings.port
+
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        # See security.py: Host allowlist (DNS rebinding), per-install secret, same-origin writes.
+        if auth:
+            h = request.headers
+            denied = security.check(request.method, request.url.path, h.get("host"), h.get("origin"),
+                                    request.cookies.get(security.COOKIE), h.get("authorization"),
+                                    settings.port, token, extra_host=settings.host)
+            if denied:
+                status, reason = denied
+                if status == 401 and request.url.path == "/":
+                    return HTMLResponse(_page("Open LocalAIAgent from its app or Terminal",
+                                              "For your privacy the agent only opens for you. Use the "
+                                              "LocalAIAgent app, or run in Terminal:  localagent open"), 401)
+                return PlainTextResponse(reason, status)
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if request.url.path == "/" or request.url.path.startswith("/ui/"):
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
+                "style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
+        return response
+
+    @app.get("/auth", include_in_schema=False)
+    async def sign_in(t: str = "", next: str = "/") -> Response:
+        if not security.same_secret(t, token):
+            return HTMLResponse(_page("Link expired", "Open the app again with: localagent open"), 403)
+        dest = next if next.startswith("/") and not next.startswith("//") else "/"
+        resp = RedirectResponse(dest, 303)
+        resp.set_cookie(security.COOKIE, token, httponly=True, samesite="strict", path="/")
+        return resp
 
     def rt(app_: FastAPI = app) -> Runtime:
         return app_.state.rt

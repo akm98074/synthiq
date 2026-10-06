@@ -214,7 +214,10 @@ def skill_tools(root: Path, require_sandbox: bool = True) -> list[Tool]:
                               lambda a, sk=sk: run_skill(sk, a, require_sandbox),
                               lambda a, sk=sk: f"Run the {sk.name} skill"
                               + (f" with {', '.join(f'{k}={v!r}' for k, v in a.items())[:120]}" if a else ""),
-                              intents))
+                              intents,
+                              egress=(lambda a, sk=sk: {"to": f"the internet (skill {sk.name})", "kind": "send",
+                                                        "text": json.dumps(a), "what": "skill arguments"})
+                              if sk.network else None))
         else:
             tools.append(Tool(sk.tool_name, sk.description + " (returns step-by-step instructions to follow)",
                               obj({}), "read", "skills",

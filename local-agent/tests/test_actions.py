@@ -1,5 +1,10 @@
+import asyncio
 import json
 import sys
+
+import pytest
+
+from localagent.tools.base import ToolError
 
 from test_chat_flow import read_events
 
@@ -156,3 +161,25 @@ def test_wants_tools_gate():
     assert not wants_tools("task", "write a haiku about autumn")
     assert not wants_tools("quick_answer", "why is the sky blue?")
     assert not wants_tools("memory_query", "what's my email address?")
+
+
+@pytest.mark.parametrize("name", ["invoice.command", "setup.exe", "run.bat", "x.desktop", "Tool.app", "a.ps1"])
+def test_files_open_refuses_programs(tmp_path, name):
+    from localagent.connectors.files import FileSpace, file_tools
+
+    p = tmp_path / name
+    (p.mkdir() if name.endswith(".app") else p.write_text("x"))
+    t = {t.name: t for t in file_tools(FileSpace([tmp_path]))}["files_open"]
+    with pytest.raises(ToolError, match="never opens those"):
+        asyncio.run(t.run({"path": str(p)}))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable bit")
+def test_files_open_refuses_executable_bit(tmp_path):
+    from localagent.connectors.files import launches_code
+
+    p = tmp_path / "notes"
+    p.write_text("#!/bin/sh\n")
+    assert not launches_code(p)
+    p.chmod(0o755)
+    assert launches_code(p)

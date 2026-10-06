@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from pathlib import Path
@@ -37,7 +38,8 @@ def _log_file() -> Path:
 
 def _url() -> str:
     s = load_settings()
-    return f"http://{s.host}:{s.port}"
+    host = "127.0.0.1" if s.host in ("0.0.0.0", "::", "") else s.host
+    return f"http://{host}:{s.port}"
 
 
 def _running_pid() -> int | None:
@@ -54,6 +56,23 @@ def _running_pid() -> int | None:
         path.unlink(missing_ok=True)
         return None
     return pid
+
+
+def _api(method: str, path: str, **kw) -> httpx.Response:
+    """Call the running agent's API with this install's secret (see security.py)."""
+    from .security import api_token
+
+    return httpx.request(method.upper(), f"{_url()}{path}",
+                         headers={"Authorization": f"Bearer {api_token(data_dir())}"}, **kw)
+
+
+def _signin_url(next_path: str = "/") -> str:
+    """A link that signs this browser in to the UI (sets the session cookie) and goes to next_path."""
+    from urllib.parse import quote
+
+    from .security import api_token
+
+    return f"{_url()}/auth?t={api_token(data_dir())}&next={quote(next_path)}"
 
 
 def _healthy(url: str) -> bool:
@@ -189,7 +208,7 @@ def start(
     url = _url()
     if foreground:
         if open_browser:
-            webbrowser.open(url)
+            threading.Timer(1.5, lambda: webbrowser.open(_signin_url())).start()
         from .server import main
         sys.argv = [sys.argv[0]]
         main()
@@ -219,7 +238,16 @@ def start(
             raise typer.Exit(1)
         typer.secho(f"Started (pid {proc.pid}) at {url}", fg="green")
     if open_browser:
-        webbrowser.open(url)
+        webbrowser.open(_signin_url())
+
+
+@app.command("open")
+def open_ui() -> None:
+    """Open the agent's window in your browser (signed in)."""
+    if not _healthy(_url()):
+        typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
+        raise typer.Exit(1)
+    webbrowser.open(_signin_url())
 
 
 @app.command()
@@ -517,7 +545,7 @@ app.add_typer(channel_app, name="channel")
 def channel_test() -> None:
     """Send a test iMessage from the agent to your phone (the agent must be running)."""
     try:
-        r = httpx.post(f"{_url()}/api/channels/imessage/test", timeout=60)
+        r = _api("post", "/api/channels/imessage/test", timeout=60)
     except httpx.HTTPError:
         typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
         raise typer.Exit(1)
@@ -535,22 +563,22 @@ def gmail_login() -> None:
     import getpass
 
     try:
-        status = httpx.get(f"{_url()}/api/gmail", timeout=5).json()
+        status = _api("get", "/api/gmail", timeout=5).json()
     except httpx.HTTPError:
         typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
         raise typer.Exit(1)
     client_id = typer.prompt("Google OAuth client ID", default=status.get("client_id") or "").strip()
     secret = getpass.getpass("Client secret (Enter to keep the saved one): ").strip()
     body = {"client_id": client_id, **({"client_secret": secret} if secret else {})}
-    r = httpx.put(f"{_url()}/api/gmail/client", json=body, timeout=10)
+    r = _api("put", "/api/gmail/client", json=body, timeout=10)
     if r.status_code != 200:
         typer.secho(r.json().get("detail", r.text), fg="red")
         raise typer.Exit(1)
     typer.echo("Opening Google's sign-in page in your browser ...")
-    webbrowser.open(f"{_url()}/api/gmail/login")
+    webbrowser.open(_signin_url("/api/gmail/login"))
     for _ in range(150):
         time.sleep(2)
-        st = httpx.get(f"{_url()}/api/gmail", timeout=5).json()
+        st = _api("get", "/api/gmail", timeout=5).json()
         if st.get("connected"):
             typer.secho(f"Gmail connected as {st.get('account')}.", fg="green")
             return
@@ -565,7 +593,7 @@ def cloud_key() -> None:
 
     key = getpass.getpass("Anthropic API key (sk-ant-…, Enter to remove): ").strip()
     try:
-        r = httpx.put(f"{_url()}/api/cloud/key", json={"key": key}, timeout=10)
+        r = _api("put", "/api/cloud/key", json={"key": key}, timeout=10)
     except httpx.HTTPError:
         typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
         raise typer.Exit(1)
@@ -586,13 +614,13 @@ def phone_setup() -> None:
     import getpass
 
     try:
-        status = httpx.get(f"{_url()}/api/phone", timeout=5).json()
+        status = _api("get", "/api/phone", timeout=5).json()
     except httpx.HTTPError:
         typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
         raise typer.Exit(1)
     token = getpass.getpass("Twilio auth token (Enter to keep the saved one): ").strip()
     if token:
-        r = httpx.put(f"{_url()}/api/phone/token", json={"token": token}, timeout=10)
+        r = _api("put", "/api/phone/token", json={"token": token}, timeout=10)
         if r.status_code != 200:
             typer.secho(r.json().get("detail", r.text), fg="red")
             raise typer.Exit(1)

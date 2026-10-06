@@ -51,6 +51,8 @@ class Tool:
     examples: list[str] = field(default_factory=list)
     # Optional per-call risk: e.g. pressing a "Delete" button is danger even if the tool is write.
     risk: Callable[[dict], Tier] | None = None
+    # Optional: where this call sends data off the computer (see safety/egress.py).
+    egress: Callable[[dict], dict] | None = None
 
     def tier_for(self, args: dict) -> Tier:
         if self.risk is None:
