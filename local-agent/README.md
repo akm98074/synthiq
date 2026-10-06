@@ -2,7 +2,7 @@
 
 A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely on your Mac**: local small language models through [Ollama](https://ollama.com), local memory in SQLite, and a fast **Jev-style decision layer** that makes the first call on every message.
 
-The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
+The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). Product-level documents (also as PDFs in `docs/pdf/`): [design overview and Muse/Instinct comparison](docs/OVERVIEW.md), [trust and control UX](docs/TRUST_UX.md), [security and privacy review](docs/SECURITY_REVIEW.md), [product roadmap](docs/PRODUCT_ROADMAP.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
 ## Status: Step 7g (v0.15.0) — Windows and Linux
 
