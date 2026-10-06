@@ -269,7 +269,19 @@ function handleEvent(ev, ctx) {
     ctx.got += ev.text; setBubble(bot.bubble, "assistant", ctx.got);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   } else if (ev.type === "error") bot.node.append(el("div", { class: "error" }, ev.message));
-  else if (ev.type === "done" && ev.model) bot.meta.append(el("span", { class: "chip" }, ev.model));
+  else if (ev.type === "done" && ev.model) {
+    bot.meta.append(el("span", { class: "chip" }, ev.model));
+    if (window.readAloud && voiceCanSpeak()) {
+      const btn = el("button", { class: "ghost read-aloud", title: "Read this reply aloud" }, "🔊");
+      btn.addEventListener("click", () => window.readAloud(ctx.got));
+      bot.meta.append(btn);
+    }
+  }
+}
+
+function voiceCanSpeak() {
+  const v = window.voiceInfo && window.voiceInfo();
+  return Boolean(v && v.enabled && v.tts && v.tts.available);
 }
 
 async function streamInto(res, bot, user) {

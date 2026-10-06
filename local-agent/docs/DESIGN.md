@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.11.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.12.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -386,6 +386,13 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 
 ---
 
+### 10.0 Avatar (Step 7d)
+
+- **Audio:** `SayTTS.synthesize()` runs `say -o <tmp>.wav --file-format=WAVE --data-format=LEI16@22050 -f <text file>` and returns the bytes. `POST /api/voice/audio` serves them (`no-store`), and temp files are deleted.
+- **Lip-sync:** in the browser, an `AudioBufferSourceNode` feeds an `AnalyserNode` (fftSize 1024). Each frame's RMS × 6 (capped at 1) is smoothed 50/50 with the previous frame and mapped to one of five mouth shapes (ellipse rx/ry), exposed as `data-level` 0–4.
+- **Face:** an SVG with blinks (random, about every 2.5–5 s), a resting smile when not talking, a gentle bob (off with reduced motion), and theme colours.
+- **Control:** `avatar_enabled` switches spoken replies from the server's `say` to browser playback. 🔊 on each reply uses the same path. `voice.speaking` is set during playback, so the wake word never hears the agent itself, and clicking the mic stops the source (barge-in).
+
 ### 10.1 Wake word (Step 7a, `voice/wake.py`, `ui/voice.js`)
 
 - **In the browser:** while "Hey <name>" is on, a second always-open mic stream runs a VAD. The noise floor is an exponential moving average, and "loud" means RMS above max(0.015, 3 × noise).
@@ -444,6 +451,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 | `file_roots` | ~/Downloads, ~/Desktop, ~/Documents | Files connector boundary |
 | `brief_time` / `dream_time` / `check_every_minutes` | 08:00 / 03:00 / 30 | Proactive schedule |
 | `quiet_start` / `quiet_end` / `max_nudges_per_day` | 22:00 / 07:30 / 6 | Interruption policy |
+| `avatar_enabled` | off | Face with lip-sync (browser playback) |
 | `wake_word_enabled` / `wake_phrases` / `wake_model` | off / (none) / whisper-tiny.en | Wake word |
 | `stt_model` / `tts_voice` / `tts_rate` | whisper-large-v3-turbo / system / 190 | Voice |
 
@@ -451,7 +459,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 154 pytest tests (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 156 pytest tests (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

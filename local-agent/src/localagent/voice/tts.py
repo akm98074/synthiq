@@ -75,6 +75,31 @@ class SayTTS:
             os.unlink(f.name)
         return code == 0
 
+    async def synthesize(self, text: str) -> bytes:
+        """The spoken reply as WAV bytes (for playback in the browser, e.g. the avatar)."""
+        text = speakable(text)
+        if not text or not self.available():
+            return b""
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write(text)
+        out = f.name[:-4] + ".wav"
+        cmd = ["say", "-r", str(self.rate)] + (["-v", self.voice] if self.voice else []) + [
+            "-o", out, "--file-format=WAVE", "--data-format=LEI16@22050", "-f", f.name]
+        try:
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.DEVNULL,
+                                                        stderr=asyncio.subprocess.PIPE)
+            _, err = await proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(f"say failed: {err.decode(errors='replace')[:200]}")
+            with open(out, "rb") as w:
+                return w.read()
+        finally:
+            for p in (f.name, out):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
     async def stop(self) -> bool:
         proc, self._proc = self._proc, None
         if proc and proc.returncode is None:

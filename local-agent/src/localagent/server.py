@@ -10,7 +10,7 @@ from importlib import resources
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -531,6 +531,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             "tts": {"available": r.tts.available(), "engine": r.tts.name,
                     "voices": await r.tts.voices(), "speaking": r.tts.speaking},
             "speak_replies": r.settings.speak_replies,
+            "avatar": r.settings.avatar_enabled,
             "wake": {"enabled": r.settings.wake_word_enabled,
                      "phrase": f"Hey {r.settings.agent_name}"},
         }
@@ -583,6 +584,20 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             raise HTTPException(503, "Speech output needs macOS (the 'say' command).")
         finished = await r.tts.speak(body.text)
         return {"ok": True, "finished": finished}
+
+    @app.post("/api/voice/audio")
+    async def voice_audio(body: SpeakIn) -> Response:
+        """The reply as WAV, for playback in the browser (the avatar lip-syncs to it)."""
+        r = rt()
+        if not r.tts.available():
+            raise HTTPException(503, "Speech output needs macOS (the 'say' command).")
+        try:
+            audio = await r.tts.synthesize(body.text)
+        except RuntimeError as exc:
+            raise HTTPException(500, str(exc)) from exc
+        if not audio:
+            raise HTTPException(400, "Nothing to say.")
+        return Response(audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
 
     @app.post("/api/voice/stop")
     async def stop_speaking() -> dict:

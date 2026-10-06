@@ -26,6 +26,9 @@ async function loadVoiceStatus() {
   micBtn.classList.toggle("hidden", !enabled);
   convToggle.parentElement.classList.toggle("hidden", !enabled);
   wakeToggle.parentElement.classList.toggle("hidden", !enabled);
+  $("#avatar-toggle").parentElement.classList.toggle("hidden", !enabled || !voice.status?.tts.available);
+  avatar.show(Boolean(enabled && voice.status?.avatar && voice.status?.tts.available));
+  $("#avatar-name").textContent = (window.settings && window.settings.agent_name) || $("#agent-name").textContent;
   if (voice.status?.wake) {
     $("#wake-text").textContent = voice.status.wake.phrase;
     wakeToggle.checked = voice.status.wake.enabled;
@@ -40,6 +43,104 @@ async function loadVoiceStatus() {
   }
 }
 window.loadVoiceStatus = loadVoiceStatus;
+window.voiceInfo = () => voice.status;
+
+/* ── speaking: macOS `say` on the Mac, or (with the face) played here with lip-sync ── */
+async function speakText(text) {
+  voice.speaking = true;
+  let finished = false;
+  try {
+    if (voice.status?.avatar) {
+      finished = await avatar.speak(text);
+    } else {
+      const r = await fetch("/api/voice/speak", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }) });
+      finished = (await r.json()).finished;
+    }
+  } catch (_) {}
+  voice.speaking = false;
+  return finished;
+}
+
+window.readAloud = async (text) => {
+  if (!text) return;
+  await stopSpeaking();
+  setVoiceState("Speaking… click the mic to interrupt", "speaking");
+  await speakText(text);
+  setVoiceState("");
+};
+
+const avatar = {
+  box: $("#avatar"), mouth: $("#av-mouth"), eyes: document.querySelectorAll(".av-eye"),
+  ctx: null, src: null, raf: 0, playing: false, done: null, level: 0,
+  SHAPES: [[16, 1.5], [15, 4], [14, 7], [13, 10], [12, 13]],
+  show(on) {
+    this.box.classList.toggle("hidden", !on);
+    $("#avatar-toggle").checked = on;
+  },
+  setLevel(level) {
+    this.level = this.level * 0.5 + level * 0.5;             // smooth between frames
+    const i = Math.min(4, Math.round(this.level * 4));
+    const [rx, ry] = this.SHAPES[i];
+    this.mouth.setAttribute("rx", rx); this.mouth.setAttribute("ry", ry);
+    this.box.dataset.level = String(i);
+  },
+  async speak(text) {
+    const r = await fetch("/api/voice/audio", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }) });
+    if (!r.ok) return false;
+    const data = await r.arrayBuffer();
+    this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (this.ctx.state === "suspended") await this.ctx.resume();
+    const buffer = await this.ctx.decodeAudioData(data);
+    const src = this.ctx.createBufferSource();
+    const analyser = this.ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    src.buffer = buffer;
+    src.connect(analyser); analyser.connect(this.ctx.destination);
+    const samples = new Float32Array(analyser.fftSize);
+    this.src = src; this.playing = true;
+    this.box.classList.add("talking");
+    const frame = () => {
+      analyser.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (const v of samples) sum += v * v;
+      this.setLevel(Math.min(1, Math.sqrt(sum / samples.length) * 6));
+      this.raf = requestAnimationFrame(frame);
+    };
+    return new Promise((resolve) => {
+      this.done = resolve;
+      src.onended = () => this.finish(true);
+      src.start();
+      frame();
+    });
+  },
+  finish(ok) {
+    cancelAnimationFrame(this.raf);
+    this.playing = false;
+    this.box.classList.remove("talking");
+    this.level = 0; this.setLevel(0);
+    const d = this.done; this.done = null;
+    if (d) d(ok);
+  },
+  stop() {
+    if (!this.playing) return;
+    const src = this.src; this.src = null;
+    this.finish(false);
+    try { src.onended = null; src.stop(); } catch (_) {}
+  },
+};
+window.avatar = avatar;
+setInterval(() => {                                           // blink now and then
+  if (avatar.box.classList.contains("hidden") || Math.random() < 0.5) return;
+  avatar.eyes.forEach((e) => e.setAttribute("ry", "1"));
+  setTimeout(() => avatar.eyes.forEach((e) => e.setAttribute("ry", "7")), 130);
+}, 2500);
+
+$("#avatar-toggle").addEventListener("change", async (e) => {
+  try { await api("/api/settings", { method: "PUT", body: { avatar_enabled: e.target.checked } }); } catch (_) {}
+  await loadVoiceStatus();
+});
 
 function encodeWav(samples, rate) {
   const buf = new ArrayBuffer(44 + samples.length * 2);
@@ -112,6 +213,7 @@ class Recorder {
 }
 
 async function stopSpeaking() {
+  if (avatar.playing) { avatar.stop(); return; }
   if (!voice.speaking) return;
   try { await fetch("/api/voice/stop", { method: "POST" }); } catch (_) {}
 }
@@ -172,14 +274,7 @@ async function askAndSpeak(text) {
   const say = out.paused ? "I need your OK on screen before I do that." : out.text;
   if (!say) return;
   setVoiceState("Speaking… click the mic to interrupt", "speaking");
-  voice.speaking = true;
-  let finished = false;
-  try {
-    const r = await fetch("/api/voice/speak", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: say }) });
-    finished = (await r.json()).finished;
-  } catch (_) {}
-  voice.speaking = false;
+  const finished = await speakText(say);
   setVoiceState("");
   if (convToggle.checked && finished && !out.paused) startListening(true);
 }

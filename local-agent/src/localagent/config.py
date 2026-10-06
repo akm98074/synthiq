@@ -125,6 +125,7 @@ class Settings:
     tts_voice: str = ""
     tts_rate: int = 190
     speak_replies: bool = True
+    avatar_enabled: bool = False        # a face that talks: replies play in the browser with lip-sync
     wake_word_enabled: bool = False     # "Hey <agent name>" while the app is open
     wake_phrases: str = ""              # extra phrases, comma-separated
     wake_model: str = "mlx-community/whisper-tiny.en-mlx"

@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 7c (v0.11.0) — optional cloud model
+## Status: Step 7d (v0.12.0) — a face that talks
 
 | Included | Comes later |
 |---|---|
@@ -16,6 +16,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Proactivity**: morning brief, nudges (events, reminders, unreplied mail), quiet hours, overnight memory review | |
 | **Voice**: push-to-talk, conversation mode, on-device Whisper, spoken replies | |
 | **Messages**: read iMessage/SMS and WhatsApp, chats waiting on your reply, iMessage replies (approved), WhatsApp replies typed in for you | |
+| **Avatar**: a face that speaks the replies, mouth in sync with the voice; 🔊 read-aloud on any reply | |
 | **Optional cloud model** (your own Anthropic key): "think harder" sends one question to Claude after you approve exactly what's sent | |
 | **Gmail** directly (sign in with Google): search, read, follow-ups, drafts, send; secrets in the Keychain | |
 | **Wake word**: say "Hey Ari, …" while the app is open | |
@@ -32,7 +33,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.11.0-py3-none-any.whl
+bash install.sh localaiagent-0.12.0-py3-none-any.whl
 localagent start
 ```
 
@@ -43,7 +44,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.11.0-py3-none-any.whl
+pipx install ./localaiagent-0.12.0-py3-none-any.whl
 localagent setup
 localagent start
 ```

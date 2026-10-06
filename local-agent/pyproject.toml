@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "localaiagent"
-version = "0.11.0"
+version = "0.12.0"
 description = "Local-first personal AI agent: on-device SLMs via Ollama with a Jev-style decision layer"
 readme = "README.md"
 requires-python = ">=3.11"

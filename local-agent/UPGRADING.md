@@ -2,6 +2,22 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.11.0 to 0.12.0 (Step 7d: a face that talks)
+
+```bash
+bash install.sh localaiagent-0.12.0-py3-none-any.whl
+localagent start
+```
+
+Under the chat box, tick **Face**. Your agent's face appears above the conversation.
+
+### What changed in 0.12.0
+
+- **A face that talks.** With **Face** on, spoken replies play in the app instead of through the Mac's speaker directly, and the mouth moves with the voice, louder syllables open it wider. It blinks, smiles when idle, and follows your light or dark theme.
+- **🔊 on every reply** reads that reply aloud (with or without the face).
+- It works with voice input, conversation mode and "Hey Ari". Clicking the mic stops it talking.
+- The voice and speed are still set in **Settings → Voice**.
+
 ## From 0.10.0 to 0.11.0 (Step 7c: optional cloud model)
 
 ```bash

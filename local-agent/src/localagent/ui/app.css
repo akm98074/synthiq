@@ -206,3 +206,18 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
 /* 0.9.0: wake word */
 body.woke .mic { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* 0.12.0: avatar */
+.avatar { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 8px; }
+.avatar svg { animation: av-bob 4s ease-in-out infinite; }
+.av-head { fill: var(--accent); }
+.av-eye { fill: var(--accent-text); transition: ry .08s; }
+.av-mouth { fill: var(--accent-text); transition: ry .06s, rx .06s; opacity: 0; }
+.av-smile { stroke: var(--accent-text); }
+.avatar.talking .av-mouth { opacity: 1; }
+.avatar.talking .av-smile { opacity: 0; }
+.av-name { font-size: 12px; color: var(--muted); }
+.avatar.talking .av-head { filter: brightness(1.08); }
+@keyframes av-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .avatar svg { animation: none; } }
+.read-aloud { padding: 0 6px; font-size: 12px; line-height: 18px; }

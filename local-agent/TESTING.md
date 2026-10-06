@@ -1,30 +1,27 @@
-# Testing Step 7c (v0.11.0): optional cloud model
+# Testing Step 7d (v0.12.0): a face that talks
 
-Set it up with `UPGRADING.md` (2 minutes; needs an Anthropic API key). This checklist takes about 5 minutes and costs a few cents.
+Upgrade with `UPGRADING.md`. This takes about 3 minutes, with the volume up.
 
 ### If something fails
 
 | You see | Fix |
 |---|---|
-| "The cloud add-on isn't installed" | `pipx inject localaiagent anthropic`, then restart. |
-| "That doesn't look like an Anthropic API key" | Copy the whole key; it starts with `sk-ant-`. |
-| "Anthropic rejected the API key" | Make a new key in the Anthropic console and save it again. |
-| No approval card, just a normal answer | **Settings → Cloud model → Allow asking the cloud model** must be ticked and saved, and the message must start with "think harder", "use the cloud" or "ask Claude". |
+| No **Face** box under the chat | **Settings → Voice → Enable voice** must be on (macOS). |
+| The face shows but there's no sound | Click anywhere on the page once (browsers need a click before playing audio), then try 🔊 again. |
+| Sound plays but the mouth doesn't move | Tell me the browser and version. |
 
 ## Checks
 
-1. `What's 17 × 23?` should get a normal local answer, no card.
-2. `Think harder: explain the difference between a Roth and a traditional IRA for someone in their 30s`
-   - Expected: an approval card, "Send to claude-opus-5-5 (Anthropic, cloud): …", that lists what goes along. Press **Decline**: "nothing was sent".
-3. Ask again and press **Approve → Just this once**. The answer streams in; the chips show "Answered by claude-opus-5-5 (cloud)".
-4. Approve one with **For 1 hour**, then ask another "think harder" question. It goes without a card.
-5. **Activity** shows each cloud request (what was asked, approved, answered). The API key isn't anywhere in it.
-6. Untick **Allow asking the cloud model**: "think harder" questions are answered locally again.
+1. Tick **Face**. A round face with your agent's name appears above the chat, blinking now and then.
+2. Ask anything, then press **🔊** under the reply. You hear it, and the mouth opens and closes with the words.
+3. Hold the mic and ask _"What's on my calendar today?"_. The answer is spoken by the face.
+4. While it's talking, click the mic. It stops mid-sentence.
+5. Switch macOS to Dark Mode. The face follows the theme.
+6. Untick **Face**. Spoken replies go back to the Mac's own speaker.
 
 ## Please send back
 
-1. Was it clear what would be sent?
-2. Were the cloud answers worth it compared with the local ones?
-3. Should it offer the cloud on its own for hard questions?
+1. Does the lip movement look natural enough?
+2. Would you like a different face (style, colour, an image of your choice)?
 
 Logs: `~/Library/Application Support/LocalAIAgent/server.log`

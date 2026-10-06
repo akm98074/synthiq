@@ -153,6 +153,17 @@ class FakeTTS:
         self.stopped += 1
         return False
 
+    async def synthesize(self, text):
+        """A second of 'speech': a tone whose loudness rises and falls like syllables."""
+        import numpy as np
+
+        from localagent.voice.stt import write_wav
+
+        self.spoken.append(text)
+        t = np.linspace(0, 1.2, int(22050 * 1.2), endpoint=False)
+        envelope = np.abs(np.sin(2 * np.pi * 3 * t))
+        return write_wav(0.5 * envelope * np.sin(2 * np.pi * 220 * t), 22050)
+
 
 @pytest.fixture
 def voice_client(fake_ollama, home, files_home, fake_runner):

@@ -28,6 +28,16 @@
   <main>
     <!-- Chat -->
     <section id="tab-chat" class="panel active">
+      <div id="avatar" class="avatar hidden" aria-hidden="true">
+        <svg id="avatar-svg" viewBox="0 0 120 120" width="88" height="88">
+          <circle cx="60" cy="60" r="52" class="av-head"/>
+          <ellipse cx="42" cy="52" rx="6" ry="7" class="av-eye"/>
+          <ellipse cx="78" cy="52" rx="6" ry="7" class="av-eye"/>
+          <path class="av-smile" d="M45 79 Q60 91 75 79" fill="none" stroke-width="4" stroke-linecap="round"/>
+          <ellipse id="av-mouth" cx="60" cy="82" rx="16" ry="1.5" class="av-mouth"/>
+        </svg>
+        <div class="av-name" id="avatar-name">Ari</div>
+      </div>
       <div id="messages" class="messages" aria-live="polite"></div>
       <form id="composer" class="composer">
         <button type="button" id="mic" class="mic" aria-label="Talk" title="Hold to talk, or click to start/stop">
@@ -39,6 +49,7 @@
       <div class="composer-foot">
         <button class="link" id="clear-chat">Clear conversation</button>
         <span id="voice-status" class="voice-status" role="status"></span>
+        <label class="conv" title="Show a face that speaks the replies"><input type="checkbox" id="avatar-toggle"> Face</label>
         <label class="conv" id="wake-label" title="Say the wake phrase any time while this page is open"><input type="checkbox" id="wake"> <span id="wake-text">Hey Ari</span></label>
         <label class="conv"><input type="checkbox" id="conversation"> Conversation mode</label>
       </div>
