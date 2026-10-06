@@ -62,6 +62,7 @@ Review the change (default: `git diff` against the last release commit, plus unt
 - [ ] OAuth: PKCE + state, loopback redirect to the agent's own address, refresh before expiry, one forced refresh on 401, `invalid_grant` → forget and ask to reconnect.
 - [ ] Anything leaving the Mac for a model (cloud) goes through an approval that lists exactly what's sent; off by default; no tools in the cloud; the key stays in the vault. Use the official SDK, the current model id and `fallbacks="default"`, and handle `stop_reason == "refusal"`.
 - [ ] Agent-to-agent: only sealed boxes from paired keys (plus hellos with a one-time token); check timestamp and nonce replay; rate-limit; no auto-answer beyond the scopes the user ticked; the listener runs only when enabled; never undo a working pairing on a failed retry.
+- [ ] Phone/webhooks: a separate 127.0.0.1-only listener behind the user's tunnel (never expose the main app); verify the provider signature over the exact public URL; owner allowlist; only read/draft tools on channels where nothing can be approved.
 - [ ] Skills: never run user scripts unsandboxed on macOS; network implies at least write tier; invalid SKILL.md files are reported, not half-loaded.
 
 - [ ] Mac UI actions: re-verify the element (role + name) before pressing, refuse password managers/System Settings/terminals, and give risky labels a higher tier through `risk(args)`. Unknown elements count as danger.

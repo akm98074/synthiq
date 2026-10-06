@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 7e (v0.13.0) — trusted agents
+## Status: Step 7f (v0.14.0) — call your agent
 
 | Included | Comes later |
 |---|---|
@@ -16,6 +16,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Proactivity**: morning brief, nudges (events, reminders, unreplied mail), quiet hours, overnight memory review | |
 | **Voice**: push-to-talk, conversation mode, on-device Whisper, spoken replies | |
 | **Messages**: read iMessage/SMS and WhatsApp, chats waiting on your reply, iMessage replies (approved), WhatsApp replies typed in for you | |
+| **Phone line** (Twilio, optional): call your agent; look-ups and drafts by voice, nothing sent by phone | |
 | **Trusted agents**: pair with a friend's agent by invite code; end-to-end encrypted; free/busy (if allowed), messages, questions you answer | |
 | **Avatar**: a face that speaks the replies, mouth in sync with the voice; 🔊 read-aloud on any reply | |
 | **Optional cloud model** (your own Anthropic key): "think harder" sends one question to Claude after you approve exactly what's sent | |
@@ -34,7 +35,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.13.0-py3-none-any.whl
+bash install.sh localaiagent-0.14.0-py3-none-any.whl
 localagent start
 ```
 
@@ -45,7 +46,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.13.0-py3-none-any.whl
+pipx install ./localaiagent-0.14.0-py3-none-any.whl
 localagent setup
 localagent start
 ```
@@ -60,6 +61,7 @@ localagent start
 | `localagent doctor` | Check Ollama, models, RAM, data directory |
 | `localagent setup --voice` | Download the speech-recognition model |
 | `localagent setup --browser` | Start the agent's Chrome once and report whether it works |
+| `localagent phone setup` | Save your Twilio auth token and print the steps to connect a number |
 | `localagent cloud-key` | Save your Anthropic API key (Keychain) for the optional cloud model |
 | `localagent gmail-login` | Connect Gmail (asks for your Google OAuth client, then opens Google's sign-in) |
 | `localagent channel test` | Send a test iMessage from the agent to your phone |

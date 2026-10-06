@@ -2,6 +2,37 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.13.0 to 0.14.0 (Step 7f: call your agent)
+
+```bash
+bash install.sh localaiagent-0.14.0-py3-none-any.whl
+localagent start
+```
+
+Off by default. Setting it up takes about 15 minutes and needs a Twilio account (a US number is about $1.15/month plus about 1–2¢ per minute).
+
+1. At https://www.twilio.com sign up, then buy a phone number with **Voice**. On the console's front page, copy the **Auth Token**.
+2. Install a tunnel so Twilio can reach your Mac: `brew install cloudflared`.
+3. In Terminal run `localagent phone setup` and paste the auth token; it goes into your Keychain. Then start the tunnel it shows and **leave that window open**:
+
+   ```bash
+   cloudflared tunnel --url http://127.0.0.1:8767
+   ```
+
+   It prints an address like `https://words-words.trycloudflare.com`.
+4. In the app: **Settings → Phone line**: tick **Answer calls**, enter your own mobile number (with country code, e.g. `+14255550100`), paste the tunnel address as **Public URL**, and **Save**.
+5. In the Twilio console, open your number → **Voice** → **A call comes in**: **Webhook**, URL `<tunnel address>/twilio/voice`, **HTTP POST**. Save.
+6. Call your Twilio number from your mobile.
+
+The free tunnel address changes every time cloudflared restarts; repeat steps 4–5 then. A named Cloudflare tunnel or Tailscale Funnel gives a fixed address.
+
+### What changed in 0.14.0
+
+- **Call your agent** from your own phone: "What's on my calendar tomorrow?", "Any emails from Priya?", "Find the price of onions at Safeway Sammamish". It answers in short spoken sentences, then asks "Anything else?". Say "goodbye" to hang up.
+- **Safe by phone:** it can look things up and prepare drafts, but it never sends, changes or deletes anything by phone; it tells you to approve that in the app.
+- **Only you:** only your own numbers are answered (others hear "this number is private"), and every request must be signed by Twilio with your auth token. Calls and rejected attempts appear in **Activity**.
+- **Privacy note:** Twilio recognises your speech and speaks the answers, so a call passes through Twilio (cloud). Everything else stays on your Mac. The tunnel only reaches the small phone listener, never the app itself.
+
 ## From 0.12.0 to 0.13.0 (Step 7e: trusted agents)
 
 ```bash

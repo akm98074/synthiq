@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.13.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.14.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -307,6 +307,14 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 
 ---
 
+### 6.2a Phone line (Step 7f, `channels/phone.py`)
+
+- **Listener:** a separate uvicorn app on **127.0.0.1:`phone_port`** (8767) with only `/twilio/voice`, `/twilio/gather` and `/twilio/result`. The user's tunnel (cloudflared / Tailscale Funnel) forwards their public URL to it, so the main app is never reachable from the internet.
+- **Authenticity:** every request's `X-Twilio-Signature` must equal base64(HMAC-SHA1(auth token, `phone_public_url` + path + query + sorted form key/value pairs)), compared in constant time. The auth token is in the vault. Requests without a valid signature get 403 and are audited.
+- **Callers:** only numbers in `phone_owner_numbers` (compared on the last 10 digits); others hear "private" and the call ends.
+- **A turn:** `SpeechResult` → `handle_turn(channel="phone")`, which keeps only read/draft tools (nothing can be approved by phone), disables cloud escalation, and adds a short "phone call" style note. Because local turns can exceed Twilio's 15 s limit, the answer is computed in a background task while TwiML says "One moment" and `<Redirect>`s to `/twilio/result?id=…`, which `<Pause>`s and redirects until done (90 s cap). Replies go through `speakable()` (900 characters), are XML-escaped, and are spoken with `<Say>`, followed by another `<Gather>`.
+- **Privacy:** Twilio does the speech recognition and synthesis (cloud), so this is opt-in and stated in the UI and docs.
+
 ### 6.2 Trusted agents (Step 7e, `connectors/peers.py`, `peers_server.py`)
 
 - **Identity:** an X25519 key pair per agent (PyNaCl). The private key is in the vault; the public key and a 16-hex fingerprint are shown in Settings.
@@ -435,6 +443,7 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 | Calendar/Mail/Contacts content | Read on demand through the Apple apps; only what a tool returns is kept (in messages or the audit summary) | No |
 | Gmail | Read on demand from Google's Gmail API (it's your mail at Google); refresh token in the Keychain | Only the requests you make to Gmail |
 | Cloud questions (opt-in) | Sent to Anthropic only after approval: the question, up to 6 earlier messages, and (setting) recalled memories | **Yes**, exactly what the approval card lists |
+| Phone calls (opt-in) | Your speech and the agent's spoken replies pass through Twilio | **Yes**, via Twilio during calls |
 | Trusted-agent messages (opt-in) | Sent directly to the paired agent, end-to-end encrypted; only what you approve (outbound) or allowed by scope (inbound) | Only to the paired Mac |
 | Web search queries | Sent to DuckDuckGo (search words only, no account or cookies) | **Yes**, the query; turn off with `enable_web_search` |
 | Screen text (opt-in) | `screen_snapshots` table, deleted after 2 hours; screenshots are deleted immediately after OCR | No |
@@ -457,6 +466,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
 | `enable_web_search` | on | Web look-ups |
+| `phone_enabled` / `phone_owner_numbers` / `phone_public_url` / `phone_port` | off / (yours) / (tunnel URL) / 8767 | Phone line; the Twilio auth token is in the vault |
 | `a2a_enabled` / `a2a_host` / `a2a_port` / `a2a_public_addr` | off / 0.0.0.0 / 8766 / (LAN address) | Trusted agents |
 | `cloud_enabled` / `cloud_model` / `cloud_effort` / `cloud_send_memories` / `cloud_auto_hard` | off / claude-opus-5-5 / high / on / off | Cloud escalation; the API key is in the vault |
 | `enable_gmail` / `gmail_client_id` / `gmail_account` | on / (yours) / (set on sign-in) | Gmail; the secret and tokens are in the vault |
@@ -477,7 +487,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 159 pytest tests (two real agents in one process pair and exchange encrypted messages) (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 164 pytest tests (two real agents in one process pair and exchange encrypted messages) (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

@@ -536,3 +536,36 @@ def cloud_key() -> None:
         raise typer.Exit(1)
     typer.secho("Key saved. Turn on Settings → Cloud model → Allow asking the cloud model." if key
                 else "Key removed.", fg="green")
+
+
+phone_app_cli = typer.Typer(help="Call your agent (Twilio phone line).", no_args_is_help=True)
+app.add_typer(phone_app_cli, name="phone")
+
+
+@phone_app_cli.command("setup")
+def phone_setup() -> None:
+    """Save your Twilio auth token and print the steps to connect a number."""
+    import getpass
+
+    try:
+        status = httpx.get(f"{_url()}/api/phone", timeout=5).json()
+    except httpx.HTTPError:
+        typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
+        raise typer.Exit(1)
+    token = getpass.getpass("Twilio auth token (Enter to keep the saved one): ").strip()
+    if token:
+        r = httpx.put(f"{_url()}/api/phone/token", json={"token": token}, timeout=10)
+        if r.status_code != 200:
+            typer.secho(r.json().get("detail", r.text), fg="red")
+            raise typer.Exit(1)
+        status = r.json()
+    port = status["port"]
+    typer.echo(f"""
+1. Run a tunnel to the phone listener (keep it running):
+     cloudflared tunnel --url http://127.0.0.1:{port}
+   It prints a https://….trycloudflare.com address.
+2. In the app: Settings → Phone line: tick "Answer calls", add your own number, paste that address
+   as the public URL, and Save.
+3. In the Twilio console, on your number: "A call comes in" → Webhook →
+     <that address>/twilio/voice   (HTTP POST)
+4. Call your Twilio number from your phone.""")

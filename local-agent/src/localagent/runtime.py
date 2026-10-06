@@ -170,6 +170,8 @@ class Runtime:
         if self._a2a_lifecycle and (self.settings.a2a_enabled != (self._a2a is not None)
                                     or self.settings.a2a_enabled):
             await self.start_a2a()
+        if self._a2a_lifecycle:
+            await self.start_phone()
         self.screen.blocklist = {x.strip().lower() for x in self.settings.screen_blocklist.split(",") if x.strip()}
         self.screen.retention = self.settings.screen_retention_minutes * 60
         if not self.settings.screen_context_enabled:
@@ -200,6 +202,32 @@ class Runtime:
         server.install_signal_handlers = lambda: None
         self._a2a = (server, asyncio.create_task(server.serve()))
 
+    async def start_phone(self) -> None:
+        """The phone webhook listener: 127.0.0.1 only; your tunnel forwards Twilio to it."""
+        await self.stop_phone()
+        if not self.settings.phone_enabled:
+            return
+        import asyncio
+
+        import uvicorn
+
+        from .channels.phone import phone_app
+
+        server = uvicorn.Server(uvicorn.Config(phone_app(self), host="127.0.0.1", port=self.settings.phone_port,
+                                               log_level="warning", proxy_headers=False))
+        server.install_signal_handlers = lambda: None
+        self._phone = (server, asyncio.create_task(server.serve()))
+
+    async def stop_phone(self) -> None:
+        if getattr(self, "_phone", None) is not None:
+            server, task = self._phone
+            server.should_exit = True
+            try:
+                await task
+            except Exception:  # noqa: BLE001
+                pass
+        self._phone = None
+
     async def stop_a2a(self) -> None:
         if self._a2a is not None:
             server, task = self._a2a
@@ -212,6 +240,7 @@ class Runtime:
 
     async def aclose(self) -> None:
         await self.stop_a2a()
+        await self.stop_phone()
         try:
             await self.browser.close()
         except Exception:  # noqa: BLE001 - closing a browser that already went away

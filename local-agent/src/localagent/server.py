@@ -108,6 +108,10 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
                 await app.state.rt.start_a2a()
             except Exception:  # noqa: BLE001 - e.g. the port is taken; the rest of the app still runs
                 log.exception("agent-to-agent listener didn't start")
+            try:
+                await app.state.rt.start_phone()
+            except Exception:  # noqa: BLE001
+                log.exception("phone listener didn't start")
             if app.state.rt.mac_available:
                 tasks.append(asyncio.create_task(app.state.rt.imessage_channel.loop()))
         yield
@@ -357,6 +361,33 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             return await r.peers.reply(inbox_id, text)
         except ToolError as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    # ── phone line ────────────────────────────────────────────────────────
+    @app.get("/api/phone")
+    async def phone_status() -> dict:
+        from .channels.phone import TOKEN
+
+        r = rt()
+        s_ = r.settings
+        return {"enabled": s_.phone_enabled, "has_token": r.vault.has(TOKEN),
+                "listening": getattr(r, "_phone", None) is not None, "port": s_.phone_port,
+                "webhook": (s_.phone_public_url.rstrip("/") + "/twilio/voice") if s_.phone_public_url else "",
+                "owners": [n.strip() for n in s_.phone_owner_numbers.split(",") if n.strip()]}
+
+    @app.put("/api/phone/token")
+    async def phone_token(body: dict) -> dict:
+        from .channels.phone import TOKEN
+
+        r = rt()
+        token = str(body.get("token", "")).strip()
+        if token and (len(token) != 32 or not all(ch in "0123456789abcdef" for ch in token.lower())):
+            raise HTTPException(400, "A Twilio auth token is 32 letters and digits (Twilio console → Account info).")
+        if token:
+            r.vault.set(TOKEN, token)
+        else:
+            r.vault.delete(TOKEN)
+        r.audit.append("phone_token_" + ("set" if token else "removed"), "phone", outcome="ok")
+        return await phone_status()
 
     # ── cloud key ─────────────────────────────────────────────────────────
     @app.get("/api/cloud")

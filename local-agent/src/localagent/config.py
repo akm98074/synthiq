@@ -90,6 +90,12 @@ class Settings:
     a2a_port: int = 8766
     a2a_public_addr: str = ""           # how friends reach you; empty: http://<this Mac's LAN address>:port
 
+    # Phone line (Step 7f): call your agent through Twilio (off unless set up)
+    phone_enabled: bool = False
+    phone_owner_numbers: str = ""       # your phone number(s), E.164, comma-separated
+    phone_public_url: str = ""          # the public https URL your tunnel gives (Twilio calls it)
+    phone_port: int = 8767              # local port the tunnel points at (127.0.0.1 only)
+
     # iMessage channel (Step 6): talk to the agent from your phone
     enable_imessage_channel: bool = False
     imessage_channel_mode: str = "self"        # self (text yourself) | account (agent's own Apple ID)

@@ -122,7 +122,12 @@ def pick_model(rt: "Runtime", intent: str, complexity: int) -> str:
     return s.chat_model
 
 
-async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
+PHONE_NOTE = ("\nYou are on a phone call: answer in a few short spoken sentences, no lists or links. On the "
+              "phone you can only look things up and prepare drafts; if asked to send, change or delete "
+              "something, say the user needs to approve it in the app.")
+
+
+async def handle_turn(rt: "Runtime", text: str, channel: str = "app") -> AsyncIterator[dict]:
     s = rt.settings
     history = rt.store.recent_messages(HISTORY_TURNS * 2)
     user_msg_id = rt.store.add_message("user", text)
@@ -158,7 +163,7 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
     past = [{"role": m["role"], "content": m["content"]} for m in history
             if m["role"] in ("user", "assistant")]
 
-    if wants_cloud(rt, text, complexity):
+    if channel != "phone" and wants_cloud(rt, text, complexity):
         req = build_request(rt, text, history, memories)
         tool = cloud_tool(rt)
         args = {k: req[k] for k in ("question", "memories", "history_turns")}
@@ -177,9 +182,13 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
     skill_words = tuple(t.name[6:].replace("_", " ") for t in rt.tools.values() if t.connector == "skills")
     web = "web_search" in rt.tools
     tools = candidates(rt.tools, intent) if wants_tools(intent, text, skill_words, web) else []
+    if channel == "phone":   # by phone only look-ups and drafts: nothing can be approved there
+        tools = [t for t in tools if t.tier in ("read", "draft")]
+    note = PHONE_NOTE if channel == "phone" else ""
     if tools:
         messages = [{"role": "system",
-                     "content": system_prompt(s, "task", memories, with_tools=True) + "\n\n" + tools_prompt()}]
+                     "content": system_prompt(s, "task", memories, with_tools=True) + "\n\n" + tools_prompt()
+                     + note}]
         messages += past + [{"role": "user", "content": text}]
         run = ActionRun(rt, user_msg_id, tools, messages, s.chat_model)
         async for event in run.start():
@@ -189,7 +198,7 @@ async def handle_turn(rt: "Runtime", text: str) -> AsyncIterator[dict]:
         return
 
     model = pick_model(rt, intent, complexity)
-    messages = [{"role": "system", "content": system_prompt(s, intent, memories)}]
+    messages = [{"role": "system", "content": system_prompt(s, intent, memories) + note}]
     messages += past
     messages.append({"role": "user", "content": text})
 

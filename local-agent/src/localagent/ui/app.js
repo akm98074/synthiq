@@ -494,6 +494,7 @@ async function loadSettings() {
   loadGmailStatus();
   loadCloudStatus();
   loadPeers();
+  loadPhone();
   document.querySelectorAll(".agent-name-inline").forEach((n) => { n.textContent = settings.agent_name; });
   const form = $("#settings-form");
   try {
@@ -687,6 +688,20 @@ $("#roots-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   settings = await api("/api/settings", { method: "PUT", body: { file_roots: $("#file-roots").value } });
   loadConnectors();
+});
+
+async function loadPhone() {
+  try {
+    const p = await api("/api/phone");
+    $("#phone-status").textContent = !p.enabled ? "Off."
+      : `${p.listening ? `Listening on 127.0.0.1:${p.port}` : "Not listening (restart the agent)"} · token ${p.has_token ? "saved" : "missing"}`
+        + (p.webhook ? ` · Twilio "A call comes in" webhook: ${p.webhook}` : " · add the public URL");
+  } catch (_) {}
+}
+$("#phone-token-save").addEventListener("click", async () => {
+  try { await api("/api/phone/token", { method: "PUT", body: { token: $("#phone-token").value.trim() } }); $("#phone-token").value = ""; }
+  catch (err) { $("#phone-status").textContent = err.message; return; }
+  loadPhone();
 });
 
 async function loadPeers() {
