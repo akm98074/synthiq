@@ -17,6 +17,8 @@ from .connectors.applescript import AppleScriptRunner
 from .connectors.browser import PlaywrightBrowser, find_chrome
 from .connectors.eventkit import EventKitCalendar
 from .connectors.forms import form_tools
+from .connectors.gmail import GmailAuth, GmailClient, GoogleEndpoints, gmail_tools
+from .vault import Vault
 from .connectors.screen import ScreenContext
 from .policy.engine import Audit, Policy
 from .tools.registry import build_tools, connector_status
@@ -29,7 +31,8 @@ from .voice.tts import SayTTS
 class Runtime:
     def __init__(self, settings: Settings, base: Path | None = None, runner=None,
                  stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None, browser=None,
-                 screen_capture=None, screen_ocr=None, screen_permission=None, web_fetch=None, wake_stt=None):
+                 screen_capture=None, screen_ocr=None, screen_permission=None, web_fetch=None, wake_stt=None,
+                 vault=None, google=None):
         self.base = base or data_dir()
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
@@ -46,6 +49,10 @@ class Runtime:
             settings.browser_show_actions, settings.browser_action_delay_ms, settings.agent_name)
         self.skills_dir = self.base / "skills"
         self.web_fetch = web_fetch
+        self.vault = vault if vault is not None else Vault(self.base)
+        self.google = google or GoogleEndpoints()
+        self.gmail = GmailClient(self.vault, self.google, settings.gmail_client_id)
+        self.gmail_auth = GmailAuth(self.vault, self.google, settings.gmail_client_id)
         extra = {k: v for k, v in (("capture", screen_capture), ("ocr", screen_ocr),
                                    ("permission", screen_permission)) if v is not None}
         self.screen = ScreenContext(self.store, self.runner, settings.screen_blocklist,
@@ -99,6 +106,8 @@ class Runtime:
                             self.browser, self.skills_dir, self.screen, self.web_fetch)
         if self.settings.enable_browser:
             tools.update({t.name: t for t in form_tools(self)})
+        if self.settings.enable_gmail and self.gmail.connected():
+            tools.update({t.name: t for t in gmail_tools(self.gmail)})
         self.tools = tools
 
     def connectors(self) -> list[dict]:
@@ -109,6 +118,8 @@ class Runtime:
                 notes["browser"] = "Needs the browser add-on: pipx inject localaiagent playwright"
             elif find_chrome(self.settings.browser_executable) is None:
                 notes["browser"] = "Google Chrome not found: install it from google.com/chrome"
+        if self.settings.enable_gmail and not self.gmail.connected():
+            notes["gmail"] = "Not connected: Settings → Gmail → Connect Gmail"
         if self.settings.enable_skills and not any(t.connector == "skills" for t in self.tools.values()):
             notes["skills"] = f"No skills yet. Folder: {self.skills_dir}"
         return connector_status(self.settings, self.mac_available, self.tools, notes)
@@ -145,6 +156,7 @@ class Runtime:
             self.stt.model = self.settings.stt_model
         if isinstance(self.wake_stt, MLXWhisper) and self.wake_stt is not self.stt:
             self.wake_stt.model = self.settings.wake_model
+        self.gmail.client_id = self.gmail_auth.client_id = self.settings.gmail_client_id
         self.screen.blocklist = {x.strip().lower() for x in self.settings.screen_blocklist.split(",") if x.strip()}
         self.screen.retention = self.settings.screen_retention_minutes * 60
         if not self.settings.screen_context_enabled:

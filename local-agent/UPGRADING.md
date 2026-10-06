@@ -2,6 +2,36 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.9.0 to 0.10.0 (Step 7b: Gmail sign-in)
+
+```bash
+bash install.sh localaiagent-0.10.0-py3-none-any.whl
+localagent start
+```
+
+### Connect Gmail (one-time, about 5 minutes)
+
+Google requires every app that reads Gmail to have its own "OAuth client". You create one for yourself; nobody else is involved and it's free.
+
+1. Open https://console.cloud.google.com and sign in with your Gmail account. Create a project, for example **LocalAIAgent** (top bar → project picker → **New project**).
+2. **APIs & Services → Library**: search for **Gmail API** and click **Enable**.
+3. **Google Auth Platform → Branding** (older consoles call it **OAuth consent screen**): app name `LocalAIAgent`, your email as support and developer contact. Save.
+4. **Audience**: user type **External**. Then click **Publish app** and confirm. This stops Google from asking you to sign in again every 7 days. Your app stays private; it just isn't "verified", which is fine for your own use.
+5. **Clients → Create client**: application type **Desktop app**, name `LocalAIAgent`. **Create**, then copy the **Client ID** and **Client secret**.
+6. In the agent: **Settings → Gmail**, paste both, and press **Save and connect Gmail**.
+   - A Google tab opens. Pick your account. Google says _"Google hasn't verified this app"_ because it's your own; click **Advanced → Go to LocalAIAgent (unsafe)**, then **Allow**.
+   - The tab says _"Gmail connected as …"_. Close it. Settings shows **Connected as you@gmail.com**.
+
+Alternatively run `localagent gmail-login` in Terminal; it asks for the same two values.
+
+### What changed in 0.10.0
+
+- **Gmail directly.** "Any unread emails from Priya?", "what did the bank email say?", "draft a reply to Sam's lunch email saying Thursday works": these now use Gmail itself, including labels and Gmail's search syntax.
+  - Drafts appear in Gmail's **Drafts** (on your phone too). Sending asks first.
+- **Nudges and the brief** use Gmail for "waiting on your reply". The same email seen in Apple Mail and Gmail gives one nudge, not two.
+- **Keychain vault.** The client secret and the Gmail sign-in are stored in your **login Keychain** (item "LocalAIAgent"), never in the config file, and never shown to the model. macOS may ask once to allow access; click **Always Allow**.
+- **Disconnect** any time in Settings, or remove access at https://myaccount.google.com/permissions.
+
 ## From 0.8.0 to 0.9.0 (Step 7a: "Hey Ari" wake word)
 
 ```bash

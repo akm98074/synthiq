@@ -72,6 +72,11 @@ class Settings:
     whatsapp_db: str = "~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite"
     addressbook_dir: str = "~/Library/Application Support/AddressBook"
 
+    # Gmail (Step 7b): your own Google OAuth client; tokens live in the Keychain
+    enable_gmail: bool = True
+    gmail_client_id: str = ""
+    gmail_account: str = ""
+
     # iMessage channel (Step 6): talk to the agent from your phone
     enable_imessage_channel: bool = False
     imessage_channel_mode: str = "self"        # self (text yourself) | account (agent's own Apple ID)

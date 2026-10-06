@@ -10,7 +10,7 @@ from importlib import resources
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -68,6 +68,14 @@ class DecisionIn(BaseModel):
     scope: str = "once"
 
 
+def _page(title: str, text: str) -> str:
+    import html as _h
+
+    return (f"<!doctype html><meta charset='utf-8'><title>{_h.escape(title)}</title>"
+            "<body style='font:16px -apple-system,sans-serif;max-width:560px;margin:80px auto;padding:0 16px'>"
+            f"<h2>{_h.escape(title)}</h2><p>{_h.escape(text)}</p></body>")
+
+
 def sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
@@ -83,14 +91,15 @@ async def _warm_up(rt: Runtime) -> None:
 
 def create_app(settings: Settings | None = None, base: Path | None = None, runner=None,
                stt=None, tts=None, scheduler: bool = True, eventkit=None, browser=None,
-               web_fetch=None, wake_stt=None) -> FastAPI:
+               web_fetch=None, wake_stt=None, vault=None, google=None) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.rt = Runtime(settings, base, runner=runner, stt=stt, tts=tts, eventkit=eventkit,
-                               browser=browser, web_fetch=web_fetch, wake_stt=wake_stt)
+                               browser=browser, web_fetch=web_fetch, wake_stt=wake_stt,
+                               vault=vault, google=google)
         tasks = [asyncio.create_task(_warm_up(app.state.rt))]
         if scheduler:
             tasks.append(asyncio.create_task(app.state.rt.scheduler.loop()))
@@ -289,6 +298,64 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             return {"ok": False, "message": str(exc)}
         r.audit.append("connector_test", name, tool.tier, args, "ok", result.display)
         return {"ok": True, "message": result.display}
+
+    # ── Gmail sign-in ─────────────────────────────────────────────────────
+    @app.get("/api/gmail")
+    async def gmail_status() -> dict:
+        from .connectors.gmail import CLIENT_SECRET
+
+        r = rt()
+        return {"connected": r.gmail.connected(), "account": r.settings.gmail_account,
+                "client_id": r.settings.gmail_client_id, "has_secret": r.vault.has(CLIENT_SECRET),
+                "vault": r.vault.backend}
+
+    @app.put("/api/gmail/client")
+    async def gmail_client(body: dict) -> dict:
+        from .connectors.gmail import CLIENT_SECRET
+
+        r = rt()
+        client_id = str(body.get("client_id", "")).strip()
+        if not client_id.endswith(".apps.googleusercontent.com"):
+            raise HTTPException(400, "That doesn't look like a Google OAuth client ID "
+                                     "(it ends with .apps.googleusercontent.com).")
+        if body.get("client_secret"):
+            r.vault.set(CLIENT_SECRET, str(body["client_secret"]).strip())
+        await r.apply_settings({"gmail_client_id": client_id})
+        return await gmail_status()
+
+    @app.get("/api/gmail/login")
+    async def gmail_login(request: Request):
+        r = rt()
+        redirect = str(request.base_url).rstrip("/") + "/api/gmail/callback"
+        try:
+            url = r.gmail_auth.auth_url(redirect)
+        except ToolError as exc:
+            return HTMLResponse(_page("Gmail", str(exc)), status_code=400)
+        return RedirectResponse(url)
+
+    @app.get("/api/gmail/callback")
+    async def gmail_callback(code: str = "", state: str = "", error: str = ""):
+        r = rt()
+        if error:
+            return HTMLResponse(_page("Gmail not connected", f"Google said: {error}. You can close this tab."))
+        try:
+            account = await r.gmail_auth.finish(code, state)
+        except ToolError as exc:
+            return HTMLResponse(_page("Gmail not connected", str(exc)), status_code=400)
+        await r.apply_settings({"gmail_account": account})
+        r.audit.append("gmail_connected", "gmail", outcome="ok", detail=account)
+        return HTMLResponse(_page("Gmail connected", f"Connected as {account}. You can close this tab and go back "
+                                                     "to the agent."))
+
+    @app.post("/api/gmail/disconnect")
+    async def gmail_disconnect() -> dict:
+        from .connectors.gmail import REFRESH
+
+        r = rt()
+        r.vault.delete(REFRESH)
+        await r.apply_settings({"gmail_account": ""})
+        r.audit.append("gmail_disconnected", "gmail", outcome="ok")
+        return await gmail_status()
 
     @app.get("/api/channels")
     async def channels() -> dict:

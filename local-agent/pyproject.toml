@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "localaiagent"
-version = "0.9.0"
+version = "0.10.0"
 description = "Local-first personal AI agent: on-device SLMs via Ollama with a Jev-style decision layer"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,6 +21,7 @@ dependencies = [
   "fpdf2>=2.7",
   "openpyxl>=3.1",
   "python-dateutil>=2.8",
+  "keyring>=24",
 ]
 
 [project.optional-dependencies]

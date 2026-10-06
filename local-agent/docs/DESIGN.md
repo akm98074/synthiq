@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.9.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.10.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -204,6 +204,7 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Contacts | `contacts_find` (read) | AppleScript |
 | Files | `files_search`, `files_list` (read), `files_open` (draft), `files_move` (write), `files_trash` (danger) | Python, confined to allowed folders |
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
+| Gmail (7b) | `gmail_search`, `gmail_read`, `gmail_followups` (read; untrusted), `gmail_draft` (draft), `gmail_send` (write) | Gmail REST API via httpx; OAuth installed-app flow with PKCE; tokens in the Keychain |
 | Web search | `web_search` (read; optional `site`) | DuckDuckGo HTML results via httpx: titles, unwrapped links, snippets; untrusted |
 | Browser | `browser_open` (draft), `browser_read` (read), `browser_find` (read), `browser_click`, `browser_type` (draft), `browser_submit` (danger) | The user's installed Google Chrome, started by the agent on its own profile and driven over DevTools (Playwright `connect_over_cdp`) |
 | Custom skills | `skill_<name>` (tier from SKILL.md; at least write when `network: true`) | Folder with `SKILL.md`; scripts run under `sandbox-exec` |
@@ -226,6 +227,14 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
   - WhatsApp's schema is checked before use (`ZWACHATSESSION`, `ZWAMESSAGE` columns). A mismatch reports "WhatsApp changed how it stores chats" instead of guessing.
   - Sending: `messages_send.applescript` tries the chat id (`any;-;…`, `iMessage;-;…`, `SMS;-;…`) and then the participant handle. WhatsApp has no API for personal accounts, so `whatsapp_open_draft` opens `whatsapp://send?phone=…&text=…` and the user presses Send. Groups aren't supported by that link.
 - **Prompt-injection guard (`safety/injection.py`):** results marked `untrusted` (mail list/read/follow-ups, chats) are fenced as data and pattern-scanned before the model sees them. A hit adds a warning for the model, a ⚠ on the chip and an `injection_flagged` audit row. It also **taints** the run: `Policy.needs_approval(…, tainted=True)` ignores standing grants, so every write needs a fresh approval, and the card says why. The taint survives a pause for approval because it's stored in the run state. The scan is regex-based (deterministic, can't be argued with), so it reduces risk rather than eliminating it.
+- **Vault (`vault.py`):** secrets go through `keyring` (macOS login Keychain, service "LocalAIAgent"). Without a usable keyring (Linux without Secret Service, or tests with `LOCALAGENT_NO_KEYRING`), they go to `secrets.json` written 0600 via an atomic replace. Secrets are never in `config.json`, the audit log or tool output.
+- **Gmail (7b, `connectors/gmail.py`):**
+  - **Sign-in:** the user's own "Desktop app" OAuth client. `/api/gmail/login` builds the consent URL (scopes `gmail.modify` and `gmail.compose`, `access_type=offline`, `prompt=consent`, S256 PKCE, a random state kept for 10 minutes) with the redirect back to the agent's own `127.0.0.1` address. `/api/gmail/callback` exchanges the code, stores the refresh token in the vault, and records the address from `/profile`.
+  - **Tokens:** access tokens are memory-only and refreshed early (60 s before expiry). One 401 triggers a forced refresh and a retry. `invalid_grant` deletes the refresh token and asks the user to reconnect.
+  - **Search and read:** `messages.list` then `messages.get(format=metadata)` for summaries. `read` prefers `text/plain` parts and otherwise strips HTML (scripts and styles removed).
+  - **Follow-ups:** threads matching `in:inbox -from:me newer_than:Nd older_than:Md`, excluding the promotions, social, updates and forums categories, whose last message isn't from the user.
+  - **Drafts and sends:** RFC 822 via `EmailMessage`, base64url `raw`. Replies set `threadId`, `In-Reply-To` and `References`.
+  - Nudge candidates are deduplicated by (title, subject) so Apple Mail and Gmail don't double up, and the brief uses Gmail for "waiting on your reply" when connected.
 - **Look-ups (0.7.1, `connectors/websearch.py`):**
   - `quick_answer` messages are always offered the tools (when web search is on). The guide tells the model to call `web_search` for anything that changes or is local (prices, shops, restaurants, hours, phone numbers, weather, news), open the best result, and answer from that page with the link. For a store's price, it opens the store's own site and uses its search box. General-knowledge questions get no tool call.
   - The decision layer gained 14 seed examples (`data/web_seed.jsonl`) such as "chutneys bellevue" → quick_answer. Seed files are now tracked per file in `meta` (`seeded:<file>`), so new seed sets reach existing installs.
@@ -388,6 +397,7 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 | PDFs / spreadsheets the agent makes | `~/Documents/LocalAIAgent/` | No |
 | Audio | In memory only, during transcription; never written to disk | No |
 | Calendar/Mail/Contacts content | Read on demand through the Apple apps; only what a tool returns is kept (in messages or the audit summary) | No |
+| Gmail | Read on demand from Google's Gmail API (it's your mail at Google); refresh token in the Keychain | Only the requests you make to Gmail |
 | Web search queries | Sent to DuckDuckGo (search words only, no account or cookies) | **Yes**, the query; turn off with `enable_web_search` |
 | Screen text (opt-in) | `screen_snapshots` table, deleted after 2 hours; screenshots are deleted immediately after OCR | No |
 | iMessage/WhatsApp history | Read on demand, read-only, from the apps' own databases; never copied in bulk | No (a sent iMessage goes through Apple, as if you sent it) |
@@ -409,6 +419,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 | `calendar_backend` | auto | Calendar listing: EventKit when allowed, else AppleScript |
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
 | `enable_web_search` | on | Web look-ups |
+| `enable_gmail` / `gmail_client_id` / `gmail_account` | on / (yours) / (set on sign-in) | Gmail; the secret and tokens are in the vault |
 | `enable_imessage_channel` / `imessage_channel_mode` / `imessage_owner_handles` / `imessage_forward_nudges` | off / self / (empty) / on | iMessage channel |
 | `enable_browser` / `browser_headless` / `browser_executable` | on / off / (installed Google Chrome) | Browser |
 | `browser_show_actions` / `browser_action_delay_ms` | on / 600 | Cursor, highlight and labels in the agent's window |
@@ -425,7 +436,7 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 148 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 151 pytest tests (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.

@@ -19,6 +19,7 @@ def fake_ollama():
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAGENT_HOME", str(tmp_path))
+    monkeypatch.setenv("LOCALAGENT_NO_KEYRING", "1")     # never touch the real Keychain in tests
     return tmp_path
 
 

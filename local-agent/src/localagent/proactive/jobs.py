@@ -59,8 +59,10 @@ async def morning_brief(rt: "Runtime", manual: bool = False) -> dict:
         "calendar": await _tool(rt, "calendar_list_events", {}),
         "reminders": await _tool(rt, "reminders_list", {"limit": 20}),
         "unread mail": await _tool(rt, "mail_list", {"unread_only": True, "limit": 5}),
-        "waiting on your reply": await _tool(rt, "mail_followups",
-                                             {"min_days": 1, "max_days": s.followup_days, "limit": 5}),
+        "waiting on your reply": (None if "gmail_followups" in rt.tools else await _tool(
+            rt, "mail_followups", {"min_days": 1, "max_days": s.followup_days, "limit": 5})),
+        "Gmail waiting on your reply": await _tool(rt, "gmail_followups",
+                                                   {"min_days": 1, "max_days": s.followup_days, "limit": 5}),
         "chats waiting on your reply": await _tool(rt, "messages_list", {
             "needs_reply": True, "max_days": 2, "min_minutes": 60, "limit": 5}),
     }
@@ -155,9 +157,21 @@ async def run_checks(rt: "Runtime", manual: bool = False) -> dict:
         + _reminder_candidates(await _tool(rt, "reminders_list", {"limit": 50}), now)
         + _followup_candidates(await _tool(rt, "mail_followups",
                                            {"min_days": 1, "max_days": s.followup_days, "limit": 15}))
+        + _followup_candidates(await _tool(rt, "gmail_followups",
+                                           {"min_days": 1, "max_days": s.followup_days, "limit": 15}))
         + _message_candidates(await _tool(rt, "messages_list", {
             "needs_reply": True, "max_days": min(s.followup_days, 3), "min_minutes": 60, "limit": 15}))
     )
+    # The same email can come from Apple Mail and Gmail: keep one nudge per (sender, subject).
+    seen, unique = set(), []
+    for c in candidates:
+        if c["kind"] == "followup" and "subject" in c.get("data", {}):
+            sig = (c["title"].lower(), c["data"]["subject"].lower())
+            if sig in seen:
+                continue
+            seen.add(sig)
+        unique.append(c)
+    candidates = unique
     delivered, skipped = [], 0
     for c in candidates:
         if rt.nudges.exists(c["key"]):

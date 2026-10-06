@@ -479,6 +479,7 @@ async function pullModel(name, btn) {
 async function loadSettings() {
   settings = await api("/api/settings");
   loadChannelStatus();
+  loadGmailStatus();
   document.querySelectorAll(".agent-name-inline").forEach((n) => { n.textContent = settings.agent_name; });
   const form = $("#settings-form");
   try {
@@ -665,6 +666,39 @@ $("#roots-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   settings = await api("/api/settings", { method: "PUT", body: { file_roots: $("#file-roots").value } });
   loadConnectors();
+});
+
+async function loadGmailStatus() {
+  try {
+    const g = await api("/api/gmail");
+    $("#gmail-client-id").value = g.client_id || "";
+    $("#gmail-client-secret").placeholder = g.has_secret ? "(saved; type to replace)" : "paste the client secret";
+    $("#gmail-status").textContent = g.connected ? `Connected as ${g.account}` : "Not connected";
+    $("#gmail-disconnect").classList.toggle("hidden", !g.connected);
+  } catch (_) {}
+}
+
+$("#gmail-connect").addEventListener("click", async () => {
+  $("#gmail-status").textContent = "Saving…";
+  try {
+    const body = { client_id: $("#gmail-client-id").value.trim() };
+    const secret = $("#gmail-client-secret").value.trim();
+    if (secret) body.client_secret = secret;
+    await api("/api/gmail/client", { method: "PUT", body });
+    $("#gmail-client-secret").value = "";
+    $("#gmail-status").textContent = "Finish signing in in the new tab, then come back here.";
+    window.open("/api/gmail/login", "_blank");
+    const until = Date.now() + 5 * 60 * 1000;
+    const poll = setInterval(async () => {
+      const g = await api("/api/gmail").catch(() => null);
+      if ((g && g.connected) || Date.now() > until) { clearInterval(poll); loadGmailStatus(); }
+    }, 2000);
+  } catch (err) { $("#gmail-status").textContent = err.message; }
+});
+
+$("#gmail-disconnect").addEventListener("click", async () => {
+  await api("/api/gmail/disconnect", { method: "POST" }).catch(() => null);
+  loadGmailStatus();
 });
 
 async function loadChannelStatus() {

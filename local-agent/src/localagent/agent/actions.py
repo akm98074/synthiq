@@ -29,6 +29,7 @@ GUIDE = """You can act on the user's computer with the tools provided.
 - Use read tools freely to look things up before answering. Never invent results.
 - To change something (create, send, move, delete), just call the tool. The app itself asks the user
   for approval when needed - do not ask for confirmation in text first.
+- If gmail_* tools are available, use them for the user's Gmail (prefer gmail_draft over gmail_send).
 - Prefer mail_draft over mail_send unless the user clearly asked to send. Look up email addresses
   with contacts_find; never guess them.
 - If a tool returns an error, fix the arguments and retry once, or explain the problem.

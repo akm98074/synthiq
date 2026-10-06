@@ -38,6 +38,9 @@ CONNECTORS = [
               "(the picture is deleted at once), skips private apps, and forgets it after a couple of hours."},
     {"id": "files", "name": "Files", "mac": False, "setting": "enable_files",
      "about": "Find, list, move, open and trash files in the allowed folders."},
+    {"id": "gmail", "name": "Gmail", "mac": False, "setting": "enable_gmail",
+     "about": "Your Gmail directly (sign in with Google): search, read, find threads waiting on your reply, "
+              "save drafts, and send (send asks first). Works without Apple Mail."},
     {"id": "web", "name": "Web search", "mac": False, "setting": "enable_web_search",
      "about": "Looks things up on the web (DuckDuckGo) for prices, shops, restaurants, hours and news, then "
               "reads the best page. Only the search words leave this Mac."},
@@ -61,6 +64,7 @@ TEST_CALLS = {
     "contacts": ("contacts_find", {"name": "a", "limit": 1}),
     "messages": ("messages_list", {"limit": 3}),
     "apps": ("apps_list", {}),
+    "gmail": ("gmail_search", {"limit": 1}),
     "web": ("web_search", {"query": "weather Seattle", "limit": 1}),
     "screen": ("screen_now", {}),
     "files": ("files_list", {"folder": "~/Downloads", "limit": 3}),

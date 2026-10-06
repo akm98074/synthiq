@@ -489,3 +489,32 @@ def channel_test() -> None:
     typer.secho(msg, fg="green" if ok else "red")
     if not ok:
         raise typer.Exit(1)
+
+
+@app.command("gmail-login")
+def gmail_login() -> None:
+    """Connect Gmail: save your Google OAuth client, then sign in with Google in the browser."""
+    import getpass
+
+    try:
+        status = httpx.get(f"{_url()}/api/gmail", timeout=5).json()
+    except httpx.HTTPError:
+        typer.secho("The agent isn't running. Start it with: localagent start", fg="red")
+        raise typer.Exit(1)
+    client_id = typer.prompt("Google OAuth client ID", default=status.get("client_id") or "").strip()
+    secret = getpass.getpass("Client secret (Enter to keep the saved one): ").strip()
+    body = {"client_id": client_id, **({"client_secret": secret} if secret else {})}
+    r = httpx.put(f"{_url()}/api/gmail/client", json=body, timeout=10)
+    if r.status_code != 200:
+        typer.secho(r.json().get("detail", r.text), fg="red")
+        raise typer.Exit(1)
+    typer.echo("Opening Google's sign-in page in your browser ...")
+    webbrowser.open(f"{_url()}/api/gmail/login")
+    for _ in range(150):
+        time.sleep(2)
+        st = httpx.get(f"{_url()}/api/gmail", timeout=5).json()
+        if st.get("connected"):
+            typer.secho(f"Gmail connected as {st.get('account')}.", fg="green")
+            return
+    typer.secho("Didn't see the sign-in finish. Try again, or use Settings → Gmail in the app.", fg="yellow")
+    raise typer.Exit(1)

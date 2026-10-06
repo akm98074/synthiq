@@ -191,6 +191,15 @@
           <label>Overnight memory review at <input name="dream_time" type="time"></label>
           <label class="check"><input type="checkbox" name="notify_macos"> Show macOS notifications</label>
         </fieldset>
+        <fieldset><legend>Gmail</legend>
+          <p class="muted small" style="margin:6px 0 0">Uses your own Google OAuth client (a 5-minute, one-time set-up; see UPGRADING.md). The secret and sign-in are kept in the Keychain.</p>
+          <label>OAuth client ID <input id="gmail-client-id" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off"></label>
+          <label>OAuth client secret <input id="gmail-client-secret" type="password" placeholder="(saved; type to replace)" autocomplete="off"></label>
+          <div class="row" style="margin-top:10px; flex-wrap:wrap">
+            <button type="button" class="secondary" id="gmail-connect">Save and connect Gmail</button>
+            <button type="button" class="ghost" id="gmail-disconnect">Disconnect</button>
+            <span id="gmail-status" class="muted small"></span></div>
+        </fieldset>
         <fieldset><legend>Text me (iMessage)</legend>
           <label class="check"><input type="checkbox" name="enable_imessage_channel"> Let me talk to the agent by iMessage from my phone</label>
           <label>How
