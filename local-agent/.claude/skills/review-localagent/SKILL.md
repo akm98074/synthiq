@@ -56,6 +56,9 @@ Review the change (default: `git diff` against the last release commit, plus unt
 - [ ] Browser: never let a draft-tier tool submit, send, buy or delete (`needs_submit()`), never type into password fields, open only http(s) URLs, and mark page text `untrusted`.
 - [ ] Skills: never run user scripts unsandboxed on macOS; network implies at least write tier; invalid SKILL.md files are reported, not half-loaded.
 
+- [ ] Mac UI actions: re-verify the element (role + name) before pressing, refuse password managers/System Settings/terminals, and give risky labels a higher tier through `risk(args)`. Unknown elements count as danger.
+- [ ] Screen capture: opt-in only; check the blocklist and lock screen before capturing; delete the image in `finally`; enforce retention on every read and write.
+
 ## D. LLM output hygiene
 
 - [ ] All model text shown to the user goes through `strip_think` (non-streaming) or `ThinkFilter` (streaming). That includes an **orphan `</think>` with no opening tag** (Qwen3 does this even with `think:false`). Streaming consumers must handle the `RESET` sentinel / `{"type":"reset"}` event.

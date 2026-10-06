@@ -250,9 +250,23 @@ async def dream(rt: "Runtime", manual: bool = False) -> dict:
     return {"summary": report, "learned": learned, "merged": merged}
 
 
+async def screen_glance(rt: "Runtime", manual: bool = False) -> dict:
+    if not rt.settings.screen_context_enabled:
+        return {"summary": "Screen context is off"}
+    try:
+        r = await rt.screen.snap()
+    except ToolError as exc:
+        raise Deferred(str(exc)) from exc
+    if r.get("skipped"):
+        return {"summary": f"Skipped: {r['skipped']}"}
+    return {"summary": f"Read {r['app']} ({len(r['text'])} characters); {rt.screen.count()} kept"}
+
+
 def job_specs(rt: "Runtime") -> list[JobSpec]:
     s = rt.settings
-    return [
+    extra = ([JobSpec("screen", "interval", str(s.screen_every_minutes), lambda manual: screen_glance(rt, manual),
+                      "Screen context")] if s.screen_context_enabled and rt.mac_available else [])
+    return extra + [
         JobSpec("morning_brief", "daily", s.brief_time, lambda manual: morning_brief(rt, manual),
                 "Morning brief"),
         JobSpec("checks", "interval", str(s.check_every_minutes), lambda manual: run_checks(rt, manual),

@@ -46,7 +46,7 @@ def judge(text: str, schema: dict) -> dict:
         intent = "memory_query"
     elif t.startswith(("i'm", "i am", "my ", "remember", "i prefer", "i like")):
         intent = "memory_write"
-    elif any(w in t for w in ("open", "delete", "send", "book", "trash", "move", "downloads", "click")):
+    elif any(w in t for w in ("open", "delete", "send", "book", "trash", "move", "downloads", "click", "fill", "shortcut", "screen")):
         intent = "computer_action"
     elif any(w in t for w in ("write", "draft", "plan", "make")):
         intent = "task"
@@ -76,6 +76,9 @@ def pick_tool(text: str, tool_names: set[str]):
     t = text.lower()
     words = text.split()
     rules = [
+        ("fill", "browser_fill_form", lambda: {}),
+        ("shortcut", "shortcuts_run", lambda: {"name": "Focus", "input": ""}),
+        ("my screen", "screen_now", lambda: {}),
         ("word count", "skill_word_count", lambda: {"text": "hello big world"}),
         ("website", "browser_open", lambda: {"url": "shop.example/item"}),
         ("click", "browser_click", lambda: {"ref": 2}),
@@ -169,7 +172,22 @@ def create_fake_app() -> FastAPI:
                 "tool_calls": [{"function": {"name": name, "arguments": args}}]}}
         if isinstance(schema, dict):
             props = schema.get("properties", {})
-            if "same" in props:
+            if "fields" in props:
+                facts = [l[2:].split(") ", 1)[-1] for l in last.split("FACTS ABOUT THE USER:")[1]
+                         .split("FORM FIELDS")[0].splitlines() if l.startswith("- (")]
+                fields = []
+                for line in last.split("FORM FIELDS")[1].splitlines():
+                    m = re.match(r"\[(\d+)\] (.+?) \(", line)
+                    if not m:
+                        continue
+                    words = [w for w in re.findall(r"[a-z]+", m.group(2).lower()) if len(w) > 3]
+                    fact = next((f for f in facts if any(w in f.lower() for w in words)), None)
+                    if fact:
+                        value = fact.split(" is ", 1)[-1].rstrip(".")
+                        fields.append({"ref": int(m.group(1)), "value": value, "source": fact})
+                fields.append({"ref": 99, "value": "ghost", "source": "made up"})
+                content = json.dumps({"fields": fields})
+            elif "same" in props:
                 a = last.split("A:", 1)[1].split("\n", 1)[0].strip()
                 content = json.dumps({"same": True, "merged": a})
             elif "facts" in props:

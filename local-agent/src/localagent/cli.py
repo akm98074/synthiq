@@ -426,3 +426,28 @@ def skill_list() -> None:
         typer.echo(f"{sk.name:<20} {state}")
     if not sandbox_available():
         typer.secho("Note: sandbox-exec isn't available here, so script skills won't run.", fg="yellow")
+
+
+@app.command("screen-access")
+def screen_access() -> None:
+    """Ask macOS for Screen Recording permission (needed for screen context)."""
+    from .connectors.screen import request_screen_permission, screen_permission
+
+    if sys.platform != "darwin":
+        typer.echo("Screen context needs macOS.")
+        raise typer.Exit(1)
+    state = screen_permission()
+    if state is None:
+        typer.secho("The screen add-on isn't installed. Run: "
+                    "pipx inject localaiagent pyobjc-framework-Vision pyobjc-framework-Quartz", fg="yellow")
+        raise typer.Exit(1)
+    if not state:
+        typer.echo("Asking macOS for permission to read the screen ...")
+        state = bool(request_screen_permission())
+    if state:
+        typer.secho("Screen reading is allowed. Turn on Screen context in the app's Connectors tab.", fg="green")
+        return
+    typer.secho("Not allowed yet. Open System Settings → Privacy & Security → Screen & System Audio Recording, "
+                "turn on Terminal, quit Terminal (Cmd+Q), reopen it, then run: localagent stop, localagent start",
+                fg="yellow")
+    raise typer.Exit(1)

@@ -20,6 +20,8 @@ US = "\x1f"  # unit (field) separator
 APP_NAMES = {
     "calendar": "Calendar", "reminders": "Reminders", "notes": "Notes",
     "mail": "Mail", "contacts": "Contacts", "messages": "Messages", "open": "the app",
+    "apps": "System Events", "app": "the app", "ui": "System Events", "front": "System Events",
+    "shortcuts": "Shortcuts",
 }
 
 
@@ -34,6 +36,10 @@ def parse_records(out: str) -> list[list[str]]:
 def explain_error(stderr: str, app: str) -> str:
     code = re.search(r"\((-?\d+)\)\s*$", stderr.strip())
     num = code.group(1) if code else ""
+    if num in ("-1719", "-25211") or "assistive access" in stderr:
+        return ("macOS needs Accessibility permission to read or press buttons in other apps. Open System "
+                "Settings → Privacy & Security → Accessibility, turn on your Terminal app, then quit Terminal, "
+                "reopen it and restart the agent.")
     if num == "-1743" or "Not authorized" in stderr:
         return (f"macOS blocked access to {app}. Open System Settings → Privacy & Security → "
                 f"Automation, allow your Terminal app to control {app}, then try again.")

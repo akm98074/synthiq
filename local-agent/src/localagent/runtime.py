@@ -16,6 +16,8 @@ from .memory.store import Store
 from .connectors.applescript import AppleScriptRunner
 from .connectors.browser import PlaywrightBrowser
 from .connectors.eventkit import EventKitCalendar
+from .connectors.forms import form_tools
+from .connectors.screen import ScreenContext
 from .policy.engine import Audit, Policy
 from .tools.registry import build_tools, connector_status
 from .proactive.nudges import Nudges
@@ -26,7 +28,8 @@ from .voice.tts import SayTTS
 
 class Runtime:
     def __init__(self, settings: Settings, base: Path | None = None, runner=None,
-                 stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None, browser=None):
+                 stt=None, tts=None, clock: Callable[[], float] = time.time, eventkit=None, browser=None,
+                 screen_capture=None, screen_ocr=None, screen_permission=None):
         self.base = base or data_dir()
         self.base.mkdir(parents=True, exist_ok=True)
         self.settings = settings
@@ -41,6 +44,10 @@ class Runtime:
         self.browser = browser if browser is not None else PlaywrightBrowser(
             self.base / "browser-profile", settings.browser_headless, settings.browser_executable)
         self.skills_dir = self.base / "skills"
+        extra = {k: v for k, v in (("capture", screen_capture), ("ocr", screen_ocr),
+                                   ("permission", screen_permission)) if v is not None}
+        self.screen = ScreenContext(self.store, self.runner, settings.screen_blocklist,
+                                    settings.screen_retention_minutes, clock=clock, **extra)
         self.policy = Policy(self.store)
         self.audit = Audit(self.store)
         self.build_tools()
@@ -79,8 +86,11 @@ class Runtime:
         )
 
     def build_tools(self) -> None:
-        self.tools = build_tools(self.settings, self.runner, self.mac_available, self.eventkit,
-                                 self.browser, self.skills_dir)
+        tools = build_tools(self.settings, self.runner, self.mac_available, self.eventkit,
+                            self.browser, self.skills_dir, self.screen)
+        if self.settings.enable_browser:
+            tools.update({t.name: t for t in form_tools(self)})
+        self.tools = tools
 
     def connectors(self) -> list[dict]:
         self.build_tools()   # picks up skills added or edited since the last look
@@ -118,6 +128,10 @@ class Runtime:
         self.register_jobs()
         if hasattr(self.stt, "model"):
             self.stt.model = self.settings.stt_model
+        self.screen.blocklist = {x.strip().lower() for x in self.settings.screen_blocklist.split(",") if x.strip()}
+        self.screen.retention = self.settings.screen_retention_minutes * 60
+        if not self.settings.screen_context_enabled:
+            self.screen.forget_all()
         if isinstance(self.browser, PlaywrightBrowser):
             self.browser.headless = self.settings.browser_headless
             self.browser.executable = self.settings.browser_executable

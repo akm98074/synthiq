@@ -2,7 +2,7 @@
 # LocalAIAgent installer for macOS (Apple Silicon).
 #
 # Run it WITHOUT sudo, from the folder containing the downloaded files:
-#   bash install.sh localaiagent-0.6.0-py3-none-any.whl
+#   bash install.sh localaiagent-0.7.0-py3-none-any.whl
 set -euo pipefail
 ORIG_PATH="$PATH"  # the PATH of the Terminal window that ran this script
 
@@ -23,7 +23,7 @@ find_wheel() {
 WHEEL="${1:-$(find_wheel)}"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "Can't find the localaiagent .whl file.
        Put install.sh and the .whl in the same folder, cd into it, and run:
-         bash install.sh localaiagent-0.6.0-py3-none-any.whl"
+         bash install.sh localaiagent-0.7.0-py3-none-any.whl"
 WHEEL="$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")"
 
 [ "$(uname -s)" = "Darwin" ] || warn "this installer targets macOS; continuing anyway."
@@ -91,8 +91,10 @@ else
 fi
 
 if [ "$(uname -s)" = "Darwin" ]; then
-  say "Adding the calendar add-on (complete calendars, including repeating events)"
+  say "Adding the calendar and screen add-ons (EventKit, on-device text recognition)"
   pipx inject localaiagent "pyobjc-framework-EventKit>=10" || warn "calendar add-on failed; Calendar falls back to AppleScript."
+  pipx inject localaiagent "pyobjc-framework-Vision>=10" "pyobjc-framework-Quartz>=10" \
+    || warn "screen add-on failed; everything except screen context still works."
 fi
 
 say "Adding the browser add-on (web tasks in the agent's own browser window)"

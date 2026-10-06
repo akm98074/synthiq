@@ -79,6 +79,14 @@ class Settings:
     enable_skills: bool = True
     skills_require_sandbox: bool = True
 
+    # Mac apps, screen context (Step 5c)
+    enable_apps: bool = True
+    screen_context_enabled: bool = False    # opt-in
+    screen_every_minutes: int = 5
+    screen_retention_minutes: int = 120
+    screen_blocklist: str = ("1Password,Bitwarden,LastPass,Dashlane,Keychain Access,Passwords,Messages,"
+                             "WhatsApp,Signal,FaceTime")
+
     # Proactivity (Step 3)
     proactive_enabled: bool = True
     brief_time: str = "08:00"
@@ -125,6 +133,10 @@ class Settings:
             raise ValueError("calendar_backend must be auto, eventkit or applescript")
         if not 5 <= self.check_every_minutes <= 720:
             raise ValueError("check_every_minutes must be between 5 and 720")
+        if not 1 <= self.screen_every_minutes <= 120:
+            raise ValueError("screen_every_minutes must be between 1 and 120")
+        if not 5 <= self.screen_retention_minutes <= 1440:
+            raise ValueError("screen_retention_minutes must be between 5 and 1440")
         if not 80 <= self.tts_rate <= 400:
             raise ValueError("tts_rate must be between 80 and 400")
         return self

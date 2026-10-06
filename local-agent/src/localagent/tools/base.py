@@ -49,6 +49,14 @@ class Tool:
     summary: Callable[[dict], str]
     intents: tuple[str, ...] = ("task", "schedule", "computer_action")
     examples: list[str] = field(default_factory=list)
+    # Optional per-call risk: e.g. pressing a "Delete" button is danger even if the tool is write.
+    risk: Callable[[dict], Tier] | None = None
+
+    def tier_for(self, args: dict) -> Tier:
+        if self.risk is None:
+            return self.tier
+        t = self.risk(args)
+        return t if TIERS.index(t) > TIERS.index(self.tier) else self.tier
 
     def spec(self) -> dict:
         """Ollama / OpenAI-style function spec."""

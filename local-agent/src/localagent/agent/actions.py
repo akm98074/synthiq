@@ -39,6 +39,11 @@ GUIDE = """You can act on the user's computer with the tools provided.
 - Web: open pages with browser_open and act on elements by their [number]. browser_click and
   browser_type never submit; use browser_submit for anything that sends, books, pays or deletes
   (the app asks the user). Never type passwords; ask the user to do it in the browser window.
+- Forms: after browser_open, browser_fill_form fills fields from what you know about the user; then
+  tell the user to check the window. Never submit without the user asking.
+- Mac apps: prefer one of the user's Shortcuts (shortcuts_list / shortcuts_run) when one fits.
+  Otherwise app_ui_read, then app_ui_press by number; read again after each press.
+- Screen: screen_now reads what the user is looking at; screen_recent searches the last few hours.
 - Custom skills (tools named skill_…) are the user's own abilities; prefer them when they fit.
 - When you list items a tool returned (events, reminders, emails, files), include every item:
   never drop, merge or summarise away entries, even near-duplicates from different calendars.
@@ -127,7 +132,7 @@ class ActionRun:
                 yield {"type": "tool_result", "tool": name, "tier": tool.tier, "ok": False,
                        "display": f"{name}: {exc}", "args": fn.get("arguments")}
                 continue
-            if self.rt.policy.needs_approval(tool, self.task_id, tainted=self.tainted):
+            if self.rt.policy.needs_approval(tool, self.task_id, tainted=self.tainted, args=args):
                 note = ("Asked after reading content that tried to instruct the agent; check it carefully."
                         if self.tainted and tool.tier in ("write", "danger") else None)
                 ap = self.rt.policy.request(tool, args, self.task_id, self.state(calls[idx + 1:]), note)

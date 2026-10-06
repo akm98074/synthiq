@@ -64,6 +64,15 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
             add("messages (Full Disk Access)", False,
                 str(exc) if "Full Disk Access" in str(exc) else f"{exc}", warn=True)
 
+    if sys.platform == "darwin" and s.screen_context_enabled:
+        from .connectors.screen import screen_permission
+
+        state = screen_permission()
+        add("screen context", bool(state),
+            "allowed" if state else ("screen add-on missing: pipx inject localaiagent pyobjc-framework-Vision "
+                                     "pyobjc-framework-Quartz" if state is None else "not allowed; run: localagent screen-access"),
+            warn=True)
+
     client = OllamaClient(s.ollama_url, timeout=5)
     try:
         version = await client.version()

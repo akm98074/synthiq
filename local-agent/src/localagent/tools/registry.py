@@ -7,7 +7,9 @@ from ..config import Settings
 from ..connectors.documents import document_tools
 from ..connectors.files import FileSpace, file_tools, parse_roots
 from ..connectors.mac import calendar_tools, contacts_tools, mail_tools, notes_tools, reminder_tools
+from ..connectors.apps import apps_tools
 from ..connectors.browser import browser_tools
+from ..connectors.screen import screen_tools
 from ..connectors.messages import ContactNames, IMessages, WhatsApp, messages_tools, present
 from ..skills import skill_tools
 from .base import Tool
@@ -27,6 +29,12 @@ CONNECTORS = [
      "about": "Read iMessage/SMS and WhatsApp chats, find ones waiting on your reply, and reply "
               "(iMessage sends after you approve; WhatsApp opens with the reply typed for you to send). "
               "Needs Full Disk Access for Terminal."},
+    {"id": "apps", "name": "Mac apps & Shortcuts", "mac": True, "setting": "enable_apps",
+     "about": "Open apps, read and press buttons in their windows, type, and run your Shortcuts. Pressing and "
+              "typing ask first. Needs Accessibility permission for Terminal."},
+    {"id": "screen", "name": "Screen context", "mac": True, "setting": "screen_context_enabled",
+     "about": "Off unless you turn it on. Reads the text on your screen every few minutes with on-device OCR "
+              "(the picture is deleted at once), skips private apps, and forgets it after a couple of hours."},
     {"id": "files", "name": "Files", "mac": False, "setting": "enable_files",
      "about": "Find, list, move, open and trash files in the allowed folders."},
     {"id": "browser", "name": "Browser", "mac": False, "setting": "enable_browser",
@@ -48,13 +56,15 @@ TEST_CALLS = {
     "mail": ("mail_list", {"limit": 1}),
     "contacts": ("contacts_find", {"name": "a", "limit": 1}),
     "messages": ("messages_list", {"limit": 3}),
+    "apps": ("apps_list", {}),
+    "screen": ("screen_now", {}),
     "files": ("files_list", {"folder": "~/Downloads", "limit": 3}),
     "documents": None,
 }
 
 
 def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None, browser=None,
-                skills_dir: Path | None = None) -> dict[str, Tool]:
+                skills_dir: Path | None = None, screen=None) -> dict[str, Tool]:
     tools: list[Tool] = []
     if mac_available:
         if settings.enable_calendar:
@@ -69,6 +79,10 @@ def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None, 
             tools += contacts_tools(runner)
         if settings.enable_messages:
             tools += messages_tools(runner, *message_sources(settings), settings.messages_include_groups)
+        if settings.enable_apps:
+            tools += apps_tools(runner)
+        if settings.screen_context_enabled and screen is not None:
+            tools += screen_tools(screen)
     if settings.enable_files:
         tools += file_tools(FileSpace(parse_roots(settings.file_roots)))
     if settings.enable_documents:

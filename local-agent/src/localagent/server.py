@@ -287,6 +287,20 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         r.audit.append("connector_test", name, tool.tier, args, "ok", result.display)
         return {"ok": True, "message": result.display}
 
+    @app.get("/api/screen")
+    async def screen_status() -> dict:
+        r = rt()
+        return {"enabled": r.settings.screen_context_enabled, "kept": r.screen.count(),
+                "permission": r.screen.permission() if r.mac_available else None,
+                "retention_minutes": r.settings.screen_retention_minutes}
+
+    @app.delete("/api/screen")
+    async def screen_forget() -> dict:
+        r = rt()
+        n = r.screen.forget_all()
+        r.audit.append("screen_forgotten", outcome="ok", detail=f"{n} snapshot(s)")
+        return {"deleted": n}
+
     @app.get("/api/skills")
     async def skills() -> dict:
         from .skills import sandbox_available, skill_status

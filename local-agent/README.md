@@ -4,11 +4,11 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 5b (v0.6.0) — web tasks and custom skills
+## Status: Step 5 complete (v0.7.0) — acting on the computer
 
 | Included | Comes later |
 |---|---|
-| Chat with streaming replies | Mac app actions, screen context, form filling (Step 5c) |
+| Chat with streaming replies | Telegram / iMessage channel to talk to the agent from your phone (Step 6) |
 | Decision layer (intent, memorable?, complexity; should-nudge, urgency) with probabilities and an eval harness | Telegram / iMessage (Step 6) |
 | Persistent memory, `about-me.md` identity file, edit and forget | Agent-to-agent, avatar, Windows/Linux (Step 7) |
 | **Connectors**: Calendar, Reminders, Notes, Mail, Contacts, Files, Documents (PDF/Excel) | |
@@ -19,12 +19,15 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Prompt-injection guard** on mail, chat and web content | |
 | **Browser**: the agent's own Chrome window; read pages, click, fill in, search. Submitting, booking or paying asks every time | |
 | **Custom skills**: your own SKILL.md folders, scripts sandboxed (`localagent skill new NAME`) | |
+| **Mac apps & Shortcuts**: open apps, read and press their buttons, type, run your Shortcuts (pressing asks first) | |
+| **Form filling from memory** in the agent's browser; you review, nothing is submitted for you | |
+| **Screen context** (opt-in): on-device OCR of your screen, private apps skipped, forgotten after 2 hours | |
 | Learning from your corrections; model manager; persona settings | |
 
 ## Install (Apple Silicon Mac, 16 GB+)
 
 ```bash
-bash install.sh localaiagent-0.6.0-py3-none-any.whl
+bash install.sh localaiagent-0.7.0-py3-none-any.whl
 localagent start
 ```
 
@@ -35,7 +38,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.6.0-py3-none-any.whl
+pipx install ./localaiagent-0.7.0-py3-none-any.whl
 localagent setup
 localagent start
 ```
@@ -50,6 +53,7 @@ localagent start
 | `localagent doctor` | Check Ollama, models, RAM, data directory |
 | `localagent setup --voice` | Download the speech-recognition model |
 | `localagent setup --browser` | Prepare the browser (uses Google Chrome, or downloads Chromium) |
+| `localagent screen-access` | Ask macOS for Screen Recording permission (for screen context) |
 | `localagent skill new NAME` / `skill list` | Create a custom skill from a template / list skills and problems |
 | `localagent autostart on\|off\|status` | Start the agent at login (optional) |
 | `localagent eval decision [--file my.jsonl] [--backend hybrid\|prototype\|slm\|systemone]` | Phase-0 gate: accuracy, macro-F1, calibration (ECE), latency |

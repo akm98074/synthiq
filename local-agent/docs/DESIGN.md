@@ -1,6 +1,6 @@
 # LocalAIAgent: design document
 
-**Version:** 0.6.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
+**Version:** 0.7.0 (Steps 1–4 of 7) · **Platform:** Apple Silicon Mac, 16 GB+ · **Companion docs:** [`PLAN.md`](PLAN.md) (research, feasibility, roadmap), [`../UPGRADING.md`](../UPGRADING.md), [`../TESTING.md`](../TESTING.md)
 
 ---
 
@@ -206,6 +206,9 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
 | Browser | `browser_open` (draft), `browser_read` (read), `browser_click`, `browser_type` (draft), `browser_submit` (danger) | Playwright on a persistent profile in the data folder; Google Chrome (`channel="chrome"`), else Playwright's Chromium |
 | Custom skills | `skill_<name>` (tier from SKILL.md; at least write when `network: true`) | Folder with `SKILL.md`; scripts run under `sandbox-exec` |
+| Mac apps & Shortcuts | `apps_list`, `app_ui_read`, `shortcuts_list` (read), `app_open` (draft), `app_ui_press` (write; danger for Delete/Send/Buy… labels), `app_type_text`, `shortcuts_run` (write) | AppleScript: System Events (Accessibility) and Shortcuts Events |
+| Screen context (opt-in) | `screen_now`, `screen_recent` (read) | `screencapture` → Vision OCR (pyobjc), image deleted at once; text kept in `screen_snapshots` |
+| Forms | `browser_fill_form` (draft) | The chat model maps memories to the current page's fields; values are typed in, never submitted |
 | Messages | `messages_list`, `messages_read` (read), `whatsapp_open_draft` (draft), `imessage_send` (write) | Read-only SQLite on `chat.db` and WhatsApp's `ChatStorage.sqlite` (Full Disk Access); send via Messages AppleScript; WhatsApp via the `whatsapp://send` link |
 
 - **AppleScript safety:** the scripts are bundled files in `connectors/scripts/` and run with `osascript -`. All arguments are passed as **argv**, never pasted into script text, so model or user text can't inject AppleScript.
@@ -233,6 +236,19 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
   - Script skills get their arguments as JSON on stdin, run with `cwd` set to the skill folder and `HOME`/`TMPDIR` set to its `work/` folder, a minimal environment and a timeout. Output is capped at 20,000 characters.
   - On macOS they run under `sandbox-exec` with: `(deny network*)` unless `network: true`; file writes only to `work/` and temp folders; and reads denied for Mail, Messages, Keychains, Cookies, Safari, Group Containers, AddressBook, Chrome, the agent's data, `~/.ssh`, `~/.aws`, `~/.gnupg` and `~/.config/gh`. Without a sandbox (non-macOS), script skills refuse to run unless `skills_require_sandbox` is off (tests only).
   - The Connectors tab rescans the folder. A message mentioning a skill's name offers the tools even for quick questions.
+- **Mac apps (Step 5c, `connectors/apps.py`):**
+  - `ui_snapshot.applescript` walks `entire contents of window 1` (up to 400 items). Python keeps interactive roles (button, checkbox, text field, tab, menu item…) plus static text, and shows up to 150, numbered by their position.
+  - `ui_press.applescript` re-reads the window and checks the element's role and name are unchanged before `AXPress`. Otherwise it says "The window changed".
+  - Password managers, Keychain Access, System Settings, terminals and the agent itself are refused. Accessibility errors (-1719, -25211) become the permission steps.
+- **Per-call risk:** a `Tool` may define `risk(args)`. `Tool.tier_for(args)` takes the higher of that and the declared tier. The policy uses it to decide approval, and the approval row stores it (so a "Delete" press allows only "once"). If the element isn't known, the press counts as danger.
+- **Screen context (`connectors/screen.py`):**
+  - Off by default. When on, a "screen" job runs every `screen_every_minutes`. `snap()` runs `front_app`, then:
+    - skips the lock screen and apps on `screen_blocklist`;
+    - checks `CGPreflightScreenCaptureAccess`;
+    - runs `screencapture -x` to a temp file, OCRs it with `VNRecognizeTextRequest` (accurate), and deletes the file in a `finally`;
+    - keeps the text (up to 8,000 characters), deduplicated by SHA-256 of app, title and text.
+  - Rows older than `screen_retention_minutes` are purged on every capture and read. Turning the feature off, or `DELETE /api/screen`, deletes all of them. Screen text is `untrusted`.
+- **Form filling (`connectors/forms.py`):** fillable fields are text, email, number and similar inputs, text areas and selects; never passwords, buttons, checkboxes or files. Fields whose label mentions passwords, card numbers, CVV, expiry, IBAN, SSN or one-time codes are left out of the prompt. The model gets the memories and fields and returns `{ref, value, source}` under a JSON schema. Unknown refs, empty values and select values that aren't real options are dropped. Nothing is clicked.
 - **Files:** every path is resolved and checked to be inside `file_roots` (default `~/Downloads`, `~/Desktop`, `~/Documents`). Trash moves files to `~/.Trash`, so they can be recovered.
 
 ---
@@ -325,6 +341,7 @@ mic (browser) ─ Web Audio ScriptProcessor ─ energy VAD ─ downsample → 16
 | PDFs / spreadsheets the agent makes | `~/Documents/LocalAIAgent/` | No |
 | Audio | In memory only, during transcription; never written to disk | No |
 | Calendar/Mail/Contacts content | Read on demand through the Apple apps; only what a tool returns is kept (in messages or the audit summary) | No |
+| Screen text (opt-in) | `screen_snapshots` table, deleted after 2 hours; screenshots are deleted immediately after OCR | No |
 | iMessage/WhatsApp history | Read on demand, read-only, from the apps' own databases; never copied in bulk | No (a sent iMessage goes through Apple, as if you sent it) |
 
 Network access happens only for **model downloads**: Ollama pulls from ollama.com, and the Whisper model comes from Hugging Face (anonymous; the "unauthenticated" warning is harmless). The optional `systemone` backend talks to a server you run on localhost.
@@ -345,6 +362,8 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 | `enable_messages` / `enable_whatsapp` / `messages_include_groups` | on / on / off | Messages connector |
 | `enable_browser` / `browser_headless` / `browser_executable` | on / off / (Chrome, else Chromium) | Browser |
 | `enable_skills` / `skills_require_sandbox` | on / on | Custom skills |
+| `enable_apps` | on | Mac apps & Shortcuts |
+| `screen_context_enabled` / `screen_every_minutes` / `screen_retention_minutes` / `screen_blocklist` | off / 5 / 120 / password managers, Messages, WhatsApp, Signal, FaceTime | Screen context |
 | `file_roots` | ~/Downloads, ~/Desktop, ~/Documents | Files connector boundary |
 | `brief_time` / `dream_time` / `check_every_minutes` | 08:00 / 03:00 / 30 | Proactive schedule |
 | `quiet_start` / `quiet_end` / `max_nudges_per_day` | 22:00 / 07:30 / 6 | Interruption policy |
@@ -354,7 +373,7 @@ Network access happens only for **model downloads**: Ollama pulls from ollama.co
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 104 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 115 pytest tests (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.
@@ -368,6 +387,7 @@ Known limits:
 - The decision percentages aren't calibrated probabilities (see 4.8).
 - Without calendar Full Access, repeating events are expanded from their rules. A moved single occurrence can appear at both times, and rules dateutil can't parse are skipped.
 - Mail search covers the Inbox only.
+- Driving unknown app windows with a 4B model is unreliable; Shortcuts are the dependable path. `entire contents` can be slow on large windows.
 - Browser tasks with a 4B model work for short flows; long checkouts and sites with bot checks often fail. The element list is capped at 120 per page.
 - WhatsApp reading uses an undocumented local database and only sees chats synced to WhatsApp Desktop. WhatsApp replies must be sent by the user.
 - Proactivity runs only while the Mac is awake and the agent is running.

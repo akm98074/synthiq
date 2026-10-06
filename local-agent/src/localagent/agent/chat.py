@@ -97,7 +97,8 @@ TOOL_HINTS = re.compile(
     r"\b(calendar|meeting|event|remind|reminders?|notes?|mail|e-?mail|inbox|send|files?|folders?|"
     r"downloads?|desktop|documents?|pdf|spreadsheet|excel|xlsx|contacts?|phone number|save|"
     r"messages?|imessages?|texts?|sms|whatsapp|chats?|repl(y|ies|ied)|browser|website|web ?page|"
-    r"site|url|online|google|search the web|skills?)\b|https?://|www\.|\.(com|org|net|io)\b",
+    r"site|url|online|google|search the web|skills?|screen|window|apps?|shortcuts?|forms?|fill in|"
+    r"button|click|press)\b|https?://|www\.|\.(com|org|net|io)\b",
     re.IGNORECASE,
 )
 

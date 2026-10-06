@@ -2,6 +2,47 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
 
+## From 0.6.0 to 0.7.0 (Step 5c: Mac apps, screen context, form filling)
+
+1. Put the new files in one folder, open Terminal there, and run (no `sudo`):
+
+   ```bash
+   bash install.sh localaiagent-0.7.0-py3-none-any.whl
+   localagent version
+   ```
+
+   The last line should print `0.7.0`.
+2. Allow **Accessibility** so the agent can read and press buttons in other apps:
+   - Open **System Settings → Privacy & Security → Accessibility**.
+   - Turn on **Terminal**. If it isn't listed, click **+** and choose **Applications → Utilities → Terminal**.
+3. Optional: **screen context** is off unless you turn it on. To use it, run:
+
+   ```bash
+   localagent screen-access
+   ```
+
+   Then allow **Terminal** under **Privacy & Security → Screen & System Audio Recording**.
+4. **Quit Terminal completely** (Cmd+Q), open it again, and start the agent:
+
+   ```bash
+   localagent start
+   ```
+
+5. For screen context, turn on **Settings → Screen context → Let the agent read the text on my screen**, then **Save**.
+
+### What changed in 0.7.0
+
+- **Mac apps and Shortcuts.** Ask "what apps are open?", "run my Focus shortcut" or "in Notes, make the title bold".
+  - The agent prefers your **Shortcuts** when one fits, because they're reliable. Otherwise it reads the app's window and presses buttons by number.
+  - Pressing, typing and running a Shortcut ask first. Buttons such as Delete, Send or Buy ask every time.
+  - It never operates password managers, Keychain Access, System Settings or Terminal.
+- **Form filling from memory.** Open a page with a form, then say "fill in the form for me". The agent fills in what it knows (name, email, address…) and lists what it used and what's left.
+  - It never fills in passwords, card numbers, security codes or ID numbers, and **never submits**. Submitting is the usual danger approval.
+- **Screen context (opt-in).** When on, the agent reads the text on your screen every 5 minutes with Apple's on-device OCR. The screenshot is deleted at once, and only the text is kept, for 2 hours.
+  - It skips password managers, Messages, WhatsApp, Signal and FaceTime (edit the list in Settings), and the lock screen.
+  - Ask "what's on my screen?" or "what was that article about kettles I was reading earlier?". **Forget screen history now** clears it.
+- Each request can now be judged by what it actually does: pressing a "Delete" button counts as a danger action even though pressing other buttons doesn't.
+
 ## From 0.5.0 to 0.6.0 (Step 5b: browser and custom skills)
 
 1. Put the new files in one folder, open Terminal there, and run (no `sudo`):

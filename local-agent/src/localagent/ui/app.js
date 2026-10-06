@@ -655,6 +655,13 @@ $("#roots-form").addEventListener("submit", async (e) => {
   loadConnectors();
 });
 
+$("#forget-screen").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/screen", { method: "DELETE" });
+    $("#screen-status").textContent = `Forgot ${r.deleted} snapshot(s).`;
+  } catch (err) { $("#screen-status").textContent = err.message; }
+});
+
 /* ── boot ─────────────────────────────────────────────────────────────── */
 async function boot() {
   try {

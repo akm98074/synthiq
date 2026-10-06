@@ -188,6 +188,14 @@
           <label>Overnight memory review at <input name="dream_time" type="time"></label>
           <label class="check"><input type="checkbox" name="notify_macos"> Show macOS notifications</label>
         </fieldset>
+        <fieldset><legend>Screen context (off unless you turn it on)</legend>
+          <label class="check"><input type="checkbox" name="screen_context_enabled"> Let the agent read the text on my screen</label>
+          <label>Look every (minutes) <input name="screen_every_minutes" type="number" min="1" max="120"></label>
+          <label>Forget what it read after (minutes) <input name="screen_retention_minutes" type="number" min="5" max="1440"></label>
+          <label>Never read these apps (comma-separated) <input name="screen_blocklist"></label>
+          <div class="row" style="margin-top:10px"><button type="button" class="secondary" id="forget-screen">Forget screen history now</button>
+            <span id="screen-status" class="muted small"></span></div>
+        </fieldset>
         <fieldset><legend>Voice</legend>
           <label class="check"><input type="checkbox" name="voice_enabled"> Enable voice</label>
           <label class="check"><input type="checkbox" name="speak_replies"> Speak replies to voice messages</label>

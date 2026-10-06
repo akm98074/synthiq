@@ -81,10 +81,12 @@ class Policy:
         store.execute("UPDATE approvals SET status='expired' WHERE status='pending'")
 
     # ── decisions ─────────────────────────────────────────────────────────
-    def needs_approval(self, tool: Tool, task_id: int | None, tainted: bool = False) -> bool:
-        if tool.tier in ("read", "draft"):
+    def needs_approval(self, tool: Tool, task_id: int | None, tainted: bool = False,
+                       args: dict | None = None) -> bool:
+        tier = tool.tier_for(args or {})
+        if tier in ("read", "draft"):
             return False
-        if tool.tier == "danger" or tainted:
+        if tier == "danger" or tainted:
             # After a suspected prompt injection, standing grants don't apply.
             return True
         return self.matching_grant(tool.name, task_id) is None
@@ -111,7 +113,7 @@ class Policy:
         cur = self.store.execute(
             "INSERT INTO approvals(created_at, tool, tier, args, summary, task_id, state)"
             " VALUES (?,?,?,?,?,?,?)",
-            (time.time(), tool.name, tool.tier, json.dumps(args), summary, task_id,
+            (time.time(), tool.name, tool.tier_for(args), json.dumps(args), summary, task_id,
              json.dumps(state)),
         )
         return self.get(int(cur.lastrowid))
