@@ -166,6 +166,17 @@ class IMessageChannel:
     async def respond(self, text: str) -> str:
         from ..agent.chat import handle_turn, resume_after_decision
 
+        cmd = text.strip().lower().rstrip(".!")
+        if cmd in ("pause", "stop everything"):
+            await self.rt.apply_settings({"paused": True})
+            self.rt.audit.append("settings_changed", "paused", outcome="sensitive", detail="False → True (by iMessage)")
+            return "Paused. I won't do anything until you reply “resume”."
+        if self.rt.settings.paused:
+            if cmd == "resume":
+                await self.rt.apply_settings({"paused": False})
+                self.rt.audit.append("settings_changed", "paused", outcome="ok", detail="True → False (by iMessage)")
+                return "Resumed."
+            return "I'm paused. Reply “resume” to turn me back on (or use the Trust center in the app)."
         pending = self._pending()
         if pending and (YES.match(text) or NO.match(text)):
             approve = bool(YES.match(text))
@@ -214,6 +225,8 @@ class IMessageChannel:
         for part in chunks(text):
             body = (MARK + part) if self.mode == "self" else part
             await self.runner.run("messages_send", [body, handle, *imessage_targets(m["guid"])])
+        self.rt.audit.append("channel_reply", "imessage", outcome="ok",
+                             args={"to": handle or "group", "chars": len(text)}, detail=text[:300])
 
     async def forward_test(self, owner: str) -> None:
         name = self.rt.settings.agent_name
@@ -230,3 +243,5 @@ class IMessageChannel:
         text = plain(f"{title}\n{body}".strip())
         for part in chunks(text):
             await self.runner.run("messages_send", [(MARK + part) if self.mode == "self" else part, owner])
+        self.rt.audit.append("channel_forward", "imessage", outcome="ok", args={"to": owner, "kind": kind},
+                             detail=text[:300])

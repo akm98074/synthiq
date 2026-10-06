@@ -13,6 +13,8 @@ from pathlib import Path
 import platformdirs
 
 DECISION_BACKENDS = ("hybrid", "prototype", "slm", "systemone")
+# Highest tool tier each trust preset allows (tools above it are refused, whatever is approved).
+AUTONOMY = {"observer": "read", "assistant": "draft", "agent": "danger"}
 
 
 def data_dir() -> Path:
@@ -141,6 +143,9 @@ class Settings:
     wake_word_enabled: bool = False     # "Hey <agent name>" while the app is open
     wake_phrases: str = ""              # extra phrases, comma-separated
     wake_model: str = "mlx-community/whisper-tiny.en-mlx"
+    # Trust center
+    paused: bool = False                # everything stops except answering you in the app (read-only)
+    autonomy: str = "agent"             # observer: look only · assistant: + drafts · agent: + actions you approve
 
     def update(self, values: dict) -> "Settings":
         """Apply and validate on a copy first, so a rejected update leaves nothing half-applied."""
@@ -179,6 +184,8 @@ class Settings:
                 raise ValueError(f"{name} must be a time like 08:00")
         if self.cloud_effort not in ("low", "medium", "high", "xhigh", "max"):
             raise ValueError("cloud_effort must be low, medium, high, xhigh or max")
+        if self.autonomy not in AUTONOMY:
+            raise ValueError(f"autonomy must be one of {', '.join(AUTONOMY)}")
         if self.imessage_channel_mode not in ("account", "self"):
             raise ValueError("imessage_channel_mode must be account or self")
         if self.calendar_backend not in ("auto", "eventkit", "applescript"):

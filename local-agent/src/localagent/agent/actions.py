@@ -131,6 +131,21 @@ class ActionRun:
                              approval_id, self.task_id)
         return result
 
+    def _beyond_ceiling(self, tier: str) -> str | None:
+        """Why a tier is refused by the Trust center's pause or preset, or None."""
+        from ..config import AUTONOMY
+        from ..tools.base import TIERS
+
+        s = self.rt.settings
+        ceiling = "read" if s.paused else AUTONOMY.get(s.autonomy, "danger")
+        if TIERS.index(tier) <= TIERS.index(ceiling):
+            return None
+        if s.paused:
+            return "The agent is paused (Trust center), so it only looks things up."
+        return {"observer": "The trust preset is Observer: the agent only looks, it doesn't act.",
+                "assistant": "The trust preset is Assistant: the agent prepares drafts but doesn't send or change "
+                             "anything."}.get(s.autonomy, "Not allowed by the trust preset.")
+
     def _user_text(self) -> str:
         return "\n".join(m.get("content") or "" for m in self.messages if m.get("role") == "user")
 
@@ -155,6 +170,12 @@ class ActionRun:
                 yield {"type": "tool_result", "tool": name, "tier": tool.tier, "ok": False,
                        "display": f"{name}: {exc}", "args": fn.get("arguments")}
                 continue
+            refused = self._beyond_ceiling(tool.tier_for(args))
+            if refused:
+                self._tool_message(name, f"Not done: {refused} Tell the user, and don't retry.")
+                self.rt.audit.append("tool_refused", tool.name, tool.tier, args, "refused", refused, None, self.task_id)
+                yield {"type": "tool_result", "tool": name, "tier": tool.tier, "ok": False, "display": refused}
+                continue
             risk = egress.risky(tool, args, tool.tier_for(args), self.read_untrusted,
                                 self._user_text(), self._seen_text())
             if self.rt.policy.needs_approval(tool, self.task_id, tainted=self.tainted, args=args,
@@ -175,7 +196,7 @@ class ActionRun:
                    "display": result.display, "data": result.data}
 
     async def _loop(self) -> AsyncIterator[dict]:
-        specs = [t.spec() for t in self.tools.values()]
+        specs = [t.spec() for t in self.tools.values() if not self._beyond_ceiling(t.tier)]
         max_steps = self.rt.settings.max_tool_steps
         while self.step < max_steps:
             self.step += 1

@@ -163,7 +163,8 @@ async def handle_turn(rt: "Runtime", text: str, channel: str = "app") -> AsyncIt
     past = [{"role": m["role"], "content": m["content"]} for m in history
             if m["role"] in ("user", "assistant")]
 
-    if channel != "phone" and wants_cloud(rt, text, complexity):
+    if (channel != "phone" and not rt.settings.paused and rt.settings.autonomy == "agent"
+            and wants_cloud(rt, text, complexity)):
         req = build_request(rt, text, history, memories)
         tool = cloud_tool(rt)
         args = {k: req[k] for k in ("question", "memories", "history_turns")}

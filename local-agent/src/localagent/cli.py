@@ -288,6 +288,32 @@ def app_status() -> None:
     typer.echo(f"{macapp.app_path()}: {'installed' if macapp.installed() else 'not installed'}")
 
 
+def _set_paused(paused: bool) -> None:
+    try:
+        r = _api("post", "/api/trust/pause", json={"paused": paused}, timeout=10)
+    except httpx.HTTPError:
+        typer.secho("The agent isn't running.", fg="yellow")
+        raise typer.Exit(1)
+    if r.status_code != 200:
+        typer.secho(r.text, fg="red")
+        raise typer.Exit(1)
+    typer.secho("Paused: the agent only answers you in the app, read-only. Resume with: localagent resume"
+                if paused else "Resumed.", fg="green")
+
+
+@app.command()
+def pause() -> None:
+    """Stop everything except answering you in the app (read-only): no actions, no background jobs,
+    no iMessage/phone/friends' agents."""
+    _set_paused(True)
+
+
+@app.command()
+def resume() -> None:
+    """Undo `localagent pause`."""
+    _set_paused(False)
+
+
 @app.command("open")
 def open_ui() -> None:
     """Open the agent's window in your browser (signed in)."""

@@ -126,6 +126,8 @@ def phone_app(rt: "Runtime") -> FastAPI:
             rt.audit.append("phone_rejected", "phone", outcome="rejected",
                             detail=f"call from {form.get('From')}: caller ID failed verification ({form['StirVerstat']})")
             return twiml(say("Sorry, this number is private."), "<Hangup/>")
+        if rt.settings.paused:
+            return twiml(say("The agent is paused. Goodbye."), "<Hangup/>")
         if not valid_pin(rt.vault.get(PIN) or ""):
             rt.audit.append("phone_rejected", "phone", outcome="rejected", detail="no phone PIN set")
             return twiml(say("This phone line needs a PIN first. Set one in the app, under Settings, "
@@ -187,6 +189,8 @@ def phone_app(rt: "Runtime") -> FastAPI:
             log.exception("phone turn failed")
         reply = speakable("".join(parts).strip(), limit=900) or "Sorry, I couldn't work that out."
         jobs[job]["text"] = reply
+        rt.audit.append("phone_answer", "phone", outcome="ok", args={"chars": len(reply)},
+                        detail=reply[:300])          # spoken by Twilio: this text leaves the computer
 
     @app.post("/twilio/result")
     async def result(request: Request, id: str = "") -> Response:

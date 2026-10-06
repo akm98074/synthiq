@@ -51,7 +51,7 @@ let questions = [];
 let settings = {};
 
 /* ── tabs ─────────────────────────────────────────────────────────────── */
-const loaders = { nudges: loadNudges, decisions: loadDecisions, memory: loadMemory, models: loadModels, settings: loadSettings,
+const loaders = { trust: loadTrust, nudges: loadNudges, decisions: loadDecisions, memory: loadMemory, models: loadModels, settings: loadSettings,
   approvals: loadApprovals, activity: loadActivity, connectors: loadConnectors };
 document.querySelectorAll(".tab").forEach((btn) =>
   btn.addEventListener("click", () => {
@@ -880,3 +880,166 @@ async function boot() {
   input.focus();
 }
 boot();
+
+/* ── trust & transparency ─────────────────────────────────────────────── */
+const PRESETS = [
+  ["observer", "Observer", "Looks things up and answers. Never creates, sends or changes anything."],
+  ["assistant", "Assistant", "Also prepares drafts (emails, events, forms) for you to finish. Never sends."],
+  ["agent", "Agent", "Also acts: sends, books, changes, always with your approval for anything that leaves or can't be undone."],
+];
+const whenTs = (ts) => (ts ? new Date(ts * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "never");
+let trustCache = null;
+
+function renderIndicators(o) {
+  const ind = [];
+  if (o.paused) ind.push(el("span", { class: "ind paused", title: "Paused: read-only, nothing runs in the background" }, "⏸ paused"));
+  const on = Object.fromEntries(o.capabilities.map((c) => [c.id, c.enabled]));
+  if (on.wake) ind.push(el("span", { class: "ind", title: "Listening for the wake word while this tab is open" }, "🎙"));
+  if (on.screen) ind.push(el("span", { class: "ind", title: "Screen context is on" }, "👁"));
+  if (on.cloud) ind.push(el("span", { class: "ind", title: "Cloud model allowed (each request asks)" }, "☁️"));
+  if (on.phone) ind.push(el("span", { class: "ind", title: "Phone line answering" }, "📞"));
+  if (on.peers) ind.push(el("span", { class: "ind", title: "Friends' agents can reach this computer" }, "🤝"));
+  $("#indicators").replaceChildren(...ind);
+  const btn = $("#pause-btn");
+  btn.textContent = o.paused ? "▶ Resume" : "⏸ Pause";
+  btn.classList.toggle("on", o.paused);
+}
+
+async function refreshTrustBits() {
+  try { trustCache = await api("/api/trust"); renderIndicators(trustCache); } catch (_) { return; }
+  // New install: personal connectors start off. Point to where they're switched on, once.
+  let seen = null;
+  try { seen = localStorage.getItem("la-trust-intro"); } catch (_) {}
+  const personal = ["mail", "messages", "contacts", "apps"];
+  const anyOn = trustCache.capabilities.some((c) => personal.includes(c.id) && (c.enabled || c.last_used));
+  if (!seen && !anyOn && trustCache.capabilities.some((c) => c.id === "mail" && c.available)) {
+    const b = $("#banner");
+    b.replaceChildren("Welcome! Mail, Messages, Contacts and Mac apps are off until you choose. ",
+      el("button", { type: "button", class: "secondary", onclick: () => {
+        try { localStorage.setItem("la-trust-intro", "1"); } catch (_) {}
+        b.classList.add("hidden"); document.querySelector("button[data-tab=trust]").click();
+      } }, "Choose what I can help with"));
+    b.classList.remove("hidden");
+  }
+}
+
+$("#pause-btn").addEventListener("click", async () => {
+  const paused = !(trustCache && trustCache.paused);
+  trustCache = await api("/api/trust/pause", { method: "POST", body: { paused } });
+  renderIndicators(trustCache);
+  if (document.querySelector("#tab-trust.active")) renderTrust(trustCache);
+});
+
+function trustRange() {
+  const q = new URLSearchParams();
+  if ($("#trust-since").value) q.set("since", $("#trust-since").value);
+  if ($("#trust-until").value) q.set("until", $("#trust-until").value);
+  return q;
+}
+
+function renderTrust(o) {
+  trustCache = o;
+  renderIndicators(o);
+  const choose = PRESETS.map(([id, name, about]) => {
+    const r = el("input", { type: "radio", name: "autonomy", value: id });
+    r.checked = o.autonomy === id;
+    r.addEventListener("change", async () => renderTrust(await api("/api/trust/autonomy", { method: "PUT", body: { autonomy: id } })));
+    return el("label", { class: o.autonomy === id ? "on" : "" }, r, " ", el("strong", {}, name), el("div", { class: "muted small" }, about));
+  });
+  const enabled = o.capabilities.filter((c) => c.enabled);
+  $("#trust-summary").replaceChildren(
+    el("div", { class: "big" }, o.paused ? "⏸ The agent is paused: it only answers you here, read-only."
+      : `Everything runs on this computer. ${o.egress_7d} thing${o.egress_7d === 1 ? "" : "s"} left it in the last 7 days.`),
+    el("div", { class: "muted small" }, `${enabled.length} of ${o.capabilities.filter((c) => c.available).length} capabilities on · `
+      + `secrets kept in ${o.vault} · version ${o.version}`),
+    el("div", { class: "presets" }, choose));
+
+  $("#trust-caps").replaceChildren(...o.capabilities.map((c) => {
+    const toggle = el("input", { type: "checkbox", "aria-label": `Turn ${c.name} on or off` });
+    toggle.checked = c.enabled;
+    toggle.disabled = !c.available;
+    toggle.addEventListener("change", async () => {
+      let forget = false;
+      if (!toggle.checked && ["screen", "gmail", "cloud", "phone", "peers", "imessage_channel"].includes(c.id)) {
+        forget = confirm(`Also delete what the agent keeps for ${c.name} (sign-ins, keys, pairings, cached text)?`);
+      }
+      try {
+        const r = await api(`/api/trust/capability/${c.id}`, { method: "POST", body: { enabled: toggle.checked, forget } });
+        if (r.forgotten?.length) alert(`Deleted: ${r.forgotten.join(", ")}`);
+        renderTrust(r);
+      } catch (err) { toggle.checked = !toggle.checked; alert(err.message); }
+    });
+    const perms = c.permissions.map((p) => p.link
+      ? el("a", { href: p.link, title: "Open this page of System Settings" }, p.name) : p.name);
+    return el("div", { class: `card cap ${c.enabled ? "" : "off"}` },
+      toggle,
+      el("div", { class: "cap-body" },
+        el("div", {}, el("strong", {}, c.name), " ", el("span", { class: `risk ${c.risk}` }, `${c.risk} risk`),
+          c.note ? el("span", { class: "muted small" }, ` · ${c.note}`) : null),
+        el("div", { class: "lines" },
+          el("div", {}, el("b", {}, "Reads: "), c.reads),
+          el("div", {}, el("b", {}, "Can leave this computer: "), c.leaves),
+          el("div", {}, el("b", {}, "Risk: "), c.risk_text),
+          el("div", {}, el("b", {}, "Safeguards: "), c.safeguards),
+          perms.length ? el("div", {}, el("b", {}, "System permission: "), ...perms.flatMap((x, i) => (i ? [", ", x] : [x]))) : null)),
+      el("div", { class: "cap-meta" }, `last used ${whenTs(c.last_used)}`, el("br"), `${c.uses_7d} use${c.uses_7d === 1 ? "" : "s"} this week`));
+  }));
+
+  $("#trust-posture").replaceChildren(...o.posture.map((p) => el("div", { class: "card check-row" },
+    el("span", { class: "mark" }, p.ok === true ? "✅" : p.ok === false ? "⚠️" : "❔"),
+    el("div", {}, el("strong", {}, p.name), el("div", { class: "muted small" }, p.detail),
+      p.fix ? el("div", { class: "small" }, `Fix: ${p.fix}`) : null))));
+
+  $("#trust-grants").replaceChildren(...(o.grants.length ? o.grants.map((g) => el("div", { class: "card card-row" },
+    el("span", {}, el("strong", {}, g.tool), " · ", g.label,
+      g.expires_at ? el("span", { class: "muted small" }, ` · until ${whenTs(g.expires_at)}`) : null),
+    el("button", { type: "button", class: "ghost", onclick: async () => {
+      await api(`/api/grants/${g.id}`, { method: "DELETE" }); loadTrust();
+    } }, "Revoke"))) : [el("p", { class: "muted small" }, "None. Everything that needs your OK will ask.")]));
+}
+
+async function loadEgress() {
+  const rows = await api(`/api/trust/egress?${trustRange()}`);
+  $("#trust-egress").replaceChildren(...(rows.length ? rows.slice(0, 100).map((e) => el("div", { class: "card egress-row" },
+    el("span", { class: "muted" }, whenTs(e.ts)),
+    el("span", {}, el("strong", {}, e.what), " → ", e.to,
+      e.approved === true ? el("span", { class: "badge tier-read" }, " you approved") : e.approved === false && e.tier !== "read" && e.tier !== "draft"
+        ? el("span", { class: "badge tier-write" }, " standing permission") : null),
+    e.content ? el("span", { class: "content" }, e.content.slice(0, 300)) : null))
+    : [el("p", { class: "muted small" }, "Nothing left this computer in this period.")]));
+}
+
+async function loadTrust() {
+  renderTrust(await api("/api/trust"));
+  await loadEgress();
+}
+
+$("#trust-run-checks").addEventListener("click", async () => {
+  const box = $("#trust-checks");
+  box.replaceChildren(el("p", { class: "muted small" }, "Checking…"));
+  try {
+    const r = await api(`/api/trust/checks?${trustRange()}`);
+    const icon = { critical: "⛔", high: "⚠️", medium: "⚠️", info: "ℹ️", ok: "✅" };
+    box.replaceChildren(
+      el("p", { class: "muted small" }, `${r.entries} log entries and ${r.egress} outgoing item(s) checked. ${r.not_covered}`),
+      ...r.findings.map((f) => el("div", { class: `card finding ${f.severity}` },
+        el("div", {}, `${icon[f.severity] || "•"} `, el("strong", {}, f.title), el("span", { class: "muted small" }, ` · ${f.severity}`)),
+        f.detail ? el("div", { class: "small" }, f.detail) : null,
+        f.items.length ? el("ul", {}, f.items.map((i) => el("li", {}, i))) : null)));
+    loadEgress();
+  } catch (err) { box.replaceChildren(el("p", { class: "muted small" }, err.message)); }
+});
+
+$("#trust-download").addEventListener("click", () => {
+  const q = trustRange();
+  if (!$("#trust-redact").checked) {
+    if (!confirm("This record will contain your personal data as-is: email addresses, phone numbers, names, "
+      + "message text. Only share it with someone you trust. Continue?")) return;
+    q.set("raw", "true"); q.set("confirm_raw", "yes");
+  }
+  const a = el("a", { href: `/api/trust/export?${q}`, download: "" });
+  document.body.append(a); a.click(); a.remove();
+});
+
+refreshTrustBits();
+setInterval(refreshTrustBits, 60000);

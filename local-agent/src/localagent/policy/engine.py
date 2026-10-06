@@ -81,7 +81,7 @@ def preview_of(tool: Tool, args: dict) -> str:
     e = describe(tool, args)
     lines = []
     if e:
-        lines.append(f"Goes to: {e.get('to') or '?'}  ({e.get('what', '')})")
+        lines.append(f"Goes to: {e.get('to') or '?'} · {e.get('what', '')}")
         if e.get("url"):
             lines.append(f"Address: {e['url']}")
     for k, v in args.items():

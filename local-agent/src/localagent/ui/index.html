@@ -9,8 +9,11 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="dot" id="status-dot" title="checking"></span><span id="agent-name">LocalAIAgent</span></div>
+    <div class="brand"><span class="dot" id="status-dot" title="checking"></span><span id="agent-name">LocalAIAgent</span>
+      <span id="indicators" class="indicators" aria-live="polite"></span>
+      <button type="button" id="pause-btn" class="pause-btn" title="Stop everything except answering you here (read-only)">⏸ Pause</button></div>
     <nav class="tabs" role="tablist">
+      <button class="tab" data-tab="trust">Trust</button>
       <button class="tab active" data-tab="chat">Chat</button>
       <button class="tab" data-tab="nudges">Nudges <span id="nudge-badge" class="count hidden">0</span></button>
       <button class="tab" data-tab="approvals">Approvals <span id="pending-badge" class="count hidden">0</span></button>
@@ -26,6 +29,38 @@
   <div id="banner" class="banner hidden"></div>
 
   <main>
+    <!-- Trust & Transparency -->
+    <section id="tab-trust" class="panel">
+      <div class="panel-head">
+        <h2>Trust &amp; Transparency</h2>
+        <p class="muted">Everything the agent can reach, what each one risks, what it did, and what left this computer. Switch anything off here. Download a record for any time window to check it yourself, or to have another AI (Claude, ChatGPT) review it.</p>
+      </div>
+      <div id="trust-summary" class="card trust-summary"></div>
+      <h3>What the agent can do</h3>
+      <div id="trust-caps" class="list"></div>
+      <h3>Safety checks</h3>
+      <div id="trust-posture" class="list"></div>
+      <h3>What left this computer</h3>
+      <p class="muted small">Every search, page, message, email or answer that went out, newest first (last 7 days unless you pick dates below).</p>
+      <div id="trust-egress" class="list"></div>
+      <h3>Standing permissions</h3>
+      <div id="trust-grants" class="list"></div>
+      <h3>Verify &amp; export</h3>
+      <div class="card">
+        <div class="row" style="flex-wrap:wrap;gap:10px;align-items:flex-end">
+          <label>From <input type="date" id="trust-since"></label>
+          <label>To <input type="date" id="trust-until"></label>
+          <label class="check"><input type="checkbox" id="trust-redact" checked> Hide personal data (emails, numbers, names, keys)</label>
+        </div>
+        <div class="row" style="margin-top:10px;flex-wrap:wrap">
+          <button type="button" class="secondary" id="trust-run-checks">Run checks</button>
+          <button type="button" class="primary" id="trust-download">Download record (.zip)</button>
+        </div>
+        <p class="muted small">The zip holds your settings (never secrets), the activity log, approvals, everything that left, an integrity check and a ready-made prompt for a reviewer. Nothing is uploaded: you decide where it goes.</p>
+        <div id="trust-checks" class="list" style="margin-top:8px"></div>
+      </div>
+    </section>
+
     <!-- Chat -->
     <section id="tab-chat" class="panel active">
       <div id="avatar" class="avatar hidden" aria-hidden="true">

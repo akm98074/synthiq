@@ -285,6 +285,8 @@ class Peers:
     async def _dispatch(self, peer: dict, body: dict) -> dict:
         kind = body.get("type")
         who = f"{peer['owner'] or peer['name']}'s agent"
+        if kind == "ask" and self.rt.settings.paused:
+            return {"type": "answer", "id": body.get("id"), "text": "This agent is paused right now."}
         if kind == "ask":
             ask = body.get("kind", "question")
             text = str(body.get("text", ""))[:2000]

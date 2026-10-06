@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime
 from contextlib import asynccontextmanager
 from importlib import resources
 from pathlib import Path
@@ -15,7 +16,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import __version__, security
+from . import __version__, security, trust
 from .agent.chat import handle_turn, resume_after_decision
 from .policy.engine import ApprovalError
 from .tools.base import ToolError
@@ -134,7 +135,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         if auth:
             h = request.headers
             denied = security.check(request.method, request.url.path, h.get("host"), h.get("origin"),
-                                    request.cookies.get(security.COOKIE), h.get("authorization"),
+                                    request.cookies.get(security.cookie_name(settings.port)), h.get("authorization"),
                                     settings.port, token, extra_host=settings.host)
             if denied:
                 status, reason = denied
@@ -158,7 +159,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             return HTMLResponse(_page("Link expired", "Open the app again with: localagent open"), 403)
         dest = next if next.startswith("/") and not next.startswith("//") else "/"
         resp = RedirectResponse(dest, 303)
-        resp.set_cookie(security.COOKIE, token, httponly=True, samesite="strict", path="/")
+        resp.set_cookie(security.cookie_name(settings.port), token, httponly=True, samesite="strict", path="/")
         return resp
 
     def rt(app_: FastAPI = app) -> Runtime:
@@ -692,8 +693,8 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         from .voice.wake import match, wake_phrases
 
         r = rt()
-        if not r.settings.wake_word_enabled:
-            raise HTTPException(409, "The wake word is off (Settings → Voice).")
+        if not r.settings.wake_word_enabled or r.settings.paused:
+            raise HTTPException(409, "The wake word is off (Settings → Voice, or the agent is paused).")
         try:
             audio = read_wav(await request.body())
         except AudioError as exc:
@@ -758,8 +759,9 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
     async def get_settings() -> dict:
         return rt().settings.to_dict()
 
-    @app.put("/api/settings")
-    async def put_settings(values: dict, request: Request) -> dict:
+    async def change_settings(values: dict, request: Request) -> dict:
+        """Apply settings like PUT /api/settings: security-sensitive changes need X-Confirm, every
+        change is audited, sensitive ones also raise a security nudge."""
         r = rt()
         risky = sensitive_changes(r.settings, values)
         confirmed = {k.strip() for k in request.headers.get("x-confirm", "").split(",") if k.strip()}
@@ -783,6 +785,81 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             await r.nudges.deliver("security", f"security:{time.time()}", "A security setting changed",
                                    "; ".join(f"{k}: {v[0]!r} → {v[1]!r}" for k, v in risky.items())[:300], 2)
         return after
+
+    @app.put("/api/settings")
+    async def put_settings(values: dict, request: Request) -> dict:
+        return await change_settings(values, request)
+
+    # ── trust & transparency center ───────────────────────────────────────
+    def window(since: str, until: str) -> tuple[float, float]:
+        def parse(v: str, default: float, end: bool = False) -> float:
+            if not v:
+                return default
+            try:
+                return float(v)
+            except ValueError:
+                pass
+            try:
+                d = datetime.fromisoformat(v)
+            except ValueError as exc:
+                raise HTTPException(400, f"Not a date: {v}") from exc
+            if end and len(v) <= 10:
+                d = d.replace(hour=23, minute=59, second=59)
+            return d.timestamp()
+
+        now = time.time()
+        a, b = parse(since, now - 7 * 86400), parse(until, now, end=True)
+        if a > b:
+            raise HTTPException(400, "The start is after the end.")
+        return a, b
+
+    @app.get("/api/trust")
+    async def trust_overview() -> dict:
+        return trust.overview(rt())
+
+    @app.post("/api/trust/capability/{cap_id}")
+    async def trust_capability(cap_id: str, body: dict, request: Request) -> dict:
+        r = rt()
+        cap = trust.CAP_BY_ID.get(cap_id)
+        if cap is None:
+            raise HTTPException(404, "Unknown capability")
+        enabled = bool(body.get("enabled"))
+        forgotten = trust.forget(r, cap_id) if (body.get("forget") and not enabled) else []
+        await change_settings({cap["setting"]: enabled}, request)
+        if forgotten:
+            r.audit.append("trust_forget", cap_id, outcome="ok", detail="; ".join(forgotten))
+        return {"forgotten": forgotten, **trust.overview(r)}
+
+    @app.post("/api/trust/pause")
+    async def trust_pause(body: dict, request: Request) -> dict:
+        await change_settings({"paused": bool(body.get("paused"))}, request)
+        return trust.overview(rt())
+
+    @app.put("/api/trust/autonomy")
+    async def trust_autonomy(body: dict, request: Request) -> dict:
+        await change_settings({"autonomy": str(body.get("autonomy", ""))}, request)
+        return trust.overview(rt())
+
+    @app.get("/api/trust/egress")
+    async def trust_egress(since: str = "", until: str = "") -> list[dict]:
+        a, b = window(since, until)
+        return trust.egress_ledger(rt(), a, b)[::-1]
+
+    @app.get("/api/trust/checks")
+    async def trust_checks(since: str = "", until: str = "") -> dict:
+        a, b = window(since, until)
+        return trust.checks(rt(), a, b)
+
+    @app.get("/api/trust/export")
+    async def trust_export(since: str = "", until: str = "", raw: bool = False, confirm_raw: str = "") -> Response:
+        if raw and confirm_raw != "yes":
+            raise HTTPException(400, "A raw export contains your personal data; confirm it first.")
+        a, b = window(since, until)
+        data, manifest = trust.export(rt(), a, b, raw=raw)
+        name = (f"localagent-activity-{manifest['window']['since_local'][:10]}_"
+                f"{manifest['window']['until_local'][:10]}{'-RAW' if raw else ''}.zip")
+        return Response(data, media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
 
     return app
 

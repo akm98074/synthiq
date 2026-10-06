@@ -95,7 +95,7 @@ class Runtime:
         from .proactive.jobs import job_specs  # local import: jobs imports the chat agent
 
         self.scheduler.register(job_specs(self))
-        self.scheduler.enabled = self.settings.proactive_enabled
+        self.scheduler.enabled = self.settings.proactive_enabled and not self.settings.paused
 
     async def notify(self, title: str, subtitle: str, body: str) -> None:
         if self.mac_available:

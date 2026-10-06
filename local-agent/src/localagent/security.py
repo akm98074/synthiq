@@ -22,7 +22,11 @@ import stat
 import sys
 from pathlib import Path
 
-COOKIE = "la_session"
+COOKIE = "la_session"          # + the port: browsers share cookies across ports of one host
+
+
+def cookie_name(port: int) -> str:
+    return f"{COOKIE}_{port}"
 TOKEN_FILE = "api-token"
 # The Gmail OAuth redirect arrives from Google (a cross-site navigation, so no SameSite cookie); it is
 # protected by its own single-use state and PKCE verifier instead.
