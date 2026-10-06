@@ -4,13 +4,13 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: Step 7f (v0.14.0) — call your agent
+## Status: Step 7g (v0.15.0) — Windows and Linux
 
 | Included | Comes later |
 |---|---|
-| Chat with streaming replies | Step 7: avatar, agent network, phone line, Windows/Linux |
-| Decision layer (intent, memorable?, complexity; should-nudge, urgency) with probabilities and an eval harness | Telegram / iMessage (Step 6) |
-| Persistent memory, `about-me.md` identity file, edit and forget | Agent-to-agent, avatar, Windows/Linux (Step 7) |
+| Chat with streaming replies | Further work: see `docs/PLAN.md` |
+| Decision layer (intent, memorable?, complexity; should-nudge, urgency) with probabilities and an eval harness | |
+| Persistent memory, `about-me.md` identity file, edit and forget | |
 | **Connectors**: Calendar, Reminders, Notes, Mail, Contacts, Files, Documents (PDF/Excel) | |
 | **Approvals** with risk tiers and scopes; hash-chained **Activity** log | |
 | **Proactivity**: morning brief, nudges (events, reminders, unreplied mail), quiet hours, overnight memory review | |
@@ -31,11 +31,12 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Form filling from memory** in the agent's browser; you review, nothing is submitted for you | |
 | **Screen context** (opt-in): on-device OCR of your screen, private apps skipped, forgotten after 2 hours | |
 | Learning from your corrections; model manager; persona settings | |
+| **Windows and Linux**: everything except the Apple apps (Calendar, Contacts, Messages, Mail, Notes, Reminders, Mac apps, screen context) | |
 
-## Install (Apple Silicon Mac, 16 GB+)
+## Install (Apple Silicon Mac, 16 GB+; Windows and Linux below)
 
 ```bash
-bash install.sh localaiagent-0.14.0-py3-none-any.whl
+bash install.sh localaiagent-0.15.0-py3-none-any.whl
 localagent start
 ```
 
@@ -46,10 +47,23 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.14.0-py3-none-any.whl
+pipx install ./localaiagent-0.15.0-py3-none-any.whl
 localagent setup
 localagent start
 ```
+
+### Windows 10/11 and Linux
+
+Windows, in a normal (not Administrator) PowerShell window, in the folder with the files:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.15.0-py3-none-any.whl
+localagent start
+```
+
+It installs Python, pipx and Ollama with winget. Linux (Ubuntu, Debian, Fedora) uses the same `install.sh` as the Mac; it installs pipx with apt/dnf and Ollama with its official installer.
+
+Available there: chat, memory, decisions, Files, Documents, Gmail, web look-ups, the browser (your Chrome), custom skills (Linux: sandboxed with bubblewrap; Windows: not yet), cloud model, avatar, trusted agents, phone line, voice (faster-whisper; speech via Windows voices or eSpeak) and desktop notifications. The Apple apps (Calendar, Contacts, Mail, Notes, Reminders, Messages, Mac apps & Shortcuts, screen context) need a Mac. Data lives in `%LOCALAPPDATA%\LocalAIAgent` (Windows) or `~/.local/share/LocalAIAgent` (Linux).
 
 ## Commands
 

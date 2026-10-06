@@ -487,14 +487,14 @@ Besides the web tools you ask for (web search queries, pages the agent's browser
 
 ## 13. Testing and known limits
 
-- **Automated tests:** 164 pytest tests (two real agents in one process pair and exchange encrypted messages) (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
+- **Automated tests:** 173 pytest tests (two real agents in one process pair and exchange encrypted messages) (a fake Google OAuth and Gmail server covers sign-in, refresh, revocation and payloads) (one drives a real headless Chromium against a local test site when Playwright and Chromium are available; CI skips it) run against a **fake Ollama** and a **fake osascript runner**:
   - the fake Ollama gives deterministic hashed embeddings, a rule-based judge and rule-based tool calls;
   - the fake osascript runner returns canned app outputs;
   - fake STT and TTS cover voice.
 
   They cover decisions, memory, the tool loop with approvals, scopes, danger tier, audit tampering, the scheduler's catch-up/defer/quiet-hours/cap behaviour, nudges, dream merging, WAV handling, the voice endpoints and the CLI.
 - **Browser tests:** Playwright runs against the real UI, including a fake microphone.
-- **CI:** a workflow for Ubuntu and macOS-14 (Apple Silicon) is ready in `.github/workflows/ci.yml`; it runs once the repo is on GitHub.
+- **CI:** synthiq's `.github/workflows/local-agent.yml` runs the suite on Ubuntu and macOS-14 (Python 3.11–3.13) and on Windows (3.12), parses `install.ps1`, and builds and smoke-installs the wheel. Tests that drive a `/bin/sh` stand-in for Chrome or check POSIX file modes are skipped on Windows; the real bubblewrap confinement test runs where `bwrap` works.
 - **Not covered by automated tests:** the real AppleScripts against the Apple apps, real model quality, and real audio. These are verified by the manual checklists in `TESTING.md` on the target Mac.
 
 Known limits:
@@ -505,6 +505,29 @@ Known limits:
 - Browser tasks with a 4B model work for short flows; long checkouts and sites with bot checks often fail. The element list is capped at 120 per page.
 - WhatsApp reading uses an undocumented local database and only sees chats synced to WhatsApp Desktop. WhatsApp replies must be sent by the user.
 - Proactivity runs only while the Mac is awake and the agent is running.
-- Notifications are attributed to Script Editor.
+- Notifications are attributed to Script Editor (macOS).
+- Windows: skills that run scripts are refused (no sandbox yet); not yet tried on a real PC.
 
-Next on the roadmap (`PLAN.md`): Step 5 (browser and Mac app actions, skills, form filling), Step 6 (Telegram/iMessage), Step 7 (optional extras).
+### 13.1 Windows and Linux (Step 7g)
+
+One code base; platform differences sit behind small selectors rather than a separate port, so every feature keeps one implementation and one set of tests.
+
+| Concern | macOS | Windows | Linux | Where |
+|---|---|---|---|---|
+| Speech to text | mlx-whisper (Apple Silicon) | faster-whisper, CPU int8 | faster-whisper | `voice/stt.make_stt` |
+| Speech out / avatar audio | `say` | pyttsx3 (SAPI voices) | pyttsx3 (eSpeak) | `voice/tts.make_tts` |
+| Notifications | AppleScript `notify` | PowerShell toast | `notify-send` | `notify.py` |
+| Skill sandbox | `sandbox-exec` profile | none: script skills refused | bubblewrap | `skills.run_skill` |
+| Start at login | LaunchAgent plist | Startup-folder `.cmd` | XDG autostart `.desktop` | `cli.autostart` |
+| Process control | signals | psutil terminate/kill | psutil | `cli.stop` |
+| Chrome | /Applications | Program Files / LocalAppData | PATH | `browser.find_chrome` |
+| Secrets | Keychain | Credential Manager (keyring) | Secret Service, else 0600 file | `vault.py` |
+| Data folder | ~/Library/Application Support | %LOCALAPPDATA% | ~/.local/share | `platformdirs` |
+
+Why these choices:
+- **faster-whisper** is the fastest CPU Whisper with no ffmpeg dependency for raw arrays; MLX stays on Apple Silicon because it uses the GPU. The configured model name (often an MLX repo) is mapped to a size, and large models fall back to `small` because they are too slow on CPU.
+- **Notification text goes through environment variables** (`LA_TITLE`, `LA_BODY`) and `notify-send --`: message content (which can come from email or chats) is never parsed as PowerShell or as a flag.
+- **bubblewrap**: read-only root, private `/tmp`, `--unshare-net` unless the skill declares network, tmpfs over private folders (SSH, cloud credentials, browser profiles, keyrings, the agent's own data), then only the skill folder (read-only) and its `work/` (writable) bound back. Windows has no comparable unprivileged sandbox in the standard library, so script skills are refused there rather than run unconfined.
+- **Apple-only connectors** (EventKit/AppleScript apps, Messages, screen OCR, Mac apps) are not emulated; `doctor` names them on other platforms.
+
+Next on the roadmap: see `PLAN.md`.

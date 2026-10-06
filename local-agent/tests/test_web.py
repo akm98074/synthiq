@@ -10,7 +10,7 @@ import pytest
 
 from localagent.connectors.browser import (PlaywrightBrowser, browser_tools, check_url, needs_submit,
                                            render)
-from localagent.skills import load_skills, parse_skill, run_skill, sandbox_profile, scaffold, skill_tools
+from localagent.skills import load_skills, parse_skill, run_skill, sandbox_available, sandbox_profile, scaffold, skill_tools
 from localagent.tools.base import ToolError
 from conftest import FakeBrowser
 from test_actions import chat, decide
@@ -233,7 +233,7 @@ def test_run_skill_and_errors(tmp_path):
     sk.run, sk.timeout = f"{sys.executable} fail.py", 10
     with pytest.raises(ToolError, match="boom"):
         run(run_skill(sk, {}, require_sandbox=False))
-    if sys.platform != "darwin":
+    if not sandbox_available():
         with pytest.raises(ToolError, match="sandbox"):
             run(run_skill(sk, {}, require_sandbox=True))
 
@@ -275,3 +275,48 @@ def test_skill_cli(home, monkeypatch):
     r = CliRunner().invoke(app, ["skill", "list"])
     assert "word-count" in r.output and "read" in r.output
     assert CliRunner().invoke(app, ["skill", "new", "Bad Name"]).exit_code == 1
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux") or not __import__("shutil").which("bwrap"),
+                    reason="needs Linux with bubblewrap")
+def test_linux_bwrap_sandbox_really_confines(monkeypatch):
+    import shutil as _sh
+    import tempfile
+
+    # Not under /tmp: the sandbox gives skills a private /tmp, which would make this test trivial.
+    home = Path(tempfile.mkdtemp(dir="/var/tmp", prefix="la-sbx-")) / "home"
+    request_cleanup = lambda: _sh.rmtree(home.parent, ignore_errors=True)  # noqa: E731
+    data = home / ".local/share/LocalAIAgent"
+    (data / "skills").mkdir(parents=True)
+    (data / "secrets.json").write_text('{"gmail_refresh_token": "SECRET"}')
+    (home / ".ssh").mkdir()
+    (home / ".ssh" / "id_ed25519").write_text("PRIVATE KEY")
+    monkeypatch.setenv("HOME", str(home))
+    folder = scaffold(data / "skills", "probe")
+    (folder / "main.py").write_text("""
+import json, os, socket, sys
+out = {}
+def tryit(name, fn):
+    try:
+        out[name] = fn()
+    except Exception as e:
+        out[name] = "blocked: " + type(e).__name__
+tryit("own_file", lambda: open("SKILL.md").read()[:3])
+tryit("secrets", lambda: open(os.path.expanduser("~/../.local/share/LocalAIAgent/secrets.json")).read())
+tryit("secrets_abs", lambda: open(sys.argv[1]).read())
+tryit("ssh", lambda: open(sys.argv[2]).read())
+tryit("write_work", lambda: open(os.environ["SKILL_WORK_DIR"] + "/x.txt", "w").write("ok"))
+tryit("write_home", lambda: open(sys.argv[3], "w").write("x"))
+tryit("network", lambda: socket.create_connection(("1.1.1.1", 53), timeout=2) and "connected")
+print(json.dumps(out))
+""")
+    sk = parse_skill(folder)
+    sk.run = f"{sys.executable} main.py {data / 'secrets.json'} {home / '.ssh/id_ed25519'} {home / 'evil.txt'}"
+    res = run(run_skill(sk, {}, require_sandbox=True))
+    out = json.loads(res.content)
+    assert out["own_file"] == "---"
+    assert out["write_work"] == 2
+    for key in ("secrets", "secrets_abs", "ssh", "write_home", "network"):
+        assert str(out[key]).startswith("blocked"), (key, out[key])
+    assert not (home / "evil.txt").exists()
+    request_cleanup()

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# LocalAIAgent installer for macOS (Apple Silicon).
+# LocalAIAgent installer for macOS (Apple Silicon recommended) and Linux.
+# Windows: use install.ps1 instead.
 #
 # Run it WITHOUT sudo, from the folder containing the downloaded files:
-#   bash install.sh localaiagent-0.14.0-py3-none-any.whl
+#   bash install.sh localaiagent-0.15.0-py3-none-any.whl
 set -euo pipefail
 ORIG_PATH="$PATH"  # the PATH of the Terminal window that ran this script
 
@@ -11,8 +12,8 @@ warn() { printf "\033[1;33mNote:\033[0m %s\n" "$*"; }
 die()  { printf "\033[1;31mError:\033[0m %s\n" "$*" >&2; exit 1; }
 
 if [ "$(id -u)" -eq 0 ]; then
-  die "Please don't run this with sudo. Homebrew refuses to run as root, and the app
-       must be installed for your own user. Run instead:
+  die "Please don't run this with sudo. The app must be installed for your own user
+       (it asks for your password itself when it needs it). Run instead:
          bash install.sh <path-to-localaiagent-*.whl>"
 fi
 
@@ -23,10 +24,11 @@ find_wheel() {
 WHEEL="${1:-$(find_wheel)}"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "Can't find the localaiagent .whl file.
        Put install.sh and the .whl in the same folder, cd into it, and run:
-         bash install.sh localaiagent-0.14.0-py3-none-any.whl"
+         bash install.sh localaiagent-0.15.0-py3-none-any.whl"
 WHEEL="$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")"
 
-[ "$(uname -s)" = "Darwin" ] || warn "this installer targets macOS; continuing anyway."
+OS="$(uname -s)"
+if [ "$OS" = "Darwin" ]; then
 [ "$(uname -m)" = "arm64" ] || warn "this build is tuned for Apple Silicon (arm64); continuing anyway."
 
 # Homebrew (it asks for your password itself when it needs admin rights).
@@ -50,9 +52,31 @@ if ! command -v ollama >/dev/null 2>&1; then
   brew install ollama
 fi
 
+else
+  # Linux
+  PY="$(command -v python3 || true)"
+  [ -n "$PY" ] && "$PY" -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
+    || die "Python 3.11 or newer is required (e.g. sudo apt install python3.12)."
+  if ! command -v pipx >/dev/null 2>&1; then
+    say "Installing pipx"
+    if command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y pipx
+    elif command -v dnf >/dev/null 2>&1; then sudo dnf install -y pipx
+    else "$PY" -m pip install --user pipx; fi
+  fi
+  pipx ensurepath >/dev/null 2>&1 || true
+  export PATH="$HOME/.local/bin:$PATH"
+  if ! command -v ollama >/dev/null 2>&1; then
+    say "Installing Ollama with its official installer (https://ollama.com/install.sh)"
+    curl -fsSL https://ollama.com/install.sh | sh
+  fi
+  command -v bwrap >/dev/null 2>&1 || warn "for custom skills that run scripts, install bubblewrap (sudo apt install bubblewrap)."
+fi
+
 if ! curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
   say "Starting Ollama in the background"
-  brew services start ollama >/dev/null 2>&1 || (nohup ollama serve >/tmp/ollama.log 2>&1 &)
+  { [ "$OS" = "Darwin" ] && brew services start ollama >/dev/null 2>&1; } \
+    || { command -v systemctl >/dev/null 2>&1 && systemctl --user start ollama >/dev/null 2>&1; } \
+    || (nohup ollama serve >/tmp/ollama.log 2>&1 &)
   for _ in $(seq 1 30); do
     curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break
     sleep 1
@@ -81,13 +105,15 @@ BIN_DIR="$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || true)"
 AGENT="$BIN_DIR/localagent"
 [ -x "$AGENT" ] || die "pipx finished but $AGENT is missing. Please send the output above."
 
-BREW_BIN="$(brew --prefix)/bin"
-LINK="$BREW_BIN/localagent"
-if [ -L "$LINK" ] || [ ! -e "$LINK" ]; then
-  ln -sf "$AGENT" "$LINK" 2>/dev/null && say "Linked $LINK -> $AGENT" \
-    || warn "couldn't link into $BREW_BIN; use the full path below."
-else
-  warn "$LINK exists and isn't a link; leaving it alone."
+if [ "$OS" = "Darwin" ]; then
+  BREW_BIN="$(brew --prefix)/bin"
+  LINK="$BREW_BIN/localagent"
+  if [ -L "$LINK" ] || [ ! -e "$LINK" ]; then
+    ln -sf "$AGENT" "$LINK" 2>/dev/null && say "Linked $LINK -> $AGENT" \
+      || warn "couldn't link into $BREW_BIN; use the full path below."
+  else
+    warn "$LINK exists and isn't a link; leaving it alone."
+  fi
 fi
 
 if [ "$(uname -s)" = "Darwin" ]; then
@@ -107,6 +133,14 @@ else
   warn "browser add-on failed to install; everything else still works."
 fi
 
+if [ "$OS" = "Linux" ]; then
+  say "Adding the voice add-ons (faster-whisper speech recognition, pyttsx3 speech)"
+  pipx inject localaiagent "faster-whisper>=1.0" "pyttsx3>=2.90" \
+    || warn "voice add-ons failed; text chat still works."
+  command -v espeak-ng >/dev/null 2>&1 || command -v espeak >/dev/null 2>&1 \
+    || warn "for spoken replies install eSpeak (sudo apt install espeak-ng)."
+fi
+
 if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
   say "Adding the voice add-on (on-device speech recognition)"
   pipx inject localaiagent "mlx-whisper>=0.4" || warn "voice add-on failed to install; text chat still works."
@@ -115,8 +149,8 @@ fi
 say "Downloading local models (about 4 GB the first time)"
 "$AGENT" setup
 
-if [ "${LOCALAGENT_VOICE:-1}" != "0" ] && [ "$(uname -m)" = "arm64" ]; then
-  say "Downloading the speech model (about 1.6 GB the first time; skip with LOCALAGENT_VOICE=0)"
+if [ "${LOCALAGENT_VOICE:-1}" != "0" ] && { [ "$(uname -m)" = "arm64" ] || [ "$OS" = "Linux" ]; }; then
+  say "Downloading the speech models (up to 1.6 GB the first time; skip with LOCALAGENT_VOICE=0)"
   "$AGENT" setup --no-pull --voice || warn "speech model download failed; run 'localagent setup --voice' later."
 fi
 
@@ -128,5 +162,5 @@ if PATH="$ORIG_PATH" command -v localagent >/dev/null 2>&1; then
   say "Done. Start the agent with:  localagent start"
 else
   say "Done. Start the agent with:  $AGENT start"
-  echo "    To make plain 'localagent' work, run:  pipx ensurepath && source ~/.zshrc"
+  echo "    To make plain 'localagent' work, run:  pipx ensurepath, then open a new terminal window"
 fi

@@ -46,6 +46,8 @@ PRIVATE = ["Library/Mail", "Library/Messages", "Library/Keychains", "Library/Coo
            "Library/Group Containers", "Library/Application Support/AddressBook",
            "Library/Application Support/Google/Chrome", "Library/Application Support/LocalAIAgent",
            ".ssh", ".aws", ".gnupg", ".config/gh"]
+LINUX_PRIVATE = [".local/share/LocalAIAgent", ".local/share/keyrings", ".config/google-chrome", ".config/chromium",
+                 ".mozilla", ".thunderbird", ".password-store", ".docker", ".kube"]
 
 
 @dataclass
@@ -129,23 +131,55 @@ def sandbox_profile(skill: Skill, home: Path) -> str:
 
 
 def sandbox_available() -> bool:
-    return sys.platform == "darwin" and shutil.which("sandbox-exec") is not None
+    if sys.platform == "darwin":
+        return shutil.which("sandbox-exec") is not None
+    if sys.platform.startswith("linux"):
+        return shutil.which("bwrap") is not None
+    return False
+
+
+def bwrap_command(skill: Skill, home: Path, cmd: list[str]) -> list[str]:
+    """Linux: bubblewrap. Read-only root, private /tmp, private folders hidden (including the agent's
+    own data), then only this skill's folder (read-only) and its work dir (writable) put back, and no
+    network unless the skill declares it."""
+    folder, work = skill.folder.resolve(), (skill.folder / "work").resolve()
+    args = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
+            "--die-with-parent", "--new-session"]
+    for p in PRIVATE + LINUX_PRIVATE:
+        target = home / p
+        if target.exists():
+            args += ["--tmpfs", str(target.resolve())]
+    # A private /tmp hides anything installed under /tmp (e.g. a virtualenv); put the interpreter back.
+    for prefix in {Path(sys.prefix).resolve(), Path(cmd[0]).resolve().parent.parent}:
+        if str(prefix).startswith("/tmp/") and prefix.exists():
+            args += ["--ro-bind", str(prefix), str(prefix)]
+    args += ["--ro-bind", str(folder), str(folder), "--bind", str(work), str(work)]
+    if not skill.network:
+        args.append("--unshare-net")
+    return args + ["--chdir", str(folder), "--", *cmd]
 
 
 async def run_skill(skill: Skill, args: dict, require_sandbox: bool = True) -> ToolResult:
-    cmd = shlex.split(skill.run)
+    cmd = shlex.split(skill.run, posix=os.name != "nt")
     if not cmd:
         raise ToolError("This skill has nothing to run.")
     work = skill.folder / "work"
     work.mkdir(exist_ok=True)
     home = Path.home()
     if sandbox_available():
-        cmd = ["sandbox-exec", "-p", sandbox_profile(skill, home), *cmd]
+        if sys.platform == "darwin":
+            cmd = ["sandbox-exec", "-p", sandbox_profile(skill, home), *cmd]
+        else:
+            cmd = bwrap_command(skill, home, cmd)
     elif require_sandbox:
-        raise ToolError("Skills that run scripts need macOS's sandbox (sandbox-exec), which isn't available here.")
+        raise ToolError("Skills that run scripts need a sandbox: macOS's sandbox-exec, or bubblewrap on Linux "
+                        "(sudo apt install bubblewrap). Not available on Windows yet.")
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(work), "TMPDIR": str(work),
            "LANG": os.environ.get("LANG", "en_US.UTF-8"), "SKILL_WORK_DIR": str(work),
            "PYTHONDONTWRITEBYTECODE": "1"}
+    if sys.platform == "win32":             # Windows programs fail to start without these
+        env.update({k: os.environ[k] for k in ("SYSTEMROOT", "SYSTEMDRIVE", "PATHEXT", "COMSPEC")
+                    if k in os.environ})
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd, cwd=skill.folder, env=env, stdin=asyncio.subprocess.PIPE,

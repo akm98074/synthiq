@@ -156,6 +156,8 @@ class BrowserUnavailable(ToolError):
 
 MAC_APPS = ["Google Chrome", "Google Chrome Beta", "Google Chrome Canary"]
 LINUX_BINS = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+WINDOWS_PATHS = [r"Google\Chrome\Application\chrome.exe", r"Google\Chrome Beta\Application\chrome.exe",
+                 r"Google\Chrome SxS\Application\chrome.exe"]
 
 
 def _app_binary(path: Path) -> Path:
@@ -173,6 +175,14 @@ def find_chrome(setting: str = "") -> Path | None:
         for folder in (Path("/Applications"), Path.home() / "Applications"):
             for name in MAC_APPS:
                 p = folder / f"{name}.app" / "Contents" / "MacOS" / name
+                if p.exists():
+                    return p
+        return None
+    if sys.platform == "win32":
+        roots = [os.environ.get(k) for k in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA")]
+        for root in filter(None, roots):
+            for rel in WINDOWS_PATHS:
+                p = Path(root) / rel
                 if p.exists():
                     return p
         return None
@@ -270,7 +280,7 @@ class ChromeProcess:
              "--disable-features=ChromeWhatsNewUI", "--window-size=1280,900"]
         if self.headless:
             a.append("--headless=new")
-        if sys.platform.startswith("linux") and os.geteuid() == 0:
+        if sys.platform.startswith("linux") and hasattr(os, "geteuid") and os.geteuid() == 0:
             a.append("--no-sandbox")   # Chrome refuses to run as root otherwise (containers, CI)
         return a + ["about:blank"]
 

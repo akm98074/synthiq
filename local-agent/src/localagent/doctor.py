@@ -21,7 +21,8 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
     is_mac_arm = sys.platform == "darwin" and machine == "arm64"
     add("platform", True if is_mac_arm else False,
         f"{platform.system()} {platform.release()} ({machine})"
-        + ("" if is_mac_arm else " - Step 1 is tuned for Apple Silicon; other platforms are untested"),
+        + ("" if is_mac_arm else " - Calendar, Contacts, Messages, Apple apps and screen context need "
+           "macOS; everything else works here"),
         warn=True)
     add("python", sys.version_info >= (3, 11), sys.version.split()[0])
 
@@ -72,6 +73,22 @@ async def run_checks(s: Settings, base: Path) -> list[dict]:
             "allowed" if state else ("screen add-on missing: pipx inject localaiagent pyobjc-framework-Vision "
                                      "pyobjc-framework-Quartz" if state is None else "not allowed; run: localagent screen-access"),
             warn=True)
+
+    if sys.platform.startswith("linux"):
+        import shutil
+
+        add("skill sandbox", bool(shutil.which("bwrap")),
+            "bubblewrap found" if shutil.which("bwrap")
+            else "custom skills with scripts need bubblewrap: sudo apt install bubblewrap", warn=True)
+
+    if sys.platform != "darwin":
+        from .notify import available
+        from .voice.stt import FasterWhisper
+
+        add("notifications", available(), "desktop notifications available" if available()
+            else "no notifier found (Linux: install libnotify-bin for notify-send)", warn=True)
+        ok, reason = FasterWhisper.status()
+        add("voice", ok, "faster-whisper installed" if ok else reason, warn=True)
 
     if s.enable_browser:
         from .connectors.browser import PlaywrightBrowser, chrome_version, find_chrome

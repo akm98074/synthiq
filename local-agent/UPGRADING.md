@@ -1,6 +1,31 @@
 # Upgrading LocalAIAgent
 
-Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/`, which the installer never touches.
+Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/` (Windows: `%LOCALAPPDATA%\LocalAIAgent`, Linux: `~/.local/share/LocalAIAgent`), which the installer never touches.
+
+## From 0.14.0 to 0.15.0 (Step 7g: Windows and Linux)
+
+On the Mac nothing changes in how you use it:
+
+```bash
+bash install.sh localaiagent-0.15.0-py3-none-any.whl
+localagent start
+```
+
+To install on a **Windows 10/11** PC: copy `install.ps1` and the `.whl` into one folder, open **PowerShell** (not as Administrator) in that folder, and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.15.0-py3-none-any.whl
+```
+
+On **Linux** (Ubuntu 22.04+, Debian 12+, Fedora): `bash install.sh localaiagent-0.15.0-py3-none-any.whl`. For custom skills that run scripts also install bubblewrap (`sudo apt install bubblewrap`); for spoken replies install eSpeak (`sudo apt install espeak-ng`).
+
+### What changed in 0.15.0
+
+- **Runs on Windows and Linux:** chat, memory, Files, Documents, Gmail, web look-ups, your Chrome, cloud model, avatar, trusted agents, phone line, voice and notifications. The Apple apps stay Mac-only, and `localagent doctor` says which parts need a Mac.
+- **Voice off the Mac:** speech recognition with faster-whisper (on the computer, no cloud), speech with the Windows voices or eSpeak.
+- **Notifications** use Windows toasts or the Linux desktop's notifications. The text is never pasted into a command.
+- **Custom skills on Linux** run inside a bubblewrap sandbox: no network unless the skill asks for it, a private /tmp, and your private folders (SSH and cloud keys, browser profiles, keyrings, the agent's own data) hidden. On Windows, skills that run scripts are refused until a sandbox exists there; instruction-only skills work.
+- **`localagent autostart on`** works on Windows (Startup folder) and Linux (desktop login), as on the Mac.
 
 ## From 0.13.0 to 0.14.0 (Step 7f: call your agent)
 

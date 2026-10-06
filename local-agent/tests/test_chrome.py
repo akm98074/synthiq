@@ -17,6 +17,9 @@ needs_chromium = pytest.mark.skipif(not PlaywrightBrowser.installed() or not Pat
                                     reason="needs Playwright and a Chromium binary")
 
 
+posix_scripts = pytest.mark.skipif(os.name == "nt", reason="uses a /bin/sh stand-in for Chrome")
+
+
 def script(tmp_path: Path, body: str) -> Path:
     p = tmp_path / "fake-chrome"
     p.write_text("#!/bin/sh\n" + body + "\n")
@@ -33,12 +36,14 @@ def test_find_chrome_setting(tmp_path):
     assert find_chrome(str(tmp_path / "missing")) is None
 
 
+@posix_scripts
 def test_chrome_that_exits_reports_why(tmp_path):
     exe = script(tmp_path, 'echo "[ERROR] bad flag --foo" >&2; exit 3')
     with pytest.raises(BrowserUnavailable, match=r"exited straight away \(code 3\).*bad flag"):
         asyncio.run(ChromeProcess(exe, tmp_path / "profile").start())
 
 
+@posix_scripts
 def test_chrome_that_never_opens_port_is_stopped(tmp_path):
     exe = script(tmp_path, "exec sleep 30")
     cp = ChromeProcess(exe, tmp_path / "profile")
@@ -48,6 +53,7 @@ def test_chrome_that_never_opens_port_is_stopped(tmp_path):
     assert cp.proc is None
 
 
+@posix_scripts
 def test_stale_lock_is_cleared_live_lock_is_reported(tmp_path):
     prof = tmp_path / "profile"
     prof.mkdir()

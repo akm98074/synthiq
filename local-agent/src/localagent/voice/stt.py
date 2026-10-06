@@ -87,3 +87,58 @@ class MLXWhisper:
         )
         return {"text": str(result.get("text", "")).strip(), "language": result.get("language"),
                 "ms": round((time.perf_counter() - start) * 1000)}
+
+
+class FasterWhisper:
+    """Speech to text on Windows, Linux and Intel Macs (faster-whisper, CPU, int8)."""
+    name = "faster-whisper"
+    SIZES = ("tiny", "base", "small", "medium")
+
+    def __init__(self, model: str):
+        self.model = model
+        self._loaded: tuple[str, object] | None = None
+
+    def size(self) -> str:
+        """Map a configured model name (often an MLX repo id) to a faster-whisper size."""
+        m = self.model.lower()
+        for s in self.SIZES:
+            if s in m:
+                return f"{s}.en" if ".en" in m or s in ("tiny", "base") else s
+        return "small"            # large models are too slow on CPU
+
+    @staticmethod
+    def status() -> tuple[bool, str]:
+        try:
+            import faster_whisper  # noqa: F401
+        except Exception:  # noqa: BLE001
+            return False, ("Voice input needs the voice add-on: pipx inject localaiagent faster-whisper")
+        return True, ""
+
+    async def transcribe(self, audio: np.ndarray) -> dict:
+        ok, reason = self.status()
+        if not ok:
+            raise RuntimeError(reason)
+        from faster_whisper import WhisperModel
+
+        size = self.size()
+        if self._loaded is None or self._loaded[0] != size:
+            self._loaded = (size, await asyncio.to_thread(WhisperModel, size, device="cpu", compute_type="int8"))
+        model = self._loaded[1]
+        start = time.perf_counter()
+
+        def run() -> tuple[str, str]:
+            segments, info = model.transcribe(audio, beam_size=1, vad_filter=False)
+            return " ".join(s.text.strip() for s in segments), info.language
+
+        text, lang = await asyncio.to_thread(run)
+        return {"text": text.strip(), "language": lang, "ms": round((time.perf_counter() - start) * 1000)}
+
+
+def make_stt(model: str):
+    """MLX Whisper on Apple Silicon, faster-whisper everywhere else."""
+    import platform
+    import sys
+
+    if sys.platform == "darwin" and platform.machine() == "arm64":
+        return MLXWhisper(model)
+    return FasterWhisper(model)

@@ -671,7 +671,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
     async def speak(body: SpeakIn) -> dict:
         r = rt()
         if not r.tts.available():
-            raise HTTPException(503, "Speech output needs macOS (the 'say' command).")
+            raise HTTPException(503, "Speech output isn't available: on Windows/Linux run: pipx inject localaiagent pyttsx3")
         finished = await r.tts.speak(body.text)
         return {"ok": True, "finished": finished}
 
@@ -680,7 +680,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         """The reply as WAV, for playback in the browser (the avatar lip-syncs to it)."""
         r = rt()
         if not r.tts.available():
-            raise HTTPException(503, "Speech output needs macOS (the 'say' command).")
+            raise HTTPException(503, "Speech output isn't available: on Windows/Linux run: pipx inject localaiagent pyttsx3")
         try:
             audio = await r.tts.synthesize(body.text)
         except RuntimeError as exc:

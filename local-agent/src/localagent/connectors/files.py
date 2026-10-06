@@ -171,8 +171,11 @@ def file_tools(space: FileSpace) -> list[Tool]:
         p = space.resolve(a["path"])
         cmd = ["open", str(p)] if sys.platform == "darwin" else ["xdg-open", str(p)]
         try:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except FileNotFoundError as exc:
+            if sys.platform == "win32":
+                os.startfile(str(p))  # type: ignore[attr-defined]  # noqa: S606 - opens with the default app
+            else:
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (FileNotFoundError, OSError) as exc:
             raise ToolError("No program available to open files.") from exc
         return ToolResult(f"Opened {p}.", f"Opened {p.name}", {"path": str(p)})
 

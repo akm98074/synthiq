@@ -5,7 +5,6 @@ import asyncio
 import json
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import time
@@ -14,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
+import psutil
 import typer
 
 from . import __version__
@@ -46,11 +46,14 @@ def _running_pid() -> int | None:
         return None
     try:
         pid = int(path.read_text().strip())
-        os.kill(pid, 0)
-        return pid
-    except (ValueError, ProcessLookupError, PermissionError):
+    except ValueError:
         path.unlink(missing_ok=True)
         return None
+    # psutil, not os.kill(pid, 0): on Windows os.kill with signal 0 terminates the process.
+    if not psutil.pid_exists(pid):
+        path.unlink(missing_ok=True)
+        return None
+    return pid
 
 
 def _healthy(url: str) -> bool:
@@ -74,7 +77,7 @@ def setup(
     chat_model: Optional[str] = typer.Option(None, help="Ollama tag for the main chat model."),
     fast_model: Optional[str] = typer.Option(None, help="Ollama tag for the fast/judge model."),
     embed_model: Optional[str] = typer.Option(None, help="Ollama tag for the embedding model."),
-    voice: bool = typer.Option(False, "--voice", help="Also download the speech-to-text model (~1.6 GB)."),
+    voice: bool = typer.Option(False, "--voice", help="Also download the speech-to-text models."),
     browser: bool = typer.Option(False, "--browser", help="Set up the browser for web tasks."),
 ) -> None:
     """Write the config and download the local models."""
@@ -158,10 +161,10 @@ def _setup_browser() -> None:
     typer.secho(f"Browser works: {chrome_version(exe)} opened “{title}”.", fg="green")
 
 
-def _setup_voice(model: str, what: str = "speech model (first time only, ~1.6 GB)") -> None:
-    from .voice.stt import MLXWhisper
+def _setup_voice(model: str, what: str = "speech model (first time only)") -> None:
+    from .voice.stt import make_stt
 
-    stt = MLXWhisper(model)
+    stt = make_stt(model)
     ok, reason = stt.status()
     if not ok:
         typer.secho(reason, fg="yellow")
@@ -197,10 +200,11 @@ def start(
         typer.echo(f"Already running at {url}" + (f" (pid {pid})" if pid else " (started at login)"))
     else:
         log = open(_log_file(), "a")
+        detach = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
+                  if sys.platform == "win32" else {"start_new_session": True})
         proc = subprocess.Popen(
             [sys.executable, "-m", "localagent.server"],
-            stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-            start_new_session=True, env=os.environ.copy(),
+            stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=os.environ.copy(), **detach,
         )
         _pid_file().write_text(str(proc.pid))
         for _ in range(100):
@@ -223,18 +227,19 @@ def stop() -> None:
     """Stop the background agent."""
     pid = _running_pid()
     if not pid:
-        if plist_path().exists() and _healthy(_url()):
+        if autostart_path().exists() and _healthy(_url()):
             typer.echo("The agent was started at login. Use `localagent autostart off` to stop it.")
         else:
             typer.echo("Not running.")
         return
-    os.kill(pid, signal.SIGTERM)
-    for _ in range(50):
-        try:
-            os.kill(pid, 0)
-            time.sleep(0.1)
-        except ProcessLookupError:
-            break
+    try:
+        proc = psutil.Process(pid)
+        proc.terminate()
+        proc.wait(timeout=5)
+    except psutil.NoSuchProcess:
+        pass
+    except psutil.TimeoutExpired:
+        proc.kill()
     _pid_file().unlink(missing_ok=True)
     typer.echo("Stopped.")
 
@@ -326,9 +331,42 @@ def plist_xml(python: str, log_file: Path, home: str | None = None) -> str:
 """
 
 
+def autostart_path() -> Path:
+    if sys.platform == "darwin":
+        return plist_path()
+    if sys.platform == "win32":
+        startup = Path(os.environ.get("APPDATA", Path.home())) / "Microsoft/Windows/Start Menu/Programs/Startup"
+        return startup / "LocalAIAgent.cmd"
+    return Path.home() / ".config/autostart/localaiagent.desktop"
+
+
+def _autostart_other(action: str) -> None:
+    """Windows: a Startup-folder script. Linux: an XDG autostart entry."""
+    path = autostart_path()
+    if action == "on":
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            path.write_text(f'@echo off\r\nstart "" /min "{sys.executable}" -m localagent.server\r\n')
+        else:
+            path.write_text("[Desktop Entry]\nType=Application\nName=LocalAIAgent\n"
+                            f"Exec={sys.executable} -m localagent.server\nX-GNOME-Autostart-enabled=true\n")
+        typer.secho(f"Autostart on ({path}). The agent now starts when you log in.", fg="green")
+    elif action == "off":
+        path.unlink(missing_ok=True)
+        typer.echo("Autostart off. Start the agent with `localagent start`.")
+    elif action == "status":
+        typer.echo(f"Autostart is {'on' if path.exists() else 'off'}.")
+    else:
+        typer.secho("Use: localagent autostart on|off|status", fg="red")
+        raise typer.Exit(2)
+
+
 @app.command()
 def autostart(action: str = typer.Argument("status", help="on | off | status")) -> None:
     """Start the agent automatically when you log in (optional)."""
+    if sys.platform != "darwin":
+        _autostart_other(action)
+        return
     path = plist_path()
     uid = os.getuid()
     launchctl = shutil.which("launchctl")

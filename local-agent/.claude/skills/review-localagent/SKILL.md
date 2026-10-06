@@ -136,7 +136,7 @@ rm -rf dist && $PY -m build
 python3 -m venv /tmp/la-clean && /tmp/la-clean/bin/pip install dist/*.whl && /tmp/la-clean/bin/localagent version
 ```
 
-CI runs the same tests on Ubuntu and macOS-14 (synthiq's `.github/workflows/local-agent.yml`).
+CI runs the same tests on Ubuntu and macOS-14 (Python 3.11–3.13) and Windows (3.12), and parses `install.ps1` (synthiq's `.github/workflows/local-agent.yml`). Platform code paths (Windows/Linux) are unit-tested by monkeypatching `sys.platform`; Windows itself is only exercised by CI.
 
 - **Browser:** drive the UI with Playwright using `executable_path="/opt/pw-browsers/chromium"` (don't run `playwright install`). Use the fake Ollama, fake runner, fake STT and fake TTS, and pass `--use-fake-device-for-media-stream` for voice.
 - **Upgrade:** open a previous release's database with the new code (git worktree).

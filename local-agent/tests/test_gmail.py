@@ -55,7 +55,8 @@ def test_sign_in_flow_and_secret_storage(gmail_client):
     st = c.get("/api/gmail").json()
     assert st["connected"] and st["account"] == "me@gmail.com"
     secrets = c.home / "secrets.json"
-    assert oct(os.stat(secrets).st_mode & 0o777) == "0o600"
+    if os.name != "nt":                     # Windows has no POSIX modes; the per-user profile protects it
+        assert oct(os.stat(secrets).st_mode & 0o777) == "0o600"
     assert json.loads(secrets.read_text())["gmail_refresh_token"] == "rt-1"
     assert "shh" not in (c.home / "config.json").read_text() and "rt-1" not in (c.home / "config.json").read_text()
     conns = {x["id"]: x for x in c.get("/api/connectors").json()}

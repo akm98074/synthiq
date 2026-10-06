@@ -24,8 +24,8 @@ from .policy.engine import Audit, Policy
 from .tools.registry import build_tools, connector_status
 from .proactive.nudges import Nudges
 from .proactive.scheduler import Scheduler
-from .voice.stt import MLXWhisper
-from .voice.tts import SayTTS
+from .voice.stt import MLXWhisper, make_stt
+from .voice.tts import SayTTS, make_tts
 
 
 class Runtime:
@@ -67,8 +67,11 @@ class Runtime:
         self.audit = Audit(self.store)
         self.build_tools()
         self.clock = clock
+        from . import notify as desktop
+
         self.nudges = Nudges(self.store, settings,
-                             notifier=self.notify if self.mac_available else None, clock=clock)
+                             notifier=self.notify if (self.mac_available or desktop.available()) else None,
+                             clock=clock)
         self.scheduler = Scheduler(self.store, clock)
         from .channels.imessage import IMessageChannel
         from .tools.registry import message_sources
@@ -76,9 +79,9 @@ class Runtime:
         self.imessage_channel = IMessageChannel(self, message_sources(settings)[0], self.runner)
         if self.mac_available:
             self.nudges.forwarders.append(self.imessage_channel.forward)
-        self.stt = stt or MLXWhisper(settings.stt_model)
-        self.wake_stt = wake_stt or (stt if stt is not None else MLXWhisper(settings.wake_model))
-        self.tts = tts or SayTTS(settings.tts_voice, settings.tts_rate)
+        self.stt = stt or make_stt(settings.stt_model)
+        self.wake_stt = wake_stt or (stt if stt is not None else make_stt(settings.wake_model))
+        self.tts = tts or make_tts(settings.tts_voice, settings.tts_rate)
         self.identity_path = self.base / "identity" / "about-me.md"
         self.ollama = OllamaClient(settings.ollama_url)
         self._build_decision_layer()
@@ -93,7 +96,12 @@ class Runtime:
         self.scheduler.enabled = self.settings.proactive_enabled
 
     async def notify(self, title: str, subtitle: str, body: str) -> None:
-        await self.runner.run("notify", [title, body, subtitle])
+        if self.mac_available:
+            await self.runner.run("notify", [title, body, subtitle])
+        else:
+            from . import notify as desktop
+
+            await desktop.notify(title, subtitle, body)
 
     def _build_decision_layer(self) -> None:
         s = self.settings
@@ -164,7 +172,7 @@ class Runtime:
         self.imessage_channel.store = message_sources(self.settings)[0]
         if hasattr(self.stt, "model"):
             self.stt.model = self.settings.stt_model
-        if isinstance(self.wake_stt, MLXWhisper) and self.wake_stt is not self.stt:
+        if self.wake_stt is not self.stt and hasattr(self.wake_stt, "model"):
             self.wake_stt.model = self.settings.wake_model
         self.gmail.client_id = self.gmail_auth.client_id = self.settings.gmail_client_id
         if self._a2a_lifecycle and (self.settings.a2a_enabled != (self._a2a is not None)
@@ -182,7 +190,7 @@ class Runtime:
             self.browser.show_actions = self.settings.browser_show_actions
             self.browser.action_delay_ms = self.settings.browser_action_delay_ms
             self.browser.agent_name = self.settings.agent_name
-        if isinstance(self.tts, SayTTS):
+        if hasattr(self.tts, "voice") and hasattr(self.tts, "rate"):
             self.tts.voice, self.tts.rate = self.settings.tts_voice, self.settings.tts_rate
         return self.settings
 

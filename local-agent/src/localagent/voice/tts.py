@@ -114,3 +114,88 @@ class SayTTS:
     @property
     def speaking(self) -> bool:
         return self._proc is not None and self._proc.returncode is None
+
+
+class Pyttsx3TTS:
+    """Speech output on Windows (SAPI voices) and Linux (eSpeak) via pyttsx3."""
+    name = "pyttsx3"
+
+    def __init__(self, voice: str = "", rate: int = 190):
+        self.voice, self.rate = voice, rate
+        self._engine = None
+        self._speaking = False
+
+    @staticmethod
+    def available() -> bool:
+        try:
+            import pyttsx3  # noqa: F401
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _make(self):
+        import pyttsx3
+
+        engine = pyttsx3.init()
+        engine.setProperty("rate", self.rate)
+        if self.voice:
+            for v in engine.getProperty("voices"):
+                if v.name == self.voice:
+                    engine.setProperty("voice", v.id)
+        return engine
+
+    async def voices(self) -> list[str]:
+        if not self.available():
+            return []
+        return await asyncio.to_thread(lambda: [v.name for v in self._make().getProperty("voices")])
+
+    async def speak(self, text: str) -> bool:
+        text = speakable(text)
+        if not text or not self.available():
+            return False
+
+        def run() -> None:
+            self._engine = self._make()
+            self._engine.say(text)
+            self._engine.runAndWait()
+
+        self._speaking = True
+        try:
+            await asyncio.to_thread(run)
+        finally:
+            self._speaking, self._engine = False, None
+        return True
+
+    async def synthesize(self, text: str) -> bytes:
+        text = speakable(text)
+        if not text or not self.available():
+            return b""
+        fd, path = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+
+        def run() -> None:
+            engine = self._make()
+            engine.save_to_file(text, path)
+            engine.runAndWait()
+
+        try:
+            await asyncio.to_thread(run)
+            with open(path, "rb") as f:
+                return f.read()
+        finally:
+            os.unlink(path)
+
+    async def stop(self) -> bool:
+        if self._engine is not None:
+            self._engine.stop()
+            return True
+        return False
+
+    @property
+    def speaking(self) -> bool:
+        return self._speaking
+
+
+def make_tts(voice: str, rate: int):
+    """macOS `say` when present, otherwise pyttsx3 (Windows SAPI / Linux eSpeak)."""
+    return SayTTS(voice, rate) if SayTTS.available() else Pyttsx3TTS(voice, rate)
