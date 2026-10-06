@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LocalAIAgent</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ccircle cx=%278%27 cy=%278%27 r=%277%27 fill=%27%232f6f5e%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="dot" id="status-dot" title="checking"></span><span id="agent-name">LocalAIAgent</span></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="chat">Chat</button>
+      <button class="tab" data-tab="nudges">Nudges <span id="nudge-badge" class="count hidden">0</span></button>
+      <button class="tab" data-tab="approvals">Approvals <span id="pending-badge" class="count hidden">0</span></button>
+      <button class="tab" data-tab="activity">Activity</button>
+      <button class="tab" data-tab="connectors">Connectors</button>
+      <button class="tab" data-tab="decisions">Decisions</button>
+      <button class="tab" data-tab="memory">Memory</button>
+      <button class="tab" data-tab="models">Models</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <main>
+    <!-- Chat -->
+    <section id="tab-chat" class="panel active">
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form id="composer" class="composer">
+        <button type="button" id="mic" class="mic" aria-label="Talk" title="Hold to talk, or click to start/stop">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+        </button>
+        <textarea id="input" rows="1" placeholder="Message your agent… (Enter to send, Shift+Enter for a new line)"></textarea>
+        <button type="submit" id="send" class="primary">Send</button>
+      </form>
+      <div class="composer-foot">
+        <button class="link" id="clear-chat">Clear conversation</button>
+        <span id="voice-status" class="voice-status" role="status"></span>
+        <label class="conv"><input type="checkbox" id="conversation"> Conversation mode</label>
+      </div>
+    </section>
+
+    <!-- Nudges -->
+    <section id="tab-nudges" class="panel">
+      <div class="panel-head">
+        <h2>Nudges</h2>
+        <p class="muted">What your agent noticed on its own: your morning brief, upcoming events, overdue reminders, emails waiting on a reply, and the overnight memory review. It only interrupts outside quiet hours, up to your daily limit.</p>
+      </div>
+      <div id="job-list" class="jobs"></div>
+      <div id="nudge-list" class="list"></div>
+    </section>
+
+    <!-- Approvals -->
+    <section id="tab-approvals" class="panel">
+      <div class="panel-head">
+        <h2>Approvals</h2>
+        <p class="muted">Anything that changes, sends or deletes waits here for you. Reading and drafting run on their own and show up in Activity.</p>
+      </div>
+      <h3>Waiting for you</h3>
+      <div id="approvals-pending" class="list"></div>
+      <h3>Standing permissions</h3>
+      <div id="grants" class="list"></div>
+      <h3>History</h3>
+      <div id="approvals-history" class="list"></div>
+    </section>
+
+    <!-- Activity -->
+    <section id="tab-activity" class="panel">
+      <div class="panel-head">
+        <h2>Activity</h2>
+        <p class="muted">Every action the agent took, asked for, or was refused. The log is hash-chained, so edits made outside the app are detected.</p>
+      </div>
+      <div id="audit-verify" class="card"></div>
+      <div id="audit-list" class="list" style="margin-top:8px"></div>
+    </section>
+
+    <!-- Connectors -->
+    <section id="tab-connectors" class="panel">
+      <div class="panel-head">
+        <h2>Connectors</h2>
+        <p class="muted">What the agent can reach on this Mac. The first use of each Apple app shows a macOS permission prompt; press Test to answer it now.</p>
+      </div>
+      <div id="connector-list" class="list"></div>
+      <h3>Folders the Files connector may use</h3>
+      <form id="roots-form" class="inline-form">
+        <input id="file-roots" placeholder="~/Downloads,~/Desktop,~/Documents">
+        <button class="secondary">Save</button>
+      </form>
+    </section>
+
+    <!-- Decisions -->
+    <section id="tab-decisions" class="panel">
+      <div class="panel-head">
+        <h2>Decision log</h2>
+        <p class="muted">The decision layer's first call on every message, with its probabilities. Fix a wrong one and it learns from it immediately.</p>
+      </div>
+      <form id="try-decide" class="inline-form">
+        <input id="try-text" placeholder="Try a message without sending it…">
+        <button class="secondary">Decide</button>
+      </form>
+      <div id="try-result"></div>
+      <div id="decision-list" class="list"></div>
+    </section>
+
+    <!-- Memory -->
+    <section id="tab-memory" class="panel">
+      <div class="panel-head">
+        <h2>Memory</h2>
+        <p class="muted">What your agent remembers about you. Forget deletes the fact and its embedding for good.</p>
+      </div>
+      <form id="add-memory" class="inline-form">
+        <select id="mem-kind">
+          <option>preference</option><option selected>fact</option><option>person</option><option>place</option><option>routine</option>
+        </select>
+        <input id="mem-text" placeholder="Add something to remember…">
+        <button class="secondary">Add</button>
+      </form>
+      <div id="memory-list" class="list"></div>
+      <details class="identity"><summary>Identity file (about-me.md)</summary><pre id="identity"></pre></details>
+    </section>
+
+    <!-- Models -->
+    <section id="tab-models" class="panel">
+      <div class="panel-head">
+        <h2>Models</h2>
+        <p class="muted">Local models served by Ollama. Only one large model needs to be loaded at a time.</p>
+      </div>
+      <div id="ram" class="ram"></div>
+      <div id="models" class="list"></div>
+      <h3>System check</h3>
+      <div id="doctor" class="list"></div>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="panel">
+      <div class="panel-head"><h2>Settings</h2></div>
+      <form id="settings-form" class="settings">
+        <fieldset><legend>Persona</legend>
+          <label>Agent name <input name="agent_name"></label>
+          <label>Your name <input name="user_name"></label>
+          <label>Tone <input name="tone"></label>
+        </fieldset>
+        <fieldset><legend>Models (Ollama tags)</legend>
+          <label>Chat model <input name="chat_model"></label>
+          <label>Fast / judge model <input name="fast_model"></label>
+          <label>Embedding model <input name="embed_model"></label>
+          <label>Ollama URL <input name="ollama_url"></label>
+        </fieldset>
+        <fieldset><legend>Decision layer</legend>
+          <label>Backend
+            <select name="decision_backend">
+              <option value="hybrid">hybrid: prototype, escalate to SLM when unsure</option>
+              <option value="prototype">prototype only (fastest)</option>
+              <option value="slm">SLM judge only (slowest)</option>
+              <option value="systemone">external Jev-style server (experimental)</option>
+            </select>
+          </label>
+          <label>Confidence threshold <input name="confidence_threshold" type="number" min="0" max="1" step="0.05"></label>
+          <label>Prototype temperature <input name="prototype_temperature" type="number" min="1" max="200" step="1"></label>
+          <label>System-One server URL <input name="systemone_url"></label>
+        </fieldset>
+        <fieldset><legend>Connectors</legend>
+          <label>Calendar source
+            <select name="calendar_backend">
+              <option value="auto">Automatic: EventKit when allowed, otherwise AppleScript</option>
+              <option value="eventkit">EventKit only (complete, includes repeating events)</option>
+              <option value="applescript">AppleScript only (may miss repeating events)</option>
+            </select>
+          </label>
+        </fieldset>
+        <fieldset><legend>Proactivity</legend>
+          <label class="check"><input type="checkbox" name="proactive_enabled"> Let the agent reach out on its own</label>
+          <label>Morning brief at <input name="brief_time" type="time"></label>
+          <label>Check calendar, reminders and email every (minutes) <input name="check_every_minutes" type="number" min="5" max="720"></label>
+          <label>Quiet hours from <input name="quiet_start" type="time"></label>
+          <label>Quiet hours until <input name="quiet_end" type="time"></label>
+          <label>Most interruptions per day <input name="max_nudges_per_day" type="number" min="0" max="50"></label>
+          <label>Flag unreplied emails up to (days old) <input name="followup_days" type="number" min="1" max="30"></label>
+          <label>Overnight memory review at <input name="dream_time" type="time"></label>
+          <label class="check"><input type="checkbox" name="notify_macos"> Show macOS notifications</label>
+        </fieldset>
+        <fieldset><legend>Voice</legend>
+          <label class="check"><input type="checkbox" name="voice_enabled"> Enable voice</label>
+          <label class="check"><input type="checkbox" name="speak_replies"> Speak replies to voice messages</label>
+          <label>Speech-to-text model <input name="stt_model" list="stt-models"></label>
+          <datalist id="stt-models">
+            <option value="mlx-community/whisper-large-v3-turbo">
+            <option value="mlx-community/whisper-small-mlx">
+            <option value="mlx-community/whisper-base.en-mlx">
+          </datalist>
+          <label>Voice <select name="tts_voice" id="tts-voice"><option value="">System default</option></select></label>
+          <label>Speaking rate (words per minute) <input name="tts_rate" type="number" min="80" max="400"></label>
+        </fieldset>
+        <div class="row"><button class="primary">Save</button><span id="settings-status" class="muted"></span></div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/ui/app.js"></script>
+  <script src="/ui/voice.js"></script>
+</body>
+</html>

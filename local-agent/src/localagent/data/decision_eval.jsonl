@@ -1,0 +1,150 @@
+{"text": "hi!", "intent": "chit_chat", "memory": false}
+{"text": "yo", "intent": "chit_chat", "memory": false}
+{"text": "thank you so much", "intent": "chit_chat", "memory": false}
+{"text": "you're funny", "intent": "chit_chat", "memory": false}
+{"text": "how's it going?", "intent": "chit_chat", "memory": false}
+{"text": "I had a rough day at work", "intent": "chit_chat", "memory": false}
+{"text": "morning, hope you're well", "intent": "chit_chat", "memory": false}
+{"text": "great, thanks", "intent": "chit_chat", "memory": false}
+{"text": "that's awesome", "intent": "chit_chat", "memory": false}
+{"text": "I'm back", "intent": "chit_chat", "memory": false}
+{"text": "see you later", "intent": "chit_chat", "memory": false}
+{"text": "just saying hello", "intent": "chit_chat", "memory": false}
+{"text": "wow nice", "intent": "chit_chat", "memory": false}
+{"text": "hmm interesting", "intent": "chit_chat", "memory": false}
+{"text": "I'm feeling a bit down today", "intent": "chit_chat", "memory": false}
+{"text": "cheers mate", "intent": "chit_chat", "memory": false}
+{"text": "alright", "intent": "chit_chat", "memory": false}
+{"text": "bye for now", "intent": "chit_chat", "memory": false}
+{"text": "that's hilarious", "intent": "chit_chat", "memory": false}
+{"text": "appreciate it", "intent": "chit_chat", "memory": false}
+{"text": "I'm excited for the weekend", "intent": "chit_chat", "memory": false}
+{"text": "what is the boiling point of water at altitude?", "intent": "quick_answer", "memory": false}
+{"text": "how many teaspoons are in a tablespoon?", "intent": "quick_answer", "memory": false}
+{"text": "who painted the Mona Lisa?", "intent": "quick_answer", "memory": false}
+{"text": "what's the population of Canada?", "intent": "quick_answer", "memory": false}
+{"text": "why do cats purr?", "intent": "quick_answer", "memory": false}
+{"text": "what does APR stand for?", "intent": "quick_answer", "memory": false}
+{"text": "is coffee bad for you?", "intent": "quick_answer", "memory": false}
+{"text": "how does wifi work?", "intent": "quick_answer", "memory": false}
+{"text": "what's the tallest mountain in Europe?", "intent": "quick_answer", "memory": false}
+{"text": "what is inflation?", "intent": "quick_answer", "memory": false}
+{"text": "how do I know if an avocado is ripe?", "intent": "quick_answer", "memory": false}
+{"text": "what's 15% of 80?", "intent": "quick_answer", "memory": false}
+{"text": "can dogs eat grapes?", "intent": "quick_answer", "memory": false}
+{"text": "what's the speed of sound?", "intent": "quick_answer", "memory": false}
+{"text": "how long do I need to rest between sets?", "intent": "quick_answer", "memory": false}
+{"text": "what is a 401k match?", "intent": "quick_answer", "memory": false}
+{"text": "what causes hiccups?", "intent": "quick_answer", "memory": false}
+{"text": "what's the difference between a virus and bacteria?", "intent": "quick_answer", "memory": false}
+{"text": "how old is the universe?", "intent": "quick_answer", "memory": false}
+{"text": "when was the Eiffel Tower built?", "intent": "quick_answer", "memory": false}
+{"text": "is it bad to charge my phone overnight?", "intent": "quick_answer", "memory": false}
+{"text": "write a thank-you note to my neighbor for watering my plants", "intent": "task", "memory": false}
+{"text": "make a grocery list for tacos for six people", "intent": "task", "memory": false}
+{"text": "draft a LinkedIn post announcing my new job", "intent": "task", "memory": false}
+{"text": "summarize the key points of this meeting transcript: we agreed to ship in May...", "intent": "task", "memory": false}
+{"text": "plan a weekend trip to Napa", "intent": "task", "memory": false}
+{"text": "proofread this text for typos", "intent": "task", "memory": false}
+{"text": "help me write a resignation letter", "intent": "task", "memory": false}
+{"text": "create a study schedule for my exams", "intent": "task", "memory": false}
+{"text": "suggest a 5-day workout split", "intent": "task", "memory": false}
+{"text": "write a haiku about autumn", "intent": "task", "memory": false}
+{"text": "make a checklist for moving apartments", "intent": "task", "memory": false}
+{"text": "draft a reply to the recruiter asking about salary", "intent": "task", "memory": false}
+{"text": "write a bedtime story about a brave turtle", "intent": "task", "memory": false}
+{"text": "give me talking points for my performance review", "intent": "task", "memory": false}
+{"text": "create an agenda for tomorrow's team sync", "intent": "task", "memory": false}
+{"text": "write SQL to find duplicate emails in a users table", "intent": "task", "memory": false}
+{"text": "plan a kid's birthday party on a budget", "intent": "task", "memory": false}
+{"text": "rewrite this email so it's shorter", "intent": "task", "memory": false}
+{"text": "turn this recipe into a shopping list", "intent": "task", "memory": false}
+{"text": "make a pros and cons list for buying vs renting", "intent": "task", "memory": false}
+{"text": "write a product description for handmade candles", "intent": "task", "memory": false}
+{"text": "remind me to take my meds at 9pm", "intent": "schedule", "memory": false}
+{"text": "what's my schedule like on Monday?", "intent": "schedule", "memory": false}
+{"text": "set a reminder to renew my passport in March", "intent": "schedule", "memory": false}
+{"text": "book an hour on Friday for the gym", "intent": "schedule", "memory": false}
+{"text": "remind me tomorrow morning to email the plumber", "intent": "schedule", "memory": false}
+{"text": "is anything on my calendar Saturday?", "intent": "schedule", "memory": false}
+{"text": "push my 4pm call by 30 minutes", "intent": "schedule", "memory": false}
+{"text": "remind me every Sunday to plan the week", "intent": "schedule", "memory": false}
+{"text": "add the parent-teacher meeting on the 12th at 5", "intent": "schedule", "memory": false}
+{"text": "when's my flight?", "intent": "schedule", "memory": false}
+{"text": "remind me to buy flowers before our anniversary", "intent": "schedule", "memory": false}
+{"text": "clear my afternoon tomorrow", "intent": "schedule", "memory": false}
+{"text": "set a timer for 25 minutes", "intent": "schedule", "memory": false}
+{"text": "put a recurring reminder to back up my laptop monthly", "intent": "schedule", "memory": false}
+{"text": "what's next on my agenda today?", "intent": "schedule", "memory": false}
+{"text": "schedule a haircut sometime next week", "intent": "schedule", "memory": false}
+{"text": "remind me when I get home to call the bank", "intent": "schedule", "memory": false}
+{"text": "alert me 10 minutes before the standup", "intent": "schedule", "memory": false}
+{"text": "delete the reminder about the dentist", "intent": "schedule", "memory": false}
+{"text": "move the book club to next Thursday", "intent": "schedule", "memory": false}
+{"text": "nudge me at noon to eat lunch", "intent": "schedule", "memory": false}
+{"text": "I'm gluten free", "intent": "memory_write", "memory": true}
+{"text": "my husband is called David", "intent": "memory_write", "memory": true}
+{"text": "I like aisle seats", "intent": "memory_write", "memory": true}
+{"text": "I'm a software engineer at a startup", "intent": "memory_write", "memory": true}
+{"text": "remember that I can't eat shellfish", "intent": "memory_write", "memory": true}
+{"text": "my go-to pizza place is Tony's", "intent": "memory_write", "memory": true}
+{"text": "I'm based in London", "intent": "memory_write", "memory": true}
+{"text": "I do yoga every Wednesday evening", "intent": "memory_write", "memory": true}
+{"text": "my mom lives in Chicago", "intent": "memory_write", "memory": true}
+{"text": "I prefer email over Slack for important stuff", "intent": "memory_write", "memory": true}
+{"text": "my favorite color is green", "intent": "memory_write", "memory": true}
+{"text": "I play guitar in a band", "intent": "memory_write", "memory": true}
+{"text": "my boss is named Kevin", "intent": "memory_write", "memory": true}
+{"text": "I'm saving for a house", "intent": "memory_write", "memory": true}
+{"text": "I don't drink alcohol", "intent": "memory_write", "memory": true}
+{"text": "my car is a 2019 Honda Civic", "intent": "memory_write", "memory": true}
+{"text": "I work from home on Fridays", "intent": "memory_write", "memory": true}
+{"text": "my cat Luna is diabetic", "intent": "memory_write", "memory": true}
+{"text": "I'm a night owl", "intent": "memory_write", "memory": true}
+{"text": "for future reference, my shoe size is 10", "intent": "memory_write", "memory": true}
+{"text": "the usual spot for brunch is Cafe Rosa", "intent": "memory_write", "memory": true}
+{"text": "what do you know about my diet?", "intent": "memory_query", "memory": false}
+{"text": "do you remember my husband's name?", "intent": "memory_query", "memory": false}
+{"text": "which seat do I prefer?", "intent": "memory_query", "memory": false}
+{"text": "what's my job again?", "intent": "memory_query", "memory": false}
+{"text": "what can't I eat?", "intent": "memory_query", "memory": false}
+{"text": "where's my go-to pizza place?", "intent": "memory_query", "memory": false}
+{"text": "where am I based?", "intent": "memory_query", "memory": false}
+{"text": "what do I do on Wednesdays?", "intent": "memory_query", "memory": false}
+{"text": "where does my mom live?", "intent": "memory_query", "memory": false}
+{"text": "how do I like to be contacted?", "intent": "memory_query", "memory": false}
+{"text": "what's my favorite color?", "intent": "memory_query", "memory": false}
+{"text": "what instrument do I play?", "intent": "memory_query", "memory": false}
+{"text": "who's my boss?", "intent": "memory_query", "memory": false}
+{"text": "what am I saving for?", "intent": "memory_query", "memory": false}
+{"text": "do I drink?", "intent": "memory_query", "memory": false}
+{"text": "what car do I drive?", "intent": "memory_query", "memory": false}
+{"text": "what did I tell you about Fridays?", "intent": "memory_query", "memory": false}
+{"text": "what's wrong with my cat?", "intent": "memory_query", "memory": false}
+{"text": "am I a morning or night person?", "intent": "memory_query", "memory": false}
+{"text": "what's my shoe size?", "intent": "memory_query", "memory": false}
+{"text": "what have you learned about me so far?", "intent": "memory_query", "memory": false}
+{"text": "empty the trash", "intent": "computer_action", "memory": false}
+{"text": "forward this email to my accountant", "intent": "computer_action", "memory": false}
+{"text": "find my tax return from 2024 on my computer", "intent": "computer_action", "memory": false}
+{"text": "open Safari and go to my bank", "intent": "computer_action", "memory": false}
+{"text": "turn the volume down", "intent": "computer_action", "memory": false}
+{"text": "order a pizza from Tony's", "intent": "computer_action", "memory": false}
+{"text": "reply to the landlord saying the heater still doesn't work", "intent": "computer_action", "memory": false}
+{"text": "delete duplicate photos", "intent": "computer_action", "memory": false}
+{"text": "open the Notes app and create a grocery note", "intent": "computer_action", "memory": false}
+{"text": "lock my screen", "intent": "computer_action", "memory": false}
+{"text": "archive emails older than a month", "intent": "computer_action", "memory": false}
+{"text": "submit the expense report form", "intent": "computer_action", "memory": false}
+{"text": "buy concert tickets for Saturday", "intent": "computer_action", "memory": false}
+{"text": "zip the project folder and email it to Dana", "intent": "computer_action", "memory": false}
+{"text": "message the team on Slack that I'm sick", "intent": "computer_action", "memory": false}
+{"text": "unsubscribe from the gym newsletter", "intent": "computer_action", "memory": false}
+{"text": "sort my downloads into folders", "intent": "computer_action", "memory": false}
+{"text": "book a ride to the office", "intent": "computer_action", "memory": false}
+{"text": "print the boarding pass", "intent": "computer_action", "memory": false}
+{"text": "change my wallpaper", "intent": "computer_action", "memory": false}
+{"text": "log into my utility account and pay the bill", "intent": "computer_action", "memory": false}
+{"text": "I'm diabetic, what snacks are okay for me?", "intent": "quick_answer", "memory": true}
+{"text": "we just adopted a puppy named Biscuit, give me a training plan", "intent": "task", "memory": true}
+{"text": "I'm moving to Denver next month, remind me to set up internet", "intent": "schedule", "memory": true}
