@@ -155,3 +155,27 @@ def test_redactor_is_stable_and_handles_names():
     r = pii.Redactor(names=["Priya Raman", "Priya"])
     out = r.value({"to": "priya@acme.com", "body": "Hi Priya Raman, cc priya@acme.com"})
     assert out == {"to": "<EMAIL_1>", "body": "Hi <NAME_1>, cc <EMAIL_1>"}
+
+
+def test_name_redaction_is_fast_with_a_big_address_book():
+    """One regex per contact name took minutes with a real address book (Run Checks "did nothing")."""
+    import random
+    import string
+
+    rnd = random.Random(1)
+    names = [("".join(rnd.choices(string.ascii_lowercase, k=6)).title() + " "
+              + "".join(rnd.choices(string.ascii_lowercase, k=7)).title()) for _ in range(3000)]
+    names += [n.split()[0] for n in names] + ["Priya Raman", "Priya", "Will"]
+    text = 'Hi Priya Raman and Priya, will you call 425-555-0100? {"to": "sam@example.com"}'
+    started = time.perf_counter()
+    for _ in range(2000):
+        found = pii.count(text, names)
+    assert time.perf_counter() - started < 5
+    assert found["NAME"] == 2 and found["EMAIL"] == 1 and found["PHONE"] == 1   # "will" is a word, not Will
+
+
+def test_checks_endpoint_reports_its_time(action_client):
+    c = action_client
+    seed_activity(rt_of(c))
+    r = c.get("/api/trust/checks")
+    assert r.status_code == 200 and "seconds" in r.json() and r.json()["findings"]

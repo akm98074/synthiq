@@ -830,6 +830,12 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             r.audit.append("trust_forget", cap_id, outcome="ok", detail="; ".join(forgotten))
         return {"forgotten": forgotten, **trust.overview(r)}
 
+    @app.post("/api/trust/ask")
+    async def trust_ask_endpoint(body: dict) -> dict:
+        from .trust_ask import ask
+
+        return await ask(rt(), str(body.get("question", "")))
+
     @app.post("/api/trust/pause")
     async def trust_pause(body: dict, request: Request) -> dict:
         await change_settings({"paused": bool(body.get("paused"))}, request)
@@ -845,17 +851,27 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         a, b = window(since, until)
         return trust.egress_ledger(rt(), a, b)[::-1]
 
+    async def off_loop(fn, *args, limit: float = 90.0):
+        """Run heavy trust work in a thread: the rest of the app keeps answering meanwhile."""
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(fn, *args), limit)
+        except asyncio.TimeoutError as exc:
+            raise HTTPException(504, "That took too long. Try a shorter date range.") from exc
+
     @app.get("/api/trust/checks")
     async def trust_checks(since: str = "", until: str = "") -> dict:
         a, b = window(since, until)
-        return trust.checks(rt(), a, b)
+        started = time.perf_counter()
+        report = await off_loop(trust.checks, rt(), a, b)
+        report["seconds"] = round(time.perf_counter() - started, 2)
+        return report
 
     @app.get("/api/trust/export")
     async def trust_export(since: str = "", until: str = "", raw: bool = False, confirm_raw: str = "") -> Response:
         if raw and confirm_raw != "yes":
             raise HTTPException(400, "A raw export contains your personal data; confirm it first.")
         a, b = window(since, until)
-        data, manifest = trust.export(rt(), a, b, raw=raw)
+        data, manifest = await off_loop(lambda: trust.export(rt(), a, b, raw=raw))
         name = (f"localagent-activity-{manifest['window']['since_local'][:10]}_"
                 f"{manifest['window']['until_local'][:10]}{'-RAW' if raw else ''}.zip")
         return Response(data, media_type="application/zip",

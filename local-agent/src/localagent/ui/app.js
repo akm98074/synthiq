@@ -937,58 +937,89 @@ function trustRange() {
   return q;
 }
 
+const RISK_DOT = { low: "🟢", medium: "🟠", high: "🔴" };
+
+async function toggleCapability(c, enable) {
+  let forget = false;
+  if (!enable && ["screen", "gmail", "cloud", "phone", "peers", "imessage_channel"].includes(c.id)) {
+    forget = confirm(`Also delete what the agent keeps for ${c.name} (sign-ins, keys, pairings, cached text)?`);
+  }
+  const r = await api(`/api/trust/capability/${c.id}`, { method: "POST", body: { enabled: enable, forget } });
+  if (r.forgotten?.length) alert(`Deleted: ${r.forgotten.join(", ")}`);
+  renderTrust(r);
+  window.loadVoiceStatus?.();          // the wake word and voice react to these switches at once
+  return r;
+}
+
+function capRow(c) {
+  const toggle = el("input", { type: "checkbox", "aria-label": `Turn ${c.name} on or off` });
+  toggle.checked = c.enabled;
+  toggle.disabled = !c.available;
+  toggle.addEventListener("change", async () => {
+    try { await toggleCapability(c, toggle.checked); } catch (err) { toggle.checked = !toggle.checked; alert(err.message); }
+  });
+  const perms = c.permissions.map((p) => p.link
+    ? el("a", { href: p.link, title: "Open this page of System Settings" }, p.name) : p.name);
+  return el("div", { class: `cap-row ${c.enabled ? "on" : "off"}` },
+    el("label", { class: "cap-switch" }, toggle),
+    el("details", { class: "cap-details" },
+      el("summary", {},
+        el("span", { class: "cap-name" }, c.name),
+        el("span", { class: `risk ${c.risk}`, title: `${c.risk} risk` }, `${RISK_DOT[c.risk] || ""} ${c.risk}`),
+        el("span", { class: "cap-meta" }, c.available ? (c.last_used ? `used ${whenTs(c.last_used)}` : "never used")
+          : "needs a Mac", c.note && c.available ? ` · ${c.note}` : "")),
+      el("dl", { class: "cap-facts" },
+        el("dt", {}, "Reads"), el("dd", {}, c.reads),
+        el("dt", {}, "Can leave this computer"), el("dd", {}, c.leaves),
+        el("dt", {}, "Risk"), el("dd", {}, c.risk_text),
+        el("dt", {}, "Safeguards"), el("dd", {}, c.safeguards),
+        perms.length ? el("dt", {}, "System permission") : null,
+        perms.length ? el("dd", {}, ...perms.flatMap((x, i) => (i ? [", ", x] : [x]))) : null)));
+}
+
 function renderTrust(o) {
   trustCache = o;
   renderIndicators(o);
-  const choose = PRESETS.map(([id, name, about]) => {
-    const r = el("input", { type: "radio", name: "autonomy", value: id });
-    r.checked = o.autonomy === id;
-    r.addEventListener("change", async () => renderTrust(await api("/api/trust/autonomy", { method: "PUT", body: { autonomy: id } })));
-    return el("label", { class: o.autonomy === id ? "on" : "" }, r, " ", el("strong", {}, name), el("div", { class: "muted small" }, about));
-  });
-  const enabled = o.capabilities.filter((c) => c.enabled);
-  $("#trust-summary").replaceChildren(
-    el("div", { class: "big" }, o.paused ? "⏸ The agent is paused: it only answers you here, read-only."
-      : `Everything runs on this computer. ${o.egress_7d} thing${o.egress_7d === 1 ? "" : "s"} left it in the last 7 days.`),
-    el("div", { class: "muted small" }, `${enabled.length} of ${o.capabilities.filter((c) => c.available).length} capabilities on · `
-      + `secrets kept in ${o.vault} · version ${o.version}`),
-    el("div", { class: "presets" }, choose));
+  const attention = o.posture.filter((p) => p.ok === false);
+  const presets = el("div", { class: "segmented", role: "radiogroup", "aria-label": "Trust preset" },
+    PRESETS.map(([id, name, about]) => {
+      const b = el("button", { type: "button", class: o.autonomy === id ? "on" : "", title: about,
+        role: "radio", "aria-checked": String(o.autonomy === id) }, name);
+      b.addEventListener("click", async () => renderTrust(await api("/api/trust/autonomy", { method: "PUT", body: { autonomy: id } })));
+      return b;
+    }));
+  const about = PRESETS.find(([id]) => id === o.autonomy)?.[2] || "";
+  $("#trust-status").replaceChildren(
+    el("div", { class: "status-line" },
+      el("span", { class: "status-big" }, o.paused ? "⏸ Paused: I only answer you here, read-only."
+        : attention.length ? `⚠ ${attention.length} thing${attention.length === 1 ? "" : "s"} need${attention.length === 1 ? "s" : ""} your attention`
+        : "✅ All good"),
+      el("button", { type: "button", class: o.paused ? "primary" : "secondary", onclick: async () => {
+        renderTrust(await api("/api/trust/pause", { method: "POST", body: { paused: !o.paused } }));
+      } }, o.paused ? "▶ Resume" : "⏸ Pause")),
+    attention.length ? el("ul", { class: "attention" }, attention.map((p) =>
+      el("li", {}, el("strong", {}, p.name), ` — ${p.detail}`, p.fix ? el("div", { class: "muted small" }, `Fix: ${p.fix}`) : null))) : null,
+    el("div", { class: "preset-row" }, el("span", { class: "muted small" }, "What I may do:"), presets,
+      el("span", { class: "muted small preset-about" }, about)));
 
-  $("#trust-caps").replaceChildren(...o.capabilities.map((c) => {
-    const toggle = el("input", { type: "checkbox", "aria-label": `Turn ${c.name} on or off` });
-    toggle.checked = c.enabled;
-    toggle.disabled = !c.available;
-    toggle.addEventListener("change", async () => {
-      let forget = false;
-      if (!toggle.checked && ["screen", "gmail", "cloud", "phone", "peers", "imessage_channel"].includes(c.id)) {
-        forget = confirm(`Also delete what the agent keeps for ${c.name} (sign-ins, keys, pairings, cached text)?`);
-      }
-      try {
-        const r = await api(`/api/trust/capability/${c.id}`, { method: "POST", body: { enabled: toggle.checked, forget } });
-        if (r.forgotten?.length) alert(`Deleted: ${r.forgotten.join(", ")}`);
-        renderTrust(r);
-      } catch (err) { toggle.checked = !toggle.checked; alert(err.message); }
-    });
-    const perms = c.permissions.map((p) => p.link
-      ? el("a", { href: p.link, title: "Open this page of System Settings" }, p.name) : p.name);
-    return el("div", { class: `card cap ${c.enabled ? "" : "off"}` },
-      toggle,
-      el("div", { class: "cap-body" },
-        el("div", {}, el("strong", {}, c.name), " ", el("span", { class: `risk ${c.risk}` }, `${c.risk} risk`),
-          c.note ? el("span", { class: "muted small" }, ` · ${c.note}`) : null),
-        el("div", { class: "lines" },
-          el("div", {}, el("b", {}, "Reads: "), c.reads),
-          el("div", {}, el("b", {}, "Can leave this computer: "), c.leaves),
-          el("div", {}, el("b", {}, "Risk: "), c.risk_text),
-          el("div", {}, el("b", {}, "Safeguards: "), c.safeguards),
-          perms.length ? el("div", {}, el("b", {}, "System permission: "), ...perms.flatMap((x, i) => (i ? [", ", x] : [x]))) : null)),
-      el("div", { class: "cap-meta" }, `last used ${whenTs(c.last_used)}`, el("br"), `${c.uses_7d} use${c.uses_7d === 1 ? "" : "s"} this week`));
-  }));
+  const on = o.capabilities.filter((c) => c.enabled);
+  const off = o.capabilities.filter((c) => !c.enabled);
+  $("#trust-caps").replaceChildren(
+    el("h3", {}, `On (${on.length})`), ...(on.length ? on.map(capRow) : [el("p", { class: "muted small" }, "Nothing is on.")]),
+    el("h3", {}, `Off (${off.length})`), ...off.map(capRow));
 
-  $("#trust-posture").replaceChildren(...o.posture.map((p) => el("div", { class: "card check-row" },
+  const failing = o.posture.filter((p) => p.ok !== true);
+  const passing = o.posture.filter((p) => p.ok === true);
+  const checkRow = (p) => el("div", { class: "card check-row" },
     el("span", { class: "mark" }, p.ok === true ? "✅" : p.ok === false ? "⚠️" : "❔"),
     el("div", {}, el("strong", {}, p.name), el("div", { class: "muted small" }, p.detail),
-      p.fix ? el("div", { class: "small" }, `Fix: ${p.fix}`) : null))));
+      p.fix ? el("div", { class: "small" }, `Fix: ${p.fix}`) : null));
+  $("#trust-posture").replaceChildren(...failing.map(checkRow),
+    passing.length ? el("details", { class: "passed" }, el("summary", {}, `${passing.length} checks passed`), ...passing.map(checkRow)) : null);
+
+  $("#trust-week").textContent = `${o.egress_7d} thing${o.egress_7d === 1 ? "" : "s"} left this computer in the last 7 days `
+    + `(see Activity). ${on.length} of ${o.capabilities.filter((c) => c.available).length} capabilities on. `
+    + `Secrets kept in ${o.vault}. Version ${o.version}.`;
 
   $("#trust-grants").replaceChildren(...(o.grants.length ? o.grants.map((g) => el("div", { class: "card card-row" },
     el("span", {}, el("strong", {}, g.tool), " · ", g.label,
@@ -997,6 +1028,44 @@ function renderTrust(o) {
       await api(`/api/grants/${g.id}`, { method: "DELETE" }); loadTrust();
     } }, "Revoke"))) : [el("p", { class: "muted small" }, "None. Everything that needs your OK will ask.")]));
 }
+
+/* sub-tabs inside Trust */
+function showTrustSub(name) {
+  document.querySelectorAll("#tab-trust .subtab").forEach((b) => b.classList.toggle("active", b.dataset.sub === name));
+  document.querySelectorAll("#tab-trust .subpanel").forEach((p) => p.classList.toggle("active", p.dataset.sub === name));
+  try { localStorage.setItem("la-trust-sub", name); } catch (_) {}
+}
+document.querySelectorAll("#tab-trust .subtab").forEach((b) => b.addEventListener("click", () => showTrustSub(b.dataset.sub)));
+try { const sub = localStorage.getItem("la-trust-sub"); if (sub) showTrustSub(sub); } catch (_) {}
+
+/* Ask about privacy & security */
+const ASK_EXAMPLES = ["What did you send last week?", "What can you access?", "Who can control you?",
+  "Is my data encrypted?", "Anything need my attention?"];
+$("#trust-ask-chips").replaceChildren(...ASK_EXAMPLES.map((q) => el("button", { type: "button", class: "chip-btn",
+  onclick: () => { $("#trust-ask").value = q; askTrust(q); } }, q)));
+
+async function askTrust(q) {
+  const box = $("#trust-answer");
+  box.classList.remove("hidden");
+  box.replaceChildren(el("p", { class: "muted small" }, "Looking at your records…"));
+  try {
+    const r = await api("/api/trust/ask", { method: "POST", body: { question: q } });
+    box.replaceChildren(
+      Object.assign(el("div", { class: "answer-text md" }), { innerHTML: md(r.answer) }),
+      r.actions.length ? el("div", { class: "row answer-actions" }, r.actions.map((a) => el("button", {
+        type: "button", class: "secondary", onclick: async () => {
+          try { await toggleCapability(trustCache.capabilities.find((c) => c.id === a.capability), a.enabled); askTrust(q); }
+          catch (err) { alert(err.message); }
+        } }, a.label))) : null,
+      el("details", { class: "based-on" }, el("summary", {}, r.source === "records" ? "Based on your records" : "Based on your records (worded by the local model)"),
+        el("ul", {}, r.facts.map((f) => el("li", {}, f)))));
+  } catch (err) { box.replaceChildren(el("p", { class: "error-text" }, err.message)); }
+}
+$("#trust-ask-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $("#trust-ask").value.trim();
+  if (q) askTrust(q);
+});
 
 async function loadEgress() {
   const rows = await api(`/api/trust/egress?${trustRange()}`);
@@ -1015,19 +1084,29 @@ async function loadTrust() {
 }
 
 $("#trust-run-checks").addEventListener("click", async () => {
+  const btn = $("#trust-run-checks");
   const box = $("#trust-checks");
-  box.replaceChildren(el("p", { class: "muted small" }, "Checking…"));
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  box.replaceChildren(el("p", { class: "muted small" }, "Checking your activity log…"));
   try {
     const r = await api(`/api/trust/checks?${trustRange()}`);
     const icon = { critical: "⛔", high: "⚠️", medium: "⚠️", info: "ℹ️", ok: "✅" };
     box.replaceChildren(
-      el("p", { class: "muted small" }, `${r.entries} log entries and ${r.egress} outgoing item(s) checked. ${r.not_covered}`),
+      el("p", { class: "small" }, el("strong", {}, "Checked "), `${r.entries} log entries and ${r.egress} outgoing item(s)`
+        + (r.seconds != null ? ` in ${r.seconds} s` : "") + ". ", el("span", { class: "muted" }, r.not_covered)),
       ...r.findings.map((f) => el("div", { class: `card finding ${f.severity}` },
         el("div", {}, `${icon[f.severity] || "•"} `, el("strong", {}, f.title), el("span", { class: "muted small" }, ` · ${f.severity}`)),
         f.detail ? el("div", { class: "small" }, f.detail) : null,
         f.items.length ? el("ul", {}, f.items.map((i) => el("li", {}, i))) : null)));
     loadEgress();
-  } catch (err) { box.replaceChildren(el("p", { class: "muted small" }, err.message)); }
+  } catch (err) {
+    box.replaceChildren(el("p", { class: "error-text" }, `Couldn't run the checks: ${err.message}`));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Run checks";
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 });
 
 $("#trust-download").addEventListener("click", () => {

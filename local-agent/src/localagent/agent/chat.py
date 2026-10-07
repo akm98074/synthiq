@@ -132,6 +132,19 @@ async def handle_turn(rt: "Runtime", text: str, channel: str = "app") -> AsyncIt
     history = rt.store.recent_messages(HISTORY_TURNS * 2)
     user_msg_id = rt.store.add_message("user", text)
 
+    from ..trust_ask import ask, is_chat_trust_question
+
+    if is_chat_trust_question(text):
+        # Questions about the agent's own access and safety are answered from its records, not guessed.
+        res = await ask(rt, text)
+        answer = res["answer"] + "\n\n(From your Trust records: " + "; ".join(res["facts"])[:300] + ")"
+        yield {"type": "trust_answer", "facts": res["facts"], "actions": res["actions"]}
+        yield {"type": "token", "text": answer}
+        msg_id = rt.store.add_message("assistant", answer)
+        yield {"type": "done", "message_id": msg_id, "model": "trust records" if res["source"] == "records"
+               else s.fast_model}
+        return
+
     try:
         decision = await rt.router.decide(text, context=_format_history(history))
     except OllamaError as exc:

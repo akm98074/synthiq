@@ -58,6 +58,40 @@ def _keep(kind: str, value: str) -> bool:
     return True
 
 
+# First names that are also everyday words would redact half the log; never treat them as names.
+COMMON_WORDS = {"will", "may", "mark", "bill", "june", "april", "august", "grace", "hope", "joy", "faith",
+                "rose", "summer", "dawn", "art", "sue", "pat", "rob", "jack", "frank", "ray", "chase", "drew",
+                "lane", "young", "page", "case", "max", "sky", "star", "king", "rich", "guy", "don", "gene"}
+_WORD = re.compile(r"[\w'’-]+", re.UNICODE)
+
+
+class _NameIndex:
+    __slots__ = ("names", "longest")
+
+    def __init__(self, names: frozenset, longest: int):
+        self.names, self.longest = names, longest
+
+
+_INDEX_CACHE: dict[tuple, _NameIndex] = {}
+
+
+def name_index(names: tuple) -> _NameIndex:
+    """Names as a set of exact word sequences: lookup is linear in the text, whatever the number of
+    contacts (one regex per name took minutes with a real address book)."""
+    idx = _INDEX_CACHE.get(names)
+    if idx is None:
+        keep = set()
+        for n in names:
+            n = " ".join(_WORD.findall(n or ""))
+            if len(n) >= 3 and n.lower() not in COMMON_WORDS:
+                keep.add(n)
+        idx = _NameIndex(frozenset(keep), max((k.count(" ") + 1 for k in keep), default=0))
+        if len(_INDEX_CACHE) > 8:
+            _INDEX_CACHE.clear()
+        _INDEX_CACHE[names] = idx
+    return idx
+
+
 def find(text: str, names: list[str] | None = None) -> list[tuple[str, str, int, int]]:
     """[(kind, value, start, end)] non-overlapping, secrets first, then PII, then known names."""
     if not text:
@@ -74,13 +108,21 @@ def find(text: str, names: list[str] | None = None) -> list[tuple[str, str, int,
             if _keep(kind, v) and free(m.start(), m.end()):
                 taken.append((m.start(), m.end()))
                 out.append((kind, v, m.start(), m.end()))
-    for name in names or []:
-        if len(name) < 3:
-            continue
-        for m in re.finditer(rf"\b{re.escape(name)}\b", text):
-            if free(m.start(), m.end()):
-                taken.append((m.start(), m.end()))
-                out.append(("NAME", m.group(0), m.start(), m.end()))
+    if names:
+        index = name_index(tuple(names))
+        words = [(m.group(0), m.start(), m.end()) for m in _WORD.finditer(text)]
+        i = 0
+        while i < len(words):
+            for n in range(min(index.longest, len(words) - i), 0, -1):
+                cand = " ".join(w for w, _, _ in words[i:i + n])
+                if cand in index.names:
+                    a, b = words[i][1], words[i + n - 1][2]
+                    if free(a, b):
+                        taken.append((a, b))
+                        out.append(("NAME", text[a:b], a, b))
+                    i += n - 1
+                    break
+            i += 1
     return sorted(out, key=lambda x: x[2])
 
 
