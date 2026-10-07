@@ -2,6 +2,19 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/` (Windows: `%LOCALAPPDATA%\LocalAIAgent`, Linux: `~/.local/share/LocalAIAgent`), which the installer never touches.
 
+## From 0.17.0 to 0.17.1 ("Hey Ari" heard but nothing happened; "null" in Trust)
+
+```bash
+bash install.sh localaiagent-0.17.1-py3-none-any.whl
+localagent start
+```
+
+A fix for the wake word. In 0.17.0, "Hey Ari" could show under the chat box as "Heard “…”" without the command going into the chat. The speech model sometimes adds sound labels such as `[BLANK_AUDIO]` or `(music)`, or keeps filler words ("Okay, so hey Ari", "Hey, uh, Ari"), and those made the phrase look like it wasn't at the start. They are now ignored. Also fixed: a stray word "null" in the Trust tab (under "All good" and under Ask answers).
+
+Nothing else changes, and you don't need to sign in again.
+
+If it still shows "Heard “…”, not “Hey Ari”", please send the exact text in quotes: it shows which wording is still missed.
+
 ## From 0.16.2 to 0.17.0 (Trust tab redesign, wake word fix, security hardening)
 
 ```bash

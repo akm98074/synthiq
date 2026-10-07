@@ -13,6 +13,10 @@ from difflib import SequenceMatcher
 
 GREETINGS = ("hey", "hi", "hello", "ok", "okay", "yo")
 THRESHOLD = 0.75
+# Whisper writes sounds it hears as labels: "[BLANK_AUDIO]", "(upbeat music)", "*cough*", "♪".
+NON_SPEECH = re.compile(r"\[[^\]]*\]|\([^)]*\)|\*[^*]*\*|♪")
+# Spoken filler that can come before or inside the phrase: "Okay, so hey Ari", "Hey, uh, Ari".
+FILLERS = {"um", "uh", "er", "erm", "ah", "oh", "so", "well", "yeah", "there"}
 
 
 def normalize(text: str) -> list[str]:
@@ -45,13 +49,17 @@ def match(text: str, phrases: list[str]) -> tuple[bool, str, str]:
     may be loose ("hi"/"hey"), but the name must sound like the agent's name, so "Hey Siri"
     or "are you there" don't wake it.
     """
+    text = NON_SPEECH.sub(" ", text)
     spans = [m.span() for m in re.finditer(r"[a-z0-9']+", text.lower())]
     words = normalize(text)
     if len(spans) != len(words):           # exotic characters: fall back to whitespace words
         spans = [m.span() for m in re.finditer(r"\S+", text)][:len(words)]
+    # Look for the phrase without filler words, but keep each word's place in the text.
+    kept = [(w, sp) for w, sp in zip(words, spans) if w not in FILLERS or w in GREETINGS]
+    words, spans = [w for w, _ in kept], [sp for _, sp in kept]
 
     def rest_after(end: int) -> str:
-        return text[spans[end - 1][1]:].strip(" ,.!?;:") if 0 < end <= len(spans) else ""
+        return text[spans[end - 1][1]:].strip(" ,.!?;:…—–-") if 0 < end <= len(spans) else ""
     for phrase in phrases:
         parts = phrase.split()
         greet = parts[:-1] if parts[0] in GREETINGS and len(parts) > 1 else []

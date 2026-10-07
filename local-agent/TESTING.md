@@ -1,4 +1,6 @@
-# Testing v0.17.0: Trust tab redesign, Ask, wake word, reliability and security
+# Testing v0.17.1: Trust tab redesign, Ask, wake word, reliability and security
+
+0.17.1 fixes "Hey Ari" being heard but not run (see UPGRADING.md). If you already checked 0.17.0, only redo steps 7–9.
 
 Do the steps in `UPGRADING.md` first (about 5 minutes). This checklist takes about 15 minutes.
 
@@ -31,7 +33,7 @@ Do the steps in `UPGRADING.md` first (about 5 minutes). This checklist takes abo
 | "Open LocalAIAgent from its app or Terminal" right after upgrading | Expected once (the sign-in secret was replaced). Run `localagent open`. |
 | "Click anywhere on this page to start listening for “Hey Ari”" | Expected after the page loads: browsers keep the microphone audio paused until you click. Click once. |
 | "Wake word: …" in red under the chat | That's the reason it can't listen. Please send it. |
-| "Heard “…”, not “Hey Ari”" | It heard you but understood something else. Please send what it shows; we tune matching from these. |
+| "Heard “…”, not “Hey Ari”" | It heard you but didn't recognise the phrase. Please send the exact text in quotes; matching is tuned from these. |
 | Phone: "This line is locked for now" | 5 wrong PINs within an hour. It unlocks after an hour, or right away if you save a new PIN in Settings → Phone line. |
 | A custom skill fails to start | Send the error. Skills can no longer use the keychain. |
 
@@ -49,7 +51,7 @@ Do the steps in `UPGRADING.md` first (about 5 minutes). This checklist takes abo
 
 **Hey Ari**
 7. In Trust → Capabilities, switch **Wake word** on. Under the chat it says "Listening for “Hey Ari”", or "Click anywhere on this page…": then click once.
-8. Say _"Hey Ari"_. You hear a chime and it listens. Say _"Hey Ari, what's on my calendar today?"_ in one breath: it answers.
+8. Say _"Hey Ari"_. You hear a chime and it listens. Say _"Hey Ari, what's on my calendar today?"_ in one breath: the question appears in the chat and it answers.
 9. Say something else. For a moment it shows "Heard “…”, not “Hey Ari”".
 
 **Phone** (if you use it)

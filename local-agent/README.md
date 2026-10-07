@@ -38,7 +38,7 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 ## Install (Apple Silicon Mac, 16 GB+; Windows and Linux below)
 
 ```bash
-bash install.sh localaiagent-0.17.0-py3-none-any.whl
+bash install.sh localaiagent-0.17.1-py3-none-any.whl
 localagent start
 ```
 
@@ -49,7 +49,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.17.0-py3-none-any.whl
+pipx install ./localaiagent-0.17.1-py3-none-any.whl
 localagent setup
 localagent app install     # macOS: permissions go to the LocalAIAgent app, not Terminal
 localagent start
@@ -60,7 +60,7 @@ localagent start
 Windows, in a normal (not Administrator) PowerShell window, in the folder with the files:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.17.0-py3-none-any.whl
+powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.17.1-py3-none-any.whl
 localagent start
 ```
 

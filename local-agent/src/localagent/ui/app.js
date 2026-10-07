@@ -1,6 +1,12 @@
 "use strict";
 
 const $ = (sel) => document.querySelector(sel);
+// The DOM turns a null child into the text "null". Optional parts are written `cond ? el(...) : null`
+// throughout, so drop empty ones everywhere, as el() does.
+for (const name of ["append", "replaceChildren"]) {
+  const orig = Element.prototype[name];
+  Element.prototype[name] = function (...kids) { return orig.apply(this, kids.filter((k) => k != null && k !== false)); };
+}
 const el = (tag, attrs = {}, ...children) => {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {

@@ -27,6 +27,17 @@ P = wake_phrases("Ari")
     ("Hey are you there?", False, ""),
     ("Hey, how are you?", False, ""),
     ("Hey Ori", False, ""),
+    # Whisper's sound labels and spoken filler (0.17.0 missed these: heard, but never woke)
+    ("[BLANK_AUDIO] Hey Ari", True, ""),
+    ("(upbeat music) Hey Ari, what time is it?", True, "what time is it"),
+    ("♪ Hey Ari ♪", True, ""),
+    ("Okay, so hey Ari, what time is it?", True, "what time is it"),
+    ("Hey, uh, Ari, lights off", True, "lights off"),
+    ("Hey there Ari", True, ""),
+    ("Hey Ari… what time is it", True, "what time is it"),
+    ("so I told Ari about it", False, ""),
+    ("[MUSIC]", False, ""),
+    ("Hey, how are you?", False, ""),
 ])
 def test_match(text, woke, rest):
     got = match(text, P)
@@ -103,3 +114,11 @@ def test_trust_switch_turns_voice_on_for_the_wake_word(voice_client):
     assert r.status_code == 200
     st = c.get("/api/voice/status").json()
     assert st["enabled"] and st["wake"]["enabled"]
+
+
+def test_wake_endpoint_with_whisper_sound_labels(voice_client):
+    c = voice_client
+    c.put("/api/settings", json={"wake_word_enabled": True})
+    c.stt.text = "[BLANK_AUDIO] Hey Ari, what's on my calendar today?"
+    r = c.post("/api/voice/wake", content=tone(1.5), headers={"Content-Type": "audio/wav"}).json()
+    assert r["wake"] and r["command"] == "what's on my calendar today"

@@ -11,7 +11,7 @@ runner = CliRunner()
 
 def test_version():
     r = runner.invoke(app, ["version"])
-    assert r.exit_code == 0 and r.stdout.strip() == "0.17.0"
+    assert r.exit_code == 0 and r.stdout.strip() == "0.17.1"
 
 
 def test_setup_doctor_eval(settings, home):
