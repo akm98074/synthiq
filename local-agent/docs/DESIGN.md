@@ -353,7 +353,7 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 
 The UI server listens on 127.0.0.1, but any local program, and any website through DNS rebinding, can reach localhost. A middleware therefore checks every request:
 1. **Host** must be `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>`, or else 421.
-2. **The per-install secret** (`<data>/api-token`, 0600): either the `la_session_<port>` cookie (HttpOnly, SameSite=Strict) that `GET /auth?t=<secret>&next=…` sets, or `Authorization: Bearer` from the CLI. Otherwise 401, and `/` shows "open with `localagent open`". Exempt: `/api/health` and `/api/gmail/callback`, which arrives from Google and is protected by its single-use state and PKCE.
+2. **The per-install secret** (`<data>/api-token`, 0600): either the `la_session_<port>` cookie (HttpOnly, SameSite=Strict) that `GET /auth?c=<code>&next=…` sets, or `Authorization: Bearer` from the CLI. The secret never goes in a URL: `localagent open` first asks the running agent (with the Bearer secret) for a one-time code that works once, for 60 seconds (`POST /api/signin-code`; a cookie alone can't mint one). Since 0.17.0 the secret is replaced once on upgrade, because earlier links carried it. Otherwise 401, and `/` shows "open with `localagent open`". Exempt: `/api/health` and `/api/gmail/callback`, which arrives from Google and is protected by its single-use state and PKCE.
 3. **Origin** on non-GET requests must be the app's own, or else 403.
 
 UI responses carry a CSP (`default-src 'self'`) and `nosniff`. Security-sensitive settings (`config.SENSITIVE_SETTINGS`) need `X-Confirm: <keys>`; otherwise the server answers 428 with each change's risk, and the UI asks. Every settings change is audited as `settings_changed`.

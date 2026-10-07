@@ -4,7 +4,7 @@ A personal AI agent in the spirit of Meta Muse and Instinct that runs **entirely
 
 The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.md). Product-level documents (also as PDFs in `docs/pdf/`): [design overview and Muse/Instinct comparison](docs/OVERVIEW.md), [trust and control UX](docs/TRUST_UX.md), [security and privacy review](docs/SECURITY_REVIEW.md), [product roadmap](docs/PRODUCT_ROADMAP.md). How the system works, including which models produce the decision probabilities, is in [`docs/DESIGN.md`](docs/DESIGN.md). How to test this step: [`TESTING.md`](TESTING.md). Upgrading: [`UPGRADING.md`](UPGRADING.md).
 
-## Status: v0.16.0 — security fixes and the Trust & Transparency center
+## Status: v0.17.0 — a calmer Trust tab you can ask questions, a working wake word, and security hardening
 
 | Included | Comes later |
 |---|---|
@@ -31,14 +31,14 @@ The research, feasibility matrix and roadmap are in [`docs/PLAN.md`](docs/PLAN.m
 | **Form filling from memory** in the agent's browser; you review, nothing is submitted for you | |
 | **Screen context** (opt-in): on-device OCR of your screen, private apps skipped, forgotten after 2 hours | |
 | Learning from your corrections; model manager; persona settings | |
-| **Trust & Transparency center**: every capability with its risk and on/off, trust presets, pause, what left this computer, automated checks, and a redacted export for third-party (or AI) review | |
+| **Trust & Transparency center**: one status line, every capability with its risk and on/off, trust presets, pause, what left this computer, automated checks, a redacted export for third-party (or AI) review, and "Ask about privacy & security" in plain language | |
 | **Security**: the app opens only for you (per-install secret, Host and Origin checks), data can't leave after reading others' content without your OK, approvals show the full payload, phone PIN, verified trusted agents, private data folder, macOS app identity | |
 | **Windows and Linux**: everything except the Apple apps (Calendar, Contacts, Messages, Mail, Notes, Reminders, Mac apps, screen context) | |
 
 ## Install (Apple Silicon Mac, 16 GB+; Windows and Linux below)
 
 ```bash
-bash install.sh localaiagent-0.16.2-py3-none-any.whl
+bash install.sh localaiagent-0.17.0-py3-none-any.whl
 localagent start
 ```
 
@@ -49,7 +49,7 @@ Manual install:
 ```bash
 brew install pipx ollama
 brew services start ollama
-pipx install ./localaiagent-0.16.2-py3-none-any.whl
+pipx install ./localaiagent-0.17.0-py3-none-any.whl
 localagent setup
 localagent app install     # macOS: permissions go to the LocalAIAgent app, not Terminal
 localagent start
@@ -60,7 +60,7 @@ localagent start
 Windows, in a normal (not Administrator) PowerShell window, in the folder with the files:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.16.2-py3-none-any.whl
+powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.17.0-py3-none-any.whl
 localagent start
 ```
 

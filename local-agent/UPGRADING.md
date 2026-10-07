@@ -2,6 +2,24 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/` (Windows: `%LOCALAPPDATA%\LocalAIAgent`, Linux: `~/.local/share/LocalAIAgent`), which the installer never touches.
 
+## From 0.16.2 to 0.17.0 (Trust tab redesign, wake word fix, security hardening)
+
+```bash
+bash install.sh localaiagent-0.17.0-py3-none-any.whl
+localagent start
+```
+
+Windows: `powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.17.0-py3-none-any.whl`.
+
+**One thing to expect:** the first time 0.17.0 starts, it replaces the app's sign-in secret. In 0.16, that secret was part of the sign-in link, so it may sit in your browser history. A browser tab that was open before shows "Open LocalAIAgent from its app or Terminal": run `localagent open` once. From now on, sign-in links carry a one-time code that works once, for 60 seconds.
+
+What's new:
+- **Trust tab.** A single status line ("All good" or "N need your attention") with Pause and the trust preset, then four sub-tabs: Overview, Capabilities, Activity, Verify & export. Capabilities are one line each; open a row for the details. **Run checks** now finishes in about a second, even with a large address book (it used to run for minutes and freeze the app). It shows how long it took.
+- **Ask about privacy & security.** Type a question in Trust → Overview, or ask in chat: "What did you send last week?", "Who can control you?", "Is screen context on?". Answers come from the agent's own records, and show what they're based on.
+- **"Hey Ari" works.** Browsers keep the microphone audio paused until you click the page. The app now says "Click anywhere on this page to start listening" until you do. If the wake word can't work, it now says why instead of staying silent. Switching **Wake word** on in Trust also turns Voice on.
+- **Responsiveness.** The Trust status no longer re-reads the whole activity log every minute, so the app stays quick as the log grows.
+- **Security.** Custom skills can no longer reach the keychain or the Secret Service. After 5 wrong phone PINs in an hour the phone line locks for an hour (saving a new PIN unlocks it). The sign-in link no longer contains the secret.
+
 ## From 0.16.1 to 0.16.2 (fix for "error -10669" on the Mac)
 
 ```bash
