@@ -247,7 +247,9 @@ class Audit:
     def __init__(self, store: Store):
         self.store = store
         store.db.executescript(SCHEMA)
+        store.db.execute("CREATE INDEX IF NOT EXISTS audit_ts ON audit(ts)")   # date-range reads stay fast
         store.db.commit()
+        self._verified: tuple[int, str, int] | None = None   # (last id, its hash, rows up to it) already checked
 
     def append(self, kind: str, tool: str | None = None, tier: str | None = None,
                args: dict | None = None, outcome: str | None = None, detail: str | None = None,
@@ -277,12 +279,31 @@ class Audit:
             out.append(d)
         return out
 
-    def verify(self) -> dict:
-        rows = self.store.query("SELECT * FROM audit ORDER BY id ASC")
-        prev = GENESIS
-        for r in rows:
-            payload = {f: r[f] for f in self.FIELDS}
-            if r["prev_hash"] != prev or _hash(prev, payload) != r["hash"]:
-                return {"ok": False, "count": len(rows), "broken_at": r["id"]}
-            prev = r["hash"]
-        return {"ok": True, "count": len(rows), "broken_at": None}
+    def verify(self, full: bool = True) -> dict:
+        """Check the hash chain. `full=False` (the status shown every minute) only checks rows added
+        since the last check, after confirming the last checked row and the row count are unchanged;
+        rewriting older rows consistently would change that row's hash, so it is still caught. Checks
+        and exports always verify everything."""
+        start_id, prev, done = 0, GENESIS, 0
+        if not full and self._verified:
+            last_id, last_hash, n = self._verified
+            anchor = self.store.query("SELECT hash, (SELECT COUNT(*) FROM audit WHERE id <= ?) AS n "
+                                      "FROM audit WHERE id = ?", (last_id, last_id))
+            if anchor and anchor[0]["hash"] == last_hash and anchor[0]["n"] == n:
+                start_id, prev, done = last_id, last_hash, n
+        count = done
+        last_id = start_id
+        while True:                            # in pages, so a long log never sits in memory at once
+            rows = self.store.query("SELECT * FROM audit WHERE id > ? ORDER BY id ASC LIMIT 5000", (last_id,))
+            if not rows:
+                break
+            for r in rows:
+                payload = {f: r[f] for f in self.FIELDS}
+                count += 1
+                if r["prev_hash"] != prev or _hash(prev, payload) != r["hash"]:
+                    self._verified = None
+                    total = self.store.query("SELECT COUNT(*) AS n FROM audit")[0]["n"]
+                    return {"ok": False, "count": total, "broken_at": r["id"]}
+                prev, last_id = r["hash"], r["id"]
+        self._verified = (last_id, prev, count) if last_id else None
+        return {"ok": True, "count": count, "broken_at": None}

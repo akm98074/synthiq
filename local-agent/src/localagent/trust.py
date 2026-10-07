@@ -167,13 +167,15 @@ def _connector_of(rt: "Runtime", tool: str | None) -> str | None:
 def usage(rt: "Runtime", since: float) -> dict[str, dict]:
     """capability id -> {last, count} from the audit log."""
     out: dict[str, dict] = {}
-    rows = rt.store.query("SELECT ts, kind, tool FROM audit WHERE ts >= ? ORDER BY id", (since,))
+    # Grouped in SQLite: this runs on every Trust refresh, and the log only grows.
+    rows = rt.store.query("SELECT kind, tool, MAX(ts) AS last, COUNT(*) AS n FROM audit WHERE ts >= ? "
+                          "GROUP BY kind, tool", (since,))
     for r in rows:
         conn = _connector_of(rt, r["tool"]) if r["kind"] in ("tool_call", "connector_test") else None
         for c in CAPABILITIES:
             if (conn and conn in c.get("connectors", set())) or r["kind"] in c.get("kinds", set()):
                 u = out.setdefault(c["id"], {"last": None, "count": 0})
-                u["last"], u["count"] = r["ts"], u["count"] + 1
+                u["last"], u["count"] = max(u["last"] or 0, r["last"]), u["count"] + r["n"]
     return out
 
 
@@ -283,7 +285,7 @@ def posture(rt: "Runtime") -> list[dict]:
         mode = stat.S_IMODE(os.stat(rt.base).st_mode)
         add("folder", "Your data folder is private", mode & 0o077 == 0, f"{rt.base} (mode {oct(mode)})",
             f"chmod 700 '{rt.base}'")
-    enc, detail = disk_encryption()
+    enc, detail = disk_encryption(max_age=600)
     add("disk", "Disk encryption", enc, detail, "Turn on FileVault (Mac), BitLocker (Windows) or LUKS (Linux).")
     ollama_local = any(h in s.ollama_url for h in ("127.0.0.1", "localhost", "[::1]"))
     add("models", "Models run on this computer", ollama_local, s.ollama_url,
@@ -320,7 +322,7 @@ def posture(rt: "Runtime") -> list[dict]:
     add("grants", "No permanent permissions", not always,
         f"{len(always)} 'always' permission(s) (each expires after 30 days)" if always else "none",
         "Review them below and revoke what you don't need.")
-    v = rt.audit.verify()
+    v = rt.audit.verify(full=False)
     add("audit", "Activity log is intact", v["ok"], f"{v['count']} entries, hash chain " +
         ("verified" if v["ok"] else f"broken at entry {v['broken_at']}"),
         "The log was changed outside the app; export it and investigate.")

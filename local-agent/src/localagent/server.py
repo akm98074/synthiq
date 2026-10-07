@@ -635,7 +635,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
 
     @app.get("/api/audit/verify")
     async def audit_verify() -> dict:
-        return rt().audit.verify()
+        return await asyncio.to_thread(rt().audit.verify)
 
     # ── proactivity: nudges and jobs ──────────────────────────────────────
     @app.get("/api/nudges")
@@ -825,7 +825,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
 
     @app.get("/api/trust")
     async def trust_overview() -> dict:
-        return trust.overview(rt())
+        return await off_loop(trust.overview, rt())
 
     @app.post("/api/trust/capability/{cap_id}")
     async def trust_capability(cap_id: str, body: dict, request: Request) -> dict:
@@ -841,7 +841,7 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         await change_settings(change, request)
         if forgotten:
             r.audit.append("trust_forget", cap_id, outcome="ok", detail="; ".join(forgotten))
-        return {"forgotten": forgotten, **trust.overview(r)}
+        return {"forgotten": forgotten, **(await off_loop(trust.overview, r))}
 
     @app.post("/api/trust/ask")
     async def trust_ask_endpoint(body: dict) -> dict:
@@ -852,12 +852,12 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
     @app.post("/api/trust/pause")
     async def trust_pause(body: dict, request: Request) -> dict:
         await change_settings({"paused": bool(body.get("paused"))}, request)
-        return trust.overview(rt())
+        return await off_loop(trust.overview, rt())
 
     @app.put("/api/trust/autonomy")
     async def trust_autonomy(body: dict, request: Request) -> dict:
         await change_settings({"autonomy": str(body.get("autonomy", ""))}, request)
-        return trust.overview(rt())
+        return await off_loop(trust.overview, rt())
 
     @app.get("/api/trust/egress")
     async def trust_egress(since: str = "", until: str = "") -> list[dict]:

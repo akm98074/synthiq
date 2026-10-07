@@ -58,9 +58,24 @@ def lock_down(base: Path) -> None:
         private_dir(base / sub)
 
 
-def disk_encryption() -> tuple[bool | None, str]:
+_DISK: tuple[float, tuple[bool | None, str]] | None = None
+
+
+def disk_encryption(max_age: float = 0) -> tuple[bool | None, str]:
     """(on?, detail). None when it can't be told. Full-disk encryption protects the data if the
-    computer is lost or stolen; the agent's files aren't encrypted separately."""
+    computer is lost or stolen; the agent's files aren't encrypted separately. `max_age` reuses a
+    recent answer: the probe starts a process (up to 10 s on Windows) and the Trust status asks often."""
+    global _DISK
+    import time
+
+    if max_age and _DISK and time.monotonic() - _DISK[0] < max_age:
+        return _DISK[1]
+    result = _disk_encryption()
+    _DISK = (time.monotonic(), result)
+    return result
+
+
+def _disk_encryption() -> tuple[bool | None, str]:
     import shutil
     import subprocess
 

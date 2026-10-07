@@ -179,3 +179,45 @@ def test_checks_endpoint_reports_its_time(action_client):
     seed_activity(rt_of(c))
     r = c.get("/api/trust/checks")
     assert r.status_code == 200 and "seconds" in r.json() and r.json()["findings"]
+
+
+def test_trust_status_stays_fast_with_a_long_log(action_client, monkeypatch):
+    """The header refreshes /api/trust every minute. It used to re-hash the whole log, scan it in
+    Python and start the disk-encryption probe each time, all on the event loop."""
+    import time as _t
+
+    from localagent import security
+
+    c = action_client
+    rt = rt_of(c)
+    rt.store.execute("PRAGMA synchronous=OFF")                   # just to seed the log quickly
+    for i in range(20000):
+        rt.audit.append("tool_call", "calendar_today" if i % 2 else "web_search", tier="read",
+                        args={"q": f"x{i}"}, outcome="ok")
+    probes = []
+    monkeypatch.setattr(security, "_disk_encryption", lambda: probes.append(1) or (True, "on"))
+    monkeypatch.setattr(security, "_DISK", None)
+    c.get("/api/trust")                                         # first call verifies the whole chain
+    t = _t.perf_counter()
+    for _ in range(3):
+        o = c.get("/api/trust").json()
+    took = (_t.perf_counter() - t) / 3
+    assert took < 0.5, f"/api/trust took {took:.2f}s"
+    assert len(probes) == 1                                      # the probe is reused for 10 minutes
+    audit = next(p for p in o["posture"] if p["id"] == "audit")
+    assert audit["ok"] and str(rt.store.query("SELECT COUNT(*) AS n FROM audit")[0]["n"]) in audit["detail"]
+    cal = next(x for x in o["capabilities"] if x["id"] == "calendar")
+    assert cal["last_used"]
+
+    # Tampering is still caught by the quick check, not only by the full one.
+    assert rt.audit._verified                                    # the status call left a checkpoint
+    row = dict(rt.store.query("SELECT * FROM audit WHERE id = 7")[0])
+    rt.store.execute("DELETE FROM audit WHERE id = 7")
+    assert not rt.audit.verify(full=False)["ok"]                 # a deleted row changes the count
+    rt.store.execute(f"INSERT INTO audit({','.join(row)}) VALUES ({','.join('?' * len(row))})", tuple(row.values()))
+    assert rt.audit.verify()["ok"] and rt.audit._verified
+    last = rt.audit._verified[0]
+    rt.store.execute("UPDATE audit SET hash='x' WHERE id = ?", (last,))
+    assert not rt.audit.verify(full=False)["ok"]                 # rewriting the chain's end is seen
+    rt.store.execute("UPDATE audit SET detail='edited' WHERE id = 5")
+    assert not rt.audit.verify()["ok"]                           # checks and exports verify everything

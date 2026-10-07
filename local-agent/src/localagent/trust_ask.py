@@ -11,6 +11,7 @@ Every answer lists the facts it used, so you can check it.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -192,8 +193,9 @@ async def ask(rt: "Runtime", question: str) -> dict:
     if not question:
         return {"answer": "Ask me anything about what I can access, what I did, or what left this computer.",
                 "facts": [], "actions": [], "source": "records"}
-    f = facts(rt)
-    direct = _answer_from_records(rt, question, f)
+    # Reading the records touches the whole log; keep it off the event loop like the Trust tab does.
+    f = await asyncio.to_thread(facts, rt)
+    direct = await asyncio.to_thread(_answer_from_records, rt, question, f)
     if direct:
         rt.audit.append("trust_question", "trust", outcome="records", detail=question[:200])
         return direct
