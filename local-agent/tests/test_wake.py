@@ -21,6 +21,12 @@ P = wake_phrases("Ari")
     ("the weather is nice", False, ""),
     ("Arrive at 5", False, ""),
     ("hey everyone", False, ""),
+    ("Heyari.", True, ""),                                         # Whisper ran it together
+    ("Hey R.I., lights on", True, "lights on"),                     # or spelled it out
+    ("Hey, Arie!", True, ""),
+    ("Hey are you there?", False, ""),
+    ("Hey, how are you?", False, ""),
+    ("Hey Ori", False, ""),
 ])
 def test_match(text, woke, rest):
     got = match(text, P)
@@ -49,7 +55,51 @@ def test_wake_endpoint(voice_client):
     assert r["wake"] and r["command"] == "what's on my calendar today"
     c.stt.text = "pass the salt please"
     assert c.post("/api/voice/wake", content=tone(1.0), headers={"Content-Type": "audio/wav"}).json() == \
-        {"wake": False, "heard": "", "command": "", "ms": 5}
+        {"wake": False, "heard": "pass the salt please", "command": "", "ms": 5}   # shown briefly, never stored
     n = len(c.stt.calls)
     assert not c.post("/api/voice/wake", content=tone(0.1), headers={"Content-Type": "audio/wav"}).json()["wake"]
     assert len(c.stt.calls) == n                                      # too short: not even transcribed
+
+
+def test_a_broken_wake_model_falls_back_to_the_main_one(voice_client):
+    """A missing or broken tiny wake model used to fail every burst silently: the wake word just never woke."""
+    from test_trust import rt_of
+
+    c = voice_client
+    c.put("/api/settings", json={"wake_word_enabled": True})
+    rt = rt_of(c)
+
+    class Broken:
+        model = "missing"
+
+        async def transcribe(self, audio):
+            raise OSError("model files not found")
+
+    rt.wake_stt = Broken()
+    c.stt.text = "Hey Ari"
+    r = c.post("/api/voice/wake", content=tone(1.0), headers={"Content-Type": "audio/wav"})
+    assert r.status_code == 200 and r.json()["wake"]
+    assert rt.wake_stt is rt.stt                                      # remembered: no second failure per burst
+
+
+def test_wake_errors_say_why(voice_client):
+    c = voice_client
+    r = c.post("/api/voice/wake", content=tone(1.0), headers={"Content-Type": "audio/wav"})
+    assert r.status_code == 409 and "Trust" in r.json()["detail"]
+    c.put("/api/settings", json={"wake_word_enabled": True})
+
+    async def boom(audio):
+        raise ValueError("bad weights")
+
+    c.stt.transcribe = boom
+    r = c.post("/api/voice/wake", content=tone(1.0), headers={"Content-Type": "audio/wav"})
+    assert r.status_code == 503 and "localagent setup --voice" in r.json()["detail"]
+
+
+def test_trust_switch_turns_voice_on_for_the_wake_word(voice_client):
+    c = voice_client
+    c.put("/api/settings", json={"voice_enabled": False})
+    r = c.post("/api/trust/capability/wake", json={"enabled": True})
+    assert r.status_code == 200
+    st = c.get("/api/voice/status").json()
+    assert st["enabled"] and st["wake"]["enabled"]

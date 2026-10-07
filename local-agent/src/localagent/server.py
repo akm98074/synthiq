@@ -693,8 +693,10 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         from .voice.wake import match, wake_phrases
 
         r = rt()
-        if not r.settings.wake_word_enabled or r.settings.paused:
-            raise HTTPException(409, "The wake word is off (Settings → Voice, or the agent is paused).")
+        if r.settings.paused:
+            raise HTTPException(409, "The agent is paused, so the wake word is off. Resume it in Trust.")
+        if not (r.settings.wake_word_enabled and r.settings.voice_enabled):
+            raise HTTPException(409, "The wake word is off. Turn it on in Trust → Capabilities.")
         try:
             audio = read_wav(await request.body())
         except AudioError as exc:
@@ -704,10 +706,18 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             return {"wake": False, "heard": "", "command": ""}
         try:
             result = await r.wake_stt.transcribe(audio)
-        except RuntimeError as exc:
-            raise HTTPException(503, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - a missing or broken wake model must not silently kill the wake word
+            if r.wake_stt is r.stt:
+                raise HTTPException(503, f"Speech recognition failed: {exc}. Try: localagent setup --voice") from exc
+            log.warning("wake model %s failed (%s); using the main speech model instead", r.settings.wake_model, exc)
+            r.wake_stt = r.stt
+            try:
+                result = await r.stt.transcribe(audio)
+            except Exception as exc2:  # noqa: BLE001
+                raise HTTPException(503, f"Speech recognition failed: {exc2}. Try: localagent setup --voice") from exc2
         woke, phrase, rest = match(result["text"], wake_phrases(r.settings.agent_name, r.settings.wake_phrases))
-        return {"wake": woke, "heard": result["text"] if woke else "", "command": rest, "ms": result.get("ms")}
+        # `heard` is shown briefly on this screen so you can see what it understood; it is never stored.
+        return {"wake": woke, "heard": result["text"].strip(), "command": rest, "ms": result.get("ms")}
 
     @app.post("/api/voice/transcribe")
     async def transcribe(request: Request) -> dict:
@@ -825,7 +835,10 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
             raise HTTPException(404, "Unknown capability")
         enabled = bool(body.get("enabled"))
         forgotten = trust.forget(r, cap_id) if (body.get("forget") and not enabled) else []
-        await change_settings({cap["setting"]: enabled}, request)
+        change = {cap["setting"]: enabled}
+        if cap_id == "wake" and enabled and not r.settings.voice_enabled:
+            change["voice_enabled"] = True       # the wake word needs voice on; otherwise the switch does nothing
+        await change_settings(change, request)
         if forgotten:
             r.audit.append("trust_forget", cap_id, outcome="ok", detail="; ".join(forgotten))
         return {"forgotten": forgotten, **trust.overview(r)}

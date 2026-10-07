@@ -45,8 +45,13 @@ def match(text: str, phrases: list[str]) -> tuple[bool, str, str]:
     may be loose ("hi"/"hey"), but the name must sound like the agent's name, so "Hey Siri"
     or "are you there" don't wake it.
     """
+    spans = [m.span() for m in re.finditer(r"[a-z0-9']+", text.lower())]
     words = normalize(text)
-    raw = text.split()
+    if len(spans) != len(words):           # exotic characters: fall back to whitespace words
+        spans = [m.span() for m in re.finditer(r"\S+", text)][:len(words)]
+
+    def rest_after(end: int) -> str:
+        return text[spans[end - 1][1]:].strip(" ,.!?;:") if 0 < end <= len(spans) else ""
     for phrase in phrases:
         parts = phrase.split()
         greet = parts[:-1] if parts[0] in GREETINGS and len(parts) > 1 else []
@@ -63,6 +68,23 @@ def match(text: str, phrases: list[str]) -> tuple[bool, str, str]:
             if _sim(got, want) < need:
                 continue
             end = start + len(parts)
-            rest = " ".join(raw[end:]).strip(" ,.!?") if end < len(raw) else ""
+            rest = rest_after(end)
             return True, phrase, rest
+    # Whisper sometimes runs the phrase together or spells it out ("Heyari", "Hey R.I."):
+    # compare the first one to three words glued together, with a stricter bar.
+    for phrase in phrases:
+        parts = phrase.split()
+        if len(parts) < 2:
+            continue
+        want = "".join(parts[:-1]) + phon(parts[-1])
+        for start in (0, 1):
+            for n in (1, 2, 3):
+                window = words[start:start + n]
+                if len(window) < n:
+                    break
+                glued = "".join(window[:-1]) + phon(window[-1]) if n > 1 else phon(window[0])
+                if _sim(glued, want) >= 0.9:
+                    end = start + n
+                    rest = rest_after(end)
+                    return True, phrase, rest
     return False, "", ""

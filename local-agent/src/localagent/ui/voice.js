@@ -33,6 +33,10 @@ async function loadVoiceStatus() {
     $("#wake-text").textContent = voice.status.wake.phrase;
     wakeToggle.checked = voice.status.wake.enabled;
     if (enabled && voice.status.wake.enabled && voice.status.stt.available) wake.start(); else wake.stop();
+    if (voice.status.wake.enabled && !enabled) setVoiceState("The wake word needs voice: turn on Voice in Settings.", "error", true);
+    else if (voice.status.wake.enabled && !voice.status.stt.available) {
+      setVoiceState(`The wake word can't listen yet: ${voice.status.stt.reason}`, "error", true);
+    }
   }
   if (enabled && !voice.status.stt.available) {
     micBtn.title = voice.status.stt.reason;
@@ -312,9 +316,10 @@ try { convToggle.checked = localStorage.getItem("conversationMode") === "1"; } c
    /api/voice/wake; nothing is kept. Bursts are ignored while the agent is listening,
    working or speaking, so it never wakes itself. */
 const wake = {
-  on: false, stream: null, ctx: null, node: null, inflight: false,
+  on: false, stream: null, ctx: null, node: null, inflight: false, failed: "", heard: "", heardTimer: null,
   async start() {
     if (this.on) return;
+    this.failed = "";
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
@@ -324,6 +329,7 @@ const wake = {
     }
     this.on = true;
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.ctx.onstatechange = () => this.showState();
     const src = this.ctx.createMediaStreamSource(this.stream);
     this.node = this.ctx.createScriptProcessor(4096, 1, 1);
     const rate = this.ctx.sampleRate;
@@ -353,7 +359,21 @@ const wake = {
     };
     src.connect(this.node);
     this.node.connect(this.ctx.destination);
-    setVoiceState(`Listening for “${$("#wake-text").textContent}”`, "", true);
+    // Browsers keep audio started without a click suspended, and then no sound reaches us at all.
+    // resume() only succeeds after a user gesture, so try now and again on the first click or key.
+    await Promise.race([this.ctx.resume().catch(() => {}), new Promise((ok) => setTimeout(ok, 300))]);
+    if (this.ctx.state !== "running") {
+      const kick = () => { if (this.ctx && this.ctx.state !== "closed") this.ctx.resume().catch(() => {}); };
+      document.addEventListener("pointerdown", kick, { once: true, capture: true });
+      document.addEventListener("keydown", kick, { once: true, capture: true });
+    }
+    this.showState();
+  },
+  phrase() { return $("#wake-text").textContent; },
+  showState() {
+    if (!this.on || voice.rec || voice.busy) return;
+    if (this.ctx?.state === "running") setVoiceState(`Listening for “${this.phrase()}”`, "", true);
+    else setVoiceState(`Click anywhere on this page to start listening for “${this.phrase()}”`, "", true);
   },
   async stop() {
     if (!this.on) return;
@@ -361,15 +381,25 @@ const wake = {
     try { this.node.disconnect(); } catch (_) {}
     this.stream.getTracks().forEach((t) => t.stop());
     await this.ctx.close();
-    if (voiceStatus.textContent.startsWith("Listening for")) setVoiceState("");
+    if (/^(Listening for|Click anywhere on this page to start listening|Heard “)/.test(voiceStatus.textContent)) setVoiceState("");
   },
   async check(burst, rate) {
     this.inflight = true;
     try {
       const wav = encodeWav(downsample(burst, rate, 16000), 16000);
       const r = await fetch("/api/voice/wake", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
-      const res = await r.json();
-      if (!r.ok || !res.wake) return;
+      const res = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        // Say why instead of silently never waking (wake word off, paused, speech model missing…).
+        this.failed = `Wake word: ${res.detail || `error ${r.status}`}`;
+        if (r.status === 409) this.stop();
+        return;
+      }
+      this.failed = "";
+      if (!res.wake) {
+        if (res.heard) this.heard = res.heard;
+        return;
+      }
       chime();
       document.body.classList.add("woke");
       setTimeout(() => document.body.classList.remove("woke"), 1200);
@@ -379,11 +409,18 @@ const wake = {
       } else {
         await startListening(true);
       }
-    } catch (_) {
-      /* a failed check just means "not woken" */
+    } catch (err) {
+      this.failed = `Wake word: couldn't reach the agent (${err.message})`;
     } finally {
       this.inflight = false;
-      if (this.on && !voice.rec) setVoiceState(`Listening for “${$("#wake-text").textContent}”`, "", true);
+      if (this.failed) setVoiceState(this.failed, "error", true);
+      else if (this.heard && this.on && !voice.rec) {
+        // Show what it heard for a moment, so a near miss ("Hey Harry") is visible, then go back to listening.
+        setVoiceState(`Heard “${this.heard.slice(0, 60)}”, not “${this.phrase()}”`, "", true);
+        this.heard = "";
+        clearTimeout(this.heardTimer);
+        this.heardTimer = setTimeout(() => this.showState(), 2500);
+      } else this.showState();
     }
   },
 };
