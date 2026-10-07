@@ -7,7 +7,7 @@ The UI server listens on 127.0.0.1 only, but that alone doesn't stop:
 
 So every request must
 1. name this server in its Host header (127.0.0.1:<port> or localhost:<port>) - stops rebinding;
-2. carry the per-install secret, as the session cookie the UI gets from /auth?t=… or as an
+2. carry the per-install secret, as the session cookie the UI gets from /auth?c=<one-time code> or as an
    `Authorization: Bearer` header (the CLI) - stops other programs and other users;
 3. if it changes anything and the browser says where it came from (Origin), come from this app.
 
@@ -113,6 +113,52 @@ def api_token(base: Path) -> str:
         fh.write(tok)
     private_file(f)
     return tok
+
+
+TOKEN_ROTATED = ".api_token_rotated"
+
+
+def rotate_legacy_token(base: Path) -> None:
+    """Up to 0.16 the secret itself was in the sign-in link, so it may sit in browser history (and
+    browser sync). Replace it once; links now carry one-time codes instead (see SignInCodes)."""
+    marker = base / TOKEN_ROTATED
+    if marker.exists():
+        return
+    (base / TOKEN_FILE).unlink(missing_ok=True)
+    api_token(base)
+    marker.write_text("1", encoding="utf-8")
+
+
+class SignInCodes:
+    """Short-lived, single-use codes for the sign-in link, so the secret never appears in a URL.
+    `localagent open` asks the running agent for one with the secret (Bearer), then opens
+    /auth?c=<code>. A code works once, for 60 seconds."""
+
+    TTL = 60.0
+
+    def __init__(self) -> None:
+        self._codes: dict[str, float] = {}
+
+    def issue(self) -> str:
+        import time
+
+        now = time.monotonic()
+        self._codes = {c: t for c, t in self._codes.items() if t > now}
+        if len(self._codes) >= 20:                                     # never a pile of live codes
+            self._codes.pop(min(self._codes, key=self._codes.get))
+        code = secrets.token_urlsafe(24)
+        self._codes[code] = now + self.TTL
+        return code
+
+    def redeem(self, code: str) -> bool:
+        import time
+
+        if not code:
+            return False
+        for known in list(self._codes):
+            if hmac.compare_digest(known.encode(), code.encode()):
+                return self._codes.pop(known) > time.monotonic()
+        return False
 
 
 def allowed_hosts(port: int, extra_host: str = "") -> set[str]:

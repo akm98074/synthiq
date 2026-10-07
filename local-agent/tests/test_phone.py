@@ -1,3 +1,4 @@
+import json
 import time
 from urllib.parse import urlencode
 
@@ -119,3 +120,41 @@ def test_phone_api(messages_client):
     assert c.put("/api/phone/pin", json={"pin": "1357"}).json()["has_pin"]
     c.put("/api/settings", json={"phone_public_url": PUBLIC}, headers={"X-Confirm": "phone_public_url"})
     assert c.get("/api/phone").json()["webhook"] == PUBLIC + "/twilio/voice"
+
+
+def test_pin_guessing_across_calls_locks_the_line(phone):
+    """Each call gets 3 tries, but a spoofed caller could just call again; 5 wrong PINs in an hour lock the line."""
+    from localagent import trust
+
+    c = phone
+    for call in range(2):
+        post(c, "/twilio/voice", {"From": OWNER, "CallSid": f"CB{call}"})
+        for _ in range(3):
+            r = post(c, "/twilio/pin", {"From": OWNER, "CallSid": f"CB{call}", "Digits": "0000"})
+            if "not right. Goodbye" in r.text:
+                break
+    assert "locked" in post(c, "/twilio/voice", {"From": OWNER, "CallSid": "CB9"}).text
+    r = post(c, "/twilio/pin", {"From": OWNER, "CallSid": "CB9", "Digits": "2468"})          # the right PIN
+    assert "What can I do" not in r.text and "locked" in r.text
+    assert "phone_locked" in [a["kind"] for a in c.rt.audit.list()]
+    lock = next(p for p in trust.posture(c.rt) if p["id"] == "pin_lock")
+    assert lock["ok"] is False and "locked until" in lock["detail"]
+    # it survives a restart (kept in the database), and a new PIN unlocks it
+    from localagent.channels.phone import locked_until
+    assert locked_until(c.rt)
+    from localagent.channels.phone import clear_failures
+    clear_failures(c.rt)                       # what saving a new PIN does (see test_new_pin_unlocks_the_line)
+    assert "What can I do" in post(c, "/twilio/pin", {"From": OWNER, "CallSid": "CC1", "Digits": "2468"}).text
+
+
+def test_new_pin_unlocks_the_line(messages_client):
+    import time as _t
+
+    from localagent.channels.phone import FAILS_KEY, locked_until
+
+    c = messages_client
+    rt = c.app.state.rt
+    rt.store.meta_set(FAILS_KEY, json.dumps([_t.time() - i for i in range(5)]))
+    assert locked_until(rt)
+    assert c.put("/api/phone/pin", json={"pin": "97531"}).status_code == 200
+    assert not locked_until(rt)

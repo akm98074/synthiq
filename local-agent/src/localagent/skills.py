@@ -140,8 +140,13 @@ def sandbox_profile(skill: Skill, home: Path, interpreter: list[Path] | None = N
     lines += ['(deny mach-lookup (global-name "com.apple.coreservices.appleevents")'
               ' (global-name "com.apple.coreservices.launchservicesd") (global-name "com.apple.lsd.mapdb")'
               ' (global-name "com.apple.pasteboard.1"))',
+              # The keychain daemons: a skill run with the agent's own Python would pass the keychain's
+              # "this app may read it" check and get the agent's keys without a prompt.
+              '(deny mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.securityd.xpc")'
+              ' (global-name "com.apple.secd") (global-name "com.apple.security.agent"))',
               '(deny process-exec (literal "/usr/bin/osascript") (literal "/usr/bin/open")'
-              ' (literal "/usr/bin/pbcopy") (literal "/usr/bin/pbpaste") (literal "/usr/bin/shortcuts"))']
+              ' (literal "/usr/bin/pbcopy") (literal "/usr/bin/pbpaste") (literal "/usr/bin/shortcuts")'
+              ' (literal "/usr/bin/security"))']
     return "\n".join(lines)
 
 
@@ -164,6 +169,14 @@ def bwrap_command(skill: Skill, home: Path, cmd: list[str]) -> list[str]:
         target = home / p
         if target.exists():
             args += ["--tmpfs", str(target.resolve())]
+    # The per-user runtime dir holds the D-Bus session bus, and through it the Secret Service where the
+    # agent keeps its keys (a socket can be connected even on a read-only mount). Skills get an empty one.
+    hide = {Path(d).resolve() for d in ("/run/user", os.environ.get("XDG_RUNTIME_DIR", ""), "/run/dbus",
+                                         "/var/run/dbus") if d and Path(d).is_dir()}
+    for d in sorted(hide):
+        if not any(o in d.parents for o in hide):             # /run/user covers /run/user/1000
+            args += ["--tmpfs", str(d)]
+    args.append("--unshare-ipc")
     # A private /tmp hides anything installed under /tmp (e.g. a virtualenv); put the interpreter back.
     for prefix in {Path(sys.prefix).resolve(), Path(cmd[0]).resolve().parent.parent}:
         if str(prefix).startswith("/tmp/") and prefix.exists():

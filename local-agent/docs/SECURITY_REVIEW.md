@@ -26,6 +26,20 @@
 
 Still open (P2): P2-2 (anchoring the audit chain in the keychain), P2-4 (default listener address), P2-6 (pinning the supply chain), P2-7 (narrower Gmail scope), P2-8 (request size limits), P2-9 (log redaction), P2-10 (per-channel tool lists). The Trust center's export partly covers P2-2: it includes the hash-chain boundary hashes, so a reviewer can check continuity between exports.
 
+## Follow-up review for 0.17.0 (high risk only)
+
+A second pass over the 0.16.2 code: the skill sandbox, every path reachable from outside this computer (phone webhook, friends' agents listener, Gmail callback), sign-in, the Trust export and the new Ask endpoint. Three issues were rated high. All three are fixed, with tests.
+
+| ID | Issue | Fix in 0.17.0 | Tests |
+|---|---|---|---|
+| H-1 | **Skills could reach the agent's keys.** On Linux, bubblewrap left the per-user runtime folder visible. Through it, the D-Bus session bus, and so the Secret Service holding the agent's keys, could be reached; a socket can be connected even on a read-only mount. This held even for skills declared without network access, and was verified with a stand-in bus. On macOS, the keychain daemons stayed reachable, and a skill run with the agent's own Python would pass the keychain's "this app may read it" check. | Linux: `/run/user`, `$XDG_RUNTIME_DIR` and `/run/dbus` are replaced by empty folders inside the sandbox, plus `--unshare-ipc`. macOS: `mach-lookup` is denied for `com.apple.SecurityServer`, `com.apple.securityd.xpc`, `com.apple.secd` and `com.apple.security.agent`, and `/usr/bin/security` can't be run. | `test_web.py` (a real bubblewrap run that tries to connect to a bus socket; the profile), `test_platform.py` |
+| H-2 | **The phone PIN could be guessed across calls.** The 3-try limit was per call, and caller ID can be spoofed, so an attacker could call again and again: a 4-digit PIN falls in about 3,300 automated calls. | Wrong PINs are also counted for the whole line, in the database, so the count survives a restart. 5 wrong PINs within an hour lock the line for an hour; even the right PIN is refused meanwhile. The lock is audited and shows in Trust as "needs your attention". Saving a new PIN unlocks it. | `test_phone.py` |
+| H-3 | **The master secret travelled in a URL.** `localagent open` opened `/auth?t=<secret>`. That URL lands in browser history, can be synced by the browser to other devices, and stays valid forever. | `localagent open` asks the running agent for a one-time code (Bearer secret, 60 s, single use). Only that code goes in the link, and `/auth` no longer accepts the secret. A browser cookie alone can't mint codes. The secret is replaced once on upgrade, because 0.16 links may already be in history. | `test_security.py`, `test_cli.py` |
+
+Reviewed and found sound: Twilio signature checks and `/twilio/result` (signed-in calls only); friends' agents (NaCl box, 5-minute window, nonce replay table, size limit); Gmail callback (state plus PKCE); raw export (explicit confirmation; SameSite=Strict cookie, so no cross-site download); Ask (the model sees a facts summary only, never content written by others; its answer is escaped).
+
+Residual risk, not high: a skill declared *with* network access shares the network namespace, so on Linux it can still reach abstract-namespace sockets (older D-Bus or X11 setups). Script skills remain opt-in, and each one says whether it uses the network.
+
 The original review follows, unchanged.
 
 ## Summary

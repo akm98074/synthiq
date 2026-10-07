@@ -97,7 +97,9 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
                auth: bool = True) -> FastAPI:
     base = base or data_dir()
     settings = settings or load_settings(base)
+    security.rotate_legacy_token(base)
     token = security.api_token(base)
+    codes = security.SignInCodes()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -153,9 +155,17 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
                 "style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
         return response
 
+    @app.post("/api/signin-code", include_in_schema=False)
+    async def signin_code(request: Request) -> dict:
+        # Only callers that already hold the secret as a Bearer header (the CLI and the app);
+        # a browser's cookie isn't enough, so a page can't mint links for itself.
+        if not security.same_secret(security.bearer(request.headers.get("authorization")), token):
+            raise HTTPException(403, "Ask with the agent's secret.")
+        return {"code": codes.issue(), "ttl": int(codes.TTL)}
+
     @app.get("/auth", include_in_schema=False)
-    async def sign_in(t: str = "", next: str = "/") -> Response:
-        if not security.same_secret(t, token):
+    async def sign_in(c: str = "", next: str = "/") -> Response:
+        if not codes.redeem(c):               # one-time codes only; the secret itself never goes in a URL
             return HTMLResponse(_page("Link expired", "Open the app again with: localagent open"), 403)
         dest = next if next.startswith("/") and not next.startswith("//") else "/"
         resp = RedirectResponse(dest, 303)
@@ -447,6 +457,9 @@ def create_app(settings: Settings | None = None, base: Path | None = None, runne
         if not valid_pin(pin):
             raise HTTPException(400, "The PIN must be 4 to 8 digits.")
         r.vault.set(PIN, pin)
+        from .channels.phone import clear_failures
+
+        clear_failures(r)                       # a new PIN ends a lockout
         r.audit.append("phone_pin_set", "phone", outcome="ok")
         return await phone_status()
 

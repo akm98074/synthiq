@@ -21,6 +21,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 import time
@@ -42,6 +43,12 @@ TOKEN = "twilio_auth_token"
 PIN = "phone_pin"
 MAX_WAIT = 90
 MAX_PIN_TRIES = 3
+# Across calls: caller ID can be spoofed and every call gets fresh tries, so wrong PINs are also
+# counted for the whole line. LOCK_AFTER wrong PINs within LOCK_WINDOW lock it for LOCK_FOR.
+LOCK_AFTER = 5
+LOCK_WINDOW = 3600
+LOCK_FOR = 3600
+FAILS_KEY = "phone_pin_failures"
 WORD_DIGITS = {"zero": "0", "oh": "0", "one": "1", "two": "2", "to": "2", "too": "2", "three": "3",
                "four": "4", "for": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "ate": "8",
                "nine": "9"}
@@ -57,6 +64,36 @@ def digits_of(text: str) -> str:
 
 def valid_pin(pin: str) -> bool:
     return pin.isdigit() and 4 <= len(pin) <= 8
+
+
+def _failures(rt: "Runtime") -> list[float]:
+    try:
+        return [float(t) for t in json.loads(rt.store.meta_get(FAILS_KEY) or "[]")]
+    except (ValueError, TypeError):
+        return []
+
+
+def locked_until(rt: "Runtime", now: float | None = None) -> float:
+    """When the line unlocks (0 if it isn't locked). Kept in the database, so a restart doesn't reset it."""
+    now = now or time.time()
+    recent = [t for t in _failures(rt) if now - t < LOCK_WINDOW + LOCK_FOR]
+    for i in range(len(recent) - LOCK_AFTER + 1):          # any LOCK_AFTER failures within the window
+        if recent[i + LOCK_AFTER - 1] - recent[i] <= LOCK_WINDOW:
+            until = recent[i + LOCK_AFTER - 1] + LOCK_FOR
+            if until > now:
+                return until
+    return 0.0
+
+
+def record_failure(rt: "Runtime") -> float:
+    now = time.time()
+    fails = [t for t in _failures(rt) if now - t < LOCK_WINDOW + LOCK_FOR] + [now]
+    rt.store.meta_set(FAILS_KEY, json.dumps(fails[-50:]))
+    return locked_until(rt, now)
+
+
+def clear_failures(rt: "Runtime") -> None:
+    rt.store.meta_set(FAILS_KEY, "[]")
 
 
 def signature(token: str, url: str, params: dict) -> str:
@@ -132,6 +169,10 @@ def phone_app(rt: "Runtime") -> FastAPI:
             rt.audit.append("phone_rejected", "phone", outcome="rejected", detail="no phone PIN set")
             return twiml(say("This phone line needs a PIN first. Set one in the app, under Settings, "
                              "Phone line. Goodbye."), "<Hangup/>")
+        if locked_until(rt):
+            rt.audit.append("phone_rejected", "phone", outcome="rejected",
+                            detail=f"call from {form.get('From')}: line locked after wrong PINs")
+            return twiml(say("This line is locked for now. Goodbye."), "<Hangup/>")
         rt.audit.append("phone_call", "phone", outcome="ok", detail=f"call from {form.get('From')}")
         return twiml(ask_pin(f"Hi, it's {rt.settings.agent_name}. Please type or say your PIN, then press hash."))
 
@@ -143,6 +184,8 @@ def phone_app(rt: "Runtime") -> FastAPI:
         if form.get("_stranger"):
             return twiml("<Hangup/>")
         sid = form.get("CallSid", "")
+        if locked_until(rt):                   # even the right PIN is refused while locked: no more guessing
+            return twiml(say("This line is locked for now. Goodbye."), "<Hangup/>")
         given = digits_of(form.get("Digits") or form.get("SpeechResult") or "")
         pin = rt.vault.get(PIN) or ""
         if sid and valid_pin(pin) and hmac.compare_digest(given.encode(), pin.encode()):
@@ -153,6 +196,13 @@ def phone_app(rt: "Runtime") -> FastAPI:
         tries[sid] = tries.get(sid, 0) + 1
         rt.audit.append("phone_pin_wrong", "phone", outcome="rejected",
                         detail=f"wrong PIN from {form.get('From')} (try {tries[sid]})")
+        until = record_failure(rt)
+        if until:
+            tries.pop(sid, None)
+            rt.audit.append("phone_locked", "phone", outcome="rejected",
+                            detail=f"{LOCK_AFTER} wrong PINs within an hour; calls refused until "
+                                   + time.strftime("%H:%M", time.localtime(until)))
+            return twiml(say("That's not right. Goodbye."), "<Hangup/>")
         if tries[sid] >= MAX_PIN_TRIES:
             tries.pop(sid, None)
             return twiml(say("That's not right. Goodbye."), "<Hangup/>")

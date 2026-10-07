@@ -66,13 +66,23 @@ def _api(method: str, path: str, **kw) -> httpx.Response:
                          headers={"Authorization": f"Bearer {api_token(data_dir())}"}, **kw)
 
 
-def _signin_url(next_path: str = "/") -> str:
-    """A link that signs this browser in to the UI (sets the session cookie) and goes to next_path."""
+def _signin_url(next_path: str = "/", wait: float = 20.0) -> str:
+    """A link that signs this browser in to the UI (sets the session cookie) and goes to next_path.
+    It carries a one-time code from the running agent, never the secret (links end up in browser
+    history and sync). Waits up to `wait` seconds for an agent that is still starting."""
     from urllib.parse import quote
 
-    from .security import api_token
-
-    return f"{_url()}/auth?t={api_token(data_dir())}&next={quote(next_path)}"
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            r = _api("POST", "/api/signin-code", timeout=3)
+            if r.status_code == 200:
+                return f"{_url()}/auth?c={r.json()['code']}&next={quote(next_path)}"
+        except httpx.HTTPError:
+            pass
+        if time.monotonic() > deadline:
+            return f"{_url()}{next_path}"     # shows "open it with localagent open" instead of failing
+        time.sleep(0.5)
 
 
 def _healthy(url: str) -> bool:

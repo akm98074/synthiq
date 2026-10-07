@@ -188,3 +188,29 @@ def test_launcher_answers_selftest_without_starting(home, monkeypatch):
     monkeypatch.setattr("localagent.cli._healthy", lambda url: (_ for _ in ()).throw(AssertionError("no start")))
     launcher.main()
     assert (home / macapp.SELFTEST_OK).exists() and not (home / macapp.SELFTEST_REQUEST).exists()
+
+
+def test_signin_link_carries_a_one_time_code_never_the_secret(monkeypatch, tmp_path):
+    import httpx as _httpx
+
+    from localagent import cli, security
+
+    monkeypatch.setattr(cli, "data_dir", lambda: tmp_path)
+    secret = security.api_token(tmp_path)
+    seen = {}
+
+    def fake_api(method, path, **kw):
+        seen["call"] = (method, path)
+        return _httpx.Response(200, json={"code": "ONE-TIME", "ttl": 60})
+
+    monkeypatch.setattr(cli, "_api", fake_api)
+    url = cli._signin_url("/api/gmail/login")
+    assert seen["call"] == ("POST", "/api/signin-code")
+    assert "c=ONE-TIME" in url and secret not in url and url.endswith("next=/api/gmail/login")
+
+    def down(*a, **kw):
+        raise _httpx.ConnectError("not running")
+
+    monkeypatch.setattr(cli, "_api", down)
+    url = cli._signin_url(wait=0)                    # agent not up: a plain link, still no secret
+    assert secret not in url and "/auth" not in url

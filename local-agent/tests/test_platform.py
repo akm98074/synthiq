@@ -82,6 +82,10 @@ def test_bwrap_command_hides_private_folders(tmp_path):
     assert args.index(str(folder.resolve())) > args.index(str((home / ".local/share/LocalAIAgent").resolve()))
     assert ("--bind", str((folder / "work").resolve())) in pairs
     assert "--unshare-net" in args and args[-3:] == ["--", "python3", "main.py"]
+    # the session bus (and so the Secret Service with the agent's keys) is out of reach
+    assert "--unshare-ipc" in args
+    if Path("/run/user").is_dir():
+        assert ("--tmpfs", "/run/user") in pairs
     sk.network = True
     assert "--unshare-net" not in bwrap_command(sk, home, ["python3", "main.py"])
 

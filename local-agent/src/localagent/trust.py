@@ -305,8 +305,15 @@ def posture(rt: "Runtime") -> list[dict]:
             if macapp.installed() else "permissions go to Terminal/Python",
             "Run: localagent app install")
     if s.phone_enabled:
+        from .channels.phone import locked_until
+
         add("pin", "Phone calls need a PIN", rt.vault.has("phone_pin"), "PIN set" if rt.vault.has("phone_pin")
             else "no PIN: calls are refused", "Set a PIN in Settings → Phone line.")
+        until = locked_until(rt)
+        add("pin_lock", "No one is guessing your phone PIN", not until,
+            "no recent wrong PINs" if not until else "several wrong PINs: the phone line is locked until "
+            + time.strftime("%H:%M", time.localtime(until)),
+            "If that wasn't you, someone has your number: set a new PIN (this also unlocks the line).")
     if s.a2a_enabled:
         add("a2a", "Friends' agents listener isn't on every network", s.a2a_host not in ("0.0.0.0", "::"),
             f"listening on {s.a2a_host}:{s.a2a_port}", "Set it to your Tailscale or home-network address.")

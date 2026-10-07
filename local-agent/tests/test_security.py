@@ -35,9 +35,11 @@ def test_cross_origin_writes_refused(client):
 
 
 def test_auth_link_sets_session_cookie(client):
+    code = client.post("/api/signin-code").json()["code"]             # what `localagent open` asks for
     token = client.headers.pop("Authorization").split()[1]
-    assert client.get("/auth", params={"t": "wrong"}, follow_redirects=False).status_code == 403
-    r = client.get("/auth", params={"t": token, "next": "//evil.example/x"}, follow_redirects=False)
+    assert client.get("/auth", params={"c": "wrong"}, follow_redirects=False).status_code == 403
+    assert client.get("/auth", params={"t": token}, follow_redirects=False).status_code == 403  # never the secret
+    r = client.get("/auth", params={"c": code, "next": "//evil.example/x"}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/"         # no open redirect
     cookie = r.headers["set-cookie"].lower()
     assert "httponly" in cookie and "samesite=strict" in cookie
@@ -123,3 +125,33 @@ def test_new_install_starts_with_personal_connectors_off(tmp_path):
     kept = load_settings(tmp_path)
     assert kept.max_tool_steps == 5
     assert kept.enable_mail and kept.enable_messages and kept.agent_name == "Juno"   # one bad value isn't fatal
+
+
+def test_signin_codes_are_single_use_short_lived_and_need_the_secret(client, monkeypatch):
+    code = client.post("/api/signin-code").json()["code"]
+    token = client.headers.pop("Authorization").split()[1]
+    assert token not in code
+    assert client.get("/auth", params={"c": code}, follow_redirects=False).status_code == 303
+    client.cookies.clear()
+    assert client.get("/auth", params={"c": code}, follow_redirects=False).status_code == 403   # used up
+    # a signed-in browser (cookie only) can't mint codes for itself
+    client.cookies.set(security.cookie_name(8765), token)
+    assert client.post("/api/signin-code").status_code == 403
+    client.cookies.clear()
+    # expired after 60 s
+    codes = security.SignInCodes()
+    c = codes.issue()
+    import time as _t
+    real = _t.monotonic
+    monkeypatch.setattr(_t, "monotonic", lambda: real() + 61)
+    assert not codes.redeem(c)
+
+
+def test_old_secret_is_replaced_once(tmp_path):
+    """Up to 0.16 the secret was in sign-in links (browser history, sync): replace it on upgrade, once."""
+    old = security.api_token(tmp_path)
+    security.rotate_legacy_token(tmp_path)
+    new = security.api_token(tmp_path)
+    assert new != old and len(new) >= 32
+    security.rotate_legacy_token(tmp_path)
+    assert security.api_token(tmp_path) == new

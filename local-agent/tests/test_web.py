@@ -252,6 +252,9 @@ def test_sandbox_profile(tmp_path):
         assert lines.index(f'(allow file-read* (subpath "{allowed}"))') > deny_home
     assert "/opt/homebrew" not in prof                                                   # outside home: not needed
     assert "com.apple.coreservices.appleevents" in prof and '(literal "/usr/bin/osascript")' in prof
+    # no way to the keychain daemons (the agent's own Python would pass the keychain's app check)
+    assert '(global-name "com.apple.SecurityServer")' in prof and '(global-name "com.apple.secd")' in prof
+    assert '(literal "/usr/bin/security")' in prof
     sk.network = True
     assert "(deny network*)" not in sandbox_profile(sk, home)
 
@@ -315,12 +318,37 @@ tryit("ssh", lambda: open(sys.argv[2]).read())
 tryit("write_work", lambda: open(os.environ["SKILL_WORK_DIR"] + "/x.txt", "w").write("ok"))
 tryit("write_home", lambda: open(sys.argv[3], "w").write("x"))
 tryit("network", lambda: socket.create_connection(("1.1.1.1", 53), timeout=2) and "connected")
+def bus():
+    s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[4]); return "connected"
+tryit("session_bus", bus)
 print(json.dumps(out))
 """)
+    # A stand-in for the D-Bus session bus (the way to the Secret Service, where keys are kept).
+    import os as _os
+    import socket as _socket
+
+    bus_dir = Path(_os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{_os.getuid()}")
+    bus = bus_dir / f"la-test-bus-{_os.getpid()}"
+    listener = None
+    try:
+        bus_dir.mkdir(parents=True, exist_ok=True)
+        listener = _socket.socket(_socket.AF_UNIX)
+        listener.bind(str(bus))
+        listener.listen(1)
+    except OSError:
+        listener = None                       # can't make one here; the other checks still run
     sk = parse_skill(folder)
-    sk.run = f"{sys.executable} main.py {data / 'secrets.json'} {home / '.ssh/id_ed25519'} {home / 'evil.txt'}"
-    res = run(run_skill(sk, {}, require_sandbox=True))
+    sk.run = (f"{sys.executable} main.py {data / 'secrets.json'} {home / '.ssh/id_ed25519'} {home / 'evil.txt'}"
+              f" {bus}")
+    try:
+        res = run(run_skill(sk, {}, require_sandbox=True))
+    finally:
+        if listener:
+            listener.close()
+            bus.unlink(missing_ok=True)
     out = json.loads(res.content)
+    if listener:
+        assert str(out["session_bus"]).startswith("blocked"), out["session_bus"]
     assert out["own_file"] == "---"
     assert out["write_work"] == 2
     for key in ("secrets", "secrets_abs", "ssh", "write_home", "network"):
