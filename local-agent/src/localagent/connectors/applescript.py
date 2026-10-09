@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
+import time
 from importlib import resources
 
 from ..tools.base import ToolError
@@ -53,6 +54,7 @@ def explain_error(stderr: str, app: str) -> str:
 class AppleScriptRunner:
     def __init__(self, timeout: float = 120.0):
         self.timeout = timeout
+        self.last_timeout: dict[str, float] = {}     # script -> when osascript last gave up on it
 
     @staticmethod
     def available() -> bool:
@@ -75,6 +77,7 @@ class AppleScriptRunner:
             )
         except asyncio.TimeoutError as exc:
             proc.kill()
+            self.last_timeout[name] = time.time()      # the app may still be working on it (see MailGuard)
             raise ToolError(
                 f"{app} took too long to answer. If macOS showed a permission prompt, "
                 "allow it and try again."

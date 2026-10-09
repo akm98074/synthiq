@@ -58,9 +58,9 @@ async def morning_brief(rt: "Runtime", manual: bool = False) -> dict:
     results = {
         "calendar": await _tool(rt, "calendar_list_events", {}),
         "reminders": await _tool(rt, "reminders_list", {"limit": 20}),
-        "unread mail": await _tool(rt, "mail_list", {"unread_only": True, "limit": 5}),
+        "unread mail": await _tool(rt, "mail_list", {"unread_only": True, "limit": 5, "_background": True}),
         "waiting on your reply": (None if "gmail_followups" in rt.tools else await _tool(
-            rt, "mail_followups", {"min_days": 1, "max_days": s.followup_days, "limit": 5})),
+            rt, "mail_followups", {"min_days": 1, "max_days": s.followup_days, "limit": 5, "_background": True})),
         "Gmail waiting on your reply": await _tool(rt, "gmail_followups",
                                                    {"min_days": 1, "max_days": s.followup_days, "limit": 5}),
         "chats waiting on your reply": await _tool(rt, "messages_list", {
@@ -157,7 +157,8 @@ async def run_checks(rt: "Runtime", manual: bool = False) -> dict:
             "start": now.strftime("%Y-%m-%dT%H:%M"), "end": end.strftime("%Y-%m-%dT%H:%M")}), now)
         + _reminder_candidates(await _tool(rt, "reminders_list", {"limit": 50}), now)
         + _followup_candidates(await _tool(rt, "mail_followups",
-                                           {"min_days": 1, "max_days": s.followup_days, "limit": 15}))
+                                           {"min_days": 1, "max_days": s.followup_days, "limit": 15,
+                                            "_background": True}))
         + _followup_candidates(await _tool(rt, "gmail_followups",
                                            {"min_days": 1, "max_days": s.followup_days, "limit": 15}))
         + _message_candidates(await _tool(rt, "messages_list", {

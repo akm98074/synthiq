@@ -2,6 +2,25 @@
 
 Upgrading keeps everything you've built up: memories, conversation history, decision corrections and settings. They live in `~/Library/Application Support/LocalAIAgent/` (Windows: `%LOCALAPPDATA%\LocalAIAgent`, Linux: `~/.local/share/LocalAIAgent`), which the installer never touches.
 
+## From 0.17.1 to 0.17.2 (Mail "ran out of application memory")
+
+```bash
+bash install.sh localaiagent-0.17.2-py3-none-any.whl
+localagent start
+```
+
+**Why:** the agent asked Mail.app over AppleScript to search your whole inbox every 30 minutes, and loaded whole messages just to show a short preview. Mail keeps much of that in memory, so it grew until macOS showed "Your system has run out of application memory" with Mail paused at tens of GB.
+
+**What changed:**
+- The agent now reads Mail's own index file (read-only), the same way it reads Messages. Background checks no longer ask Mail.app for anything.
+- If that index can't be read on your Mac, it uses a small script that looks only at your newest inbox messages, at most every 3 hours. It skips the check if Mail is already using over 2 GB, or didn't answer in time recently.
+- Trust → Verify & export → Safety checks shows "Mail isn't slowed down by the agent", with which way it reads your mail.
+
+**After upgrading:**
+1. Quit Mail once (Force Quit if it's paused) and reopen it.
+2. Keep **Mail (Apple)** switched on.
+3. Full Disk Access for LocalAIAgent (already needed for Messages) lets it read Mail's index.
+
 ## From 0.17.0 to 0.17.1 ("Hey Ari" heard but nothing happened; "null" in Trust)
 
 ```bash

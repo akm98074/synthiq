@@ -1,6 +1,6 @@
 # LocalAIAgent installer for Windows 10/11.
 # Run it from PowerShell (not as Administrator), in the folder with the downloaded files:
-#   powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.17.1-py3-none-any.whl
+#   powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.17.2-py3-none-any.whl
 param([string]$Wheel = "")
 $ErrorActionPreference = "Stop"
 
@@ -24,7 +24,7 @@ if (-not $Wheel) {
 }
 if (-not $Wheel -or -not (Test-Path $Wheel)) {
   Die "Can't find the localaiagent .whl file. Put install.ps1 and the .whl in the same folder and run:
-       powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.17.1-py3-none-any.whl"
+       powershell -ExecutionPolicy Bypass -File install.ps1 localaiagent-0.17.2-py3-none-any.whl"
 }
 $Wheel = (Resolve-Path $Wheel).Path
 

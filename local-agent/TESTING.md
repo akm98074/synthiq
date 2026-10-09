@@ -1,6 +1,11 @@
-# Testing v0.17.1: Trust tab redesign, Ask, wake word, reliability and security
+# Testing v0.17.2: Trust tab redesign, Ask, wake word, reliability and security
 
-0.17.1 fixes "Hey Ari" being heard but not run (see UPGRADING.md). If you already checked 0.17.0, only redo steps 7–9.
+**New in 0.17.2: Mail no longer runs out of memory** (see UPGRADING.md). If you already checked 0.17.1, only do these:
+- M1. After upgrading, quit and reopen Mail. Open Trust → Verify & export → Safety checks. "Mail isn't slowed down by the agent" shows ✅ and "reads Mail's index". If it says it uses Mail.app instead, please send the reason it shows.
+- M2. Ask _"Any unread email?"_ and _"Read the first one"_: both answer as before.
+- M3. After a day of normal use, open Activity Monitor → Memory: Mail stays at a normal size (hundreds of MB, not GB), and the "out of application memory" warning doesn't come back.
+
+0.17.1 fixed "Hey Ari" being heard but not run. If you already checked 0.17.0, also redo steps 7–9.
 
 Do the steps in `UPGRADING.md` first (about 5 minutes). This checklist takes about 15 minutes.
 

@@ -304,6 +304,21 @@ def posture(rt: "Runtime") -> list[dict]:
             else "macOS won't launch LocalAIAgent.app; permissions go to Terminal"
             if macapp.installed() else "permissions go to Terminal/Python",
             "Run: localagent app install")
+    if rt.mac_available and s.enable_mail and "mail_list" in rt.tools:
+        index, guard = getattr(rt.tools["mail_list"], "mail_state", (None, None))
+        ok_index, why = index.status() if index is not None else (False, "no index")
+        if ok_index:
+            add("mail", "Mail isn't slowed down by the agent", True,
+                "reads Mail's index; Mail.app isn't asked to search in the background")
+        else:
+            rss = guard.mail_rss_mb() if guard is not None else None
+            heavy = rss is not None and rss > guard.MAX_RSS_MB
+            add("mail", "Mail isn't slowed down by the agent", not heavy,
+                (f"Mail is using {rss / 1024:.1f} GB; background mail checks are paused" if heavy
+                 else f"uses Mail.app sparingly (newest messages only, background at most every 3 h); {why}")
+                + (f" · last skipped: {guard.last_skip}" if guard is not None and guard.last_skip else ""),
+                "Quit and reopen Mail. To let the agent read Mail's index instead, give LocalAIAgent Full Disk "
+                "Access (System Settings → Privacy & Security).")
     if s.phone_enabled:
         from .channels.phone import locked_until
 

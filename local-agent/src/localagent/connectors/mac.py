@@ -1,7 +1,11 @@
 """macOS app connectors: Calendar, Reminders, Notes, Mail, Contacts (via AppleScript)."""
 from __future__ import annotations
 
+import asyncio
 import html
+import subprocess
+import sys
+import time
 from datetime import datetime, timedelta
 from typing import Protocol
 
@@ -215,35 +219,126 @@ def _clean_recipients(value) -> str:
     return ",".join(out)
 
 
-def mail_tools(runner: Runner) -> list[Tool]:
+class MailGuard:
+    """Keeps background work from piling onto Mail.app.
+
+    Background checks (nudges, the morning brief) use Mail's index when it can be read, which
+    doesn't touch Mail.app. Only when they would have to script Mail.app, they run at most every
+    3 hours, never while Mail is already using a lot of memory, and not for 6 hours after Mail
+    failed to answer in time (osascript gives up, but Mail keeps working on the request).
+    """
+
+    MAX_RSS_MB = 2048
+    MIN_GAP = 3 * 3600
+    AFTER_TIMEOUT = 6 * 3600
+
+    def __init__(self, runner, clock=time.time):
+        self.runner = runner
+        self.clock = clock
+        self.last_background = 0.0
+        self.last_skip = ""
+        self.source = ""                 # "index" or "mail_app": what answered last
+
+    @staticmethod
+    def mail_rss_mb() -> float | None:
+        """Mail.app's resident memory in MB (None if it isn't running or this isn't a Mac)."""
+        if sys.platform != "darwin":
+            return None
+        try:
+            out = subprocess.run(["ps", "-axo", "rss=,comm="], capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            return None
+        for line in out.splitlines():
+            rss, _, comm = line.strip().partition(" ")
+            if comm.strip().endswith("/Mail.app/Contents/MacOS/Mail") and rss.isdigit():
+                return int(rss) / 1024
+        return None
+
+    def background_ok(self) -> tuple[bool, str]:
+        now = self.clock()
+        timed_out = max((getattr(self.runner, "last_timeout", {}) or {}).get(n, 0)
+                        for n in ("mail_list", "mail_followups", "mail_read")) if hasattr(self.runner, "last_timeout") else 0
+        if timed_out and now - timed_out < self.AFTER_TIMEOUT:
+            return False, "Mail didn't answer in time recently"
+        rss = self.mail_rss_mb()
+        if rss is not None and rss > self.MAX_RSS_MB:
+            return False, f"Mail is already using {rss / 1024:.1f} GB"
+        if now - self.last_background < self.MIN_GAP:
+            return False, "checked Mail less than 3 hours ago"
+        return True, ""
+
+
+def mail_tools(runner: Runner, index=None, guard: MailGuard | None = None) -> list[Tool]:
+    """Apple Mail. Reads come from Mail's index (connectors/mailindex.py) when possible; otherwise a
+    small AppleScript that only looks at the newest messages of each inbox. Background callers pass
+    `_background`, and then never script Mail.app unless MailGuard allows it."""
+    from .mailindex import MailIndexUnavailable
+
+    guard = guard or MailGuard(runner)
+
+    async def from_index(fn, *args):
+        if index is None:
+            raise MailIndexUnavailable("no index")
+        res = await asyncio.to_thread(fn, *args)
+        guard.source = "index"
+        return res
+
+    async def via_mail_app(a: dict, name: str, args: list[str]) -> str:
+        if a.get("_background"):
+            ok, why = guard.background_ok()
+            if not ok:
+                guard.last_skip = why
+                raise ToolError(f"Mail check skipped: {why}.")
+            guard.last_background = guard.clock()
+        guard.source, guard.last_skip = "mail_app", ""
+        return await runner.run(name, args)
+
+    def when(ts: float) -> str:
+        return datetime.fromtimestamp(ts).isoformat(timespec="minutes")
+
     async def list_mail(a: dict) -> ToolResult:
         now = datetime.now()
-        out = await runner.run("mail_list", [a.get("query", ""), str(a.get("limit", 10)),
-                                             "1" if a.get("unread_only") else "0"])
-        msgs = []
-        for rec in parse_records(out):
-            if len(rec) < 6:
-                continue
-            mid, subj, sender, recv, read, snippet = rec[:6]
-            msgs.append({"id": mid, "subject": subj, "from": sender,
-                         "received": _at(recv, now).isoformat(timespec="minutes"),
-                         "read": read == "true", "snippet": " ".join(snippet.split())[:200]})
+        limit = int(a.get("limit", 10) or 10)
+        try:
+            rows = await from_index(index.recent if index else None, a.get("query", ""), limit, bool(a.get("unread_only")))
+            msgs = [{"id": str(r["id"]), "subject": r["subject"], "from": r["from"], "received": when(r["received"]),
+                     "read": r["read"], "snippet": r["snippet"]} for r in rows]
+        except MailIndexUnavailable:
+            out = await via_mail_app(a, "mail_list", [a.get("query", ""), str(limit),
+                                                      "1" if a.get("unread_only") else "0"])
+            msgs = []
+            for rec in parse_records(out):
+                if len(rec) < 6:
+                    continue
+                mid, subj, sender, recv, read, snippet = rec[:6]
+                msgs.append({"id": mid, "subject": subj, "from": sender,
+                             "received": _at(recv, now).isoformat(timespec="minutes"),
+                             "read": read == "true", "snippet": " ".join(snippet.split())[:200]})
+            msgs = sorted(msgs, key=lambda m: m["received"], reverse=True)[:limit]
         if not msgs:
             return ToolResult("No matching messages in the inbox.", "No matching mail", [])
         lines = [f"- [id {m['id']}] {m['received'].replace('T', ' ')} from {m['from']}: {m['subject']}"
-                 + ("" if m["read"] else " (unread)") + f"\n  {m['snippet']}" for m in msgs]
+                 + ("" if m["read"] else " (unread)") + (f"\n  {m['snippet']}" if m["snippet"] else "") for m in msgs]
         return ToolResult("Inbox messages (newest first):\n" + "\n".join(lines),
                           f"Found {len(msgs)} message(s)", msgs, untrusted=True)
 
     async def read_mail(a: dict) -> ToolResult:
         now = datetime.now()
-        out = await runner.run("mail_read", [str(a["id"])])
-        parts = out.split("\x1f", 3)
-        if len(parts) < 4:
-            raise ToolError("Could not read that message.")
-        subj, sender, recv, content = parts
-        when = _at(recv, now).strftime("%a %d %b %H:%M")
-        return ToolResult(f"From: {sender}\nDate: {when}\nSubject: {subj}\n\n{content}",
+        try:
+            msg = await from_index(index.read if index else None, int(a["id"]))
+        except (MailIndexUnavailable, ValueError):
+            msg = None
+        if msg is not None:
+            subj, sender, content = msg["subject"], msg["from"], msg["text"]
+            when_s = datetime.fromtimestamp(msg["received"]).strftime("%a %d %b %H:%M")
+        else:
+            out = await via_mail_app(a, "mail_read", [str(a["id"])])
+            parts = out.split("\x1f", 3)
+            if len(parts) < 4:
+                raise ToolError("Could not read that message.")
+            subj, sender, recv, content = parts
+            when_s = _at(recv, now).strftime("%a %d %b %H:%M")
+        return ToolResult(f"From: {sender}\nDate: {when_s}\nSubject: {subj}\n\n{content}",
                           f"Read: {subj}", {"subject": subj, "from": sender}, untrusted=True)
 
     async def compose(a: dict, mode: str) -> ToolResult:
@@ -256,18 +351,24 @@ def mail_tools(runner: Runner) -> list[Tool]:
 
     async def followups(a: dict) -> ToolResult:
         now = datetime.now()
-        out = await runner.run("mail_followups", [str(a.get("min_days", 1)), str(a.get("max_days", 7)),
-                                                  str(a.get("limit", 15))])
-        msgs = []
-        for rec in parse_records(out):
-            if len(rec) < 5:
-                continue
-            mid, subj, sender, recv, snippet = rec[:5]
-            received = _at(recv, now)
-            msgs.append({"id": mid, "subject": subj, "from": sender,
-                         "received": received.isoformat(timespec="minutes"),
-                         "days_ago": max(0, (now - received).days),
-                         "snippet": " ".join(snippet.split())[:200]})
+        lo, hi, limit = a.get("min_days", 1), a.get("max_days", 7), int(a.get("limit", 15) or 15)
+        try:
+            rows = await from_index(index.followups if index else None, lo, hi, limit)
+            msgs = [{"id": str(r["id"]), "subject": r["subject"], "from": r["from"], "received": when(r["received"]),
+                     "days_ago": max(0, (now - datetime.fromtimestamp(r["received"])).days),
+                     "snippet": r["snippet"]} for r in rows]
+        except MailIndexUnavailable:
+            out = await via_mail_app(a, "mail_followups", [str(lo), str(hi), str(limit)])
+            msgs = []
+            for rec in parse_records(out):
+                if len(rec) < 5:
+                    continue
+                mid, subj, sender, recv, snippet = rec[:5]
+                received = _at(recv, now)
+                msgs.append({"id": mid, "subject": subj, "from": sender,
+                             "received": received.isoformat(timespec="minutes"),
+                             "days_ago": max(0, (now - received).days),
+                             "snippet": " ".join(snippet.split())[:200]})
         if not msgs:
             return ToolResult("No unreplied messages in that window.", "Nothing waiting on a reply", [])
         lines = [f"- [id {m['id']}] {m['days_ago']}d ago from {m['from']}: {m['subject']}" for m in msgs]
@@ -276,7 +377,7 @@ def mail_tools(runner: Runner) -> list[Tool]:
 
     params = obj({"to": s("Recipient email address(es), comma-separated"),
                   "subject": s("Subject line"), "body": s("Plain-text body")}, ["to", "subject", "body"])
-    return [
+    tools = [
         Tool("mail_list", "List or search recent inbox messages (subject or sender).",
              obj({"query": s("Text to match in subject or sender (optional)"),
                   "limit": i("Max messages (default 10)"),
@@ -301,6 +402,9 @@ def mail_tools(runner: Runner) -> list[Tool]:
              lambda a: f"Send email to {a.get('to', '')}: “{a.get('subject', '')}”",
              ("computer_action",)),
     ]
+    for t in tools:
+        t.mail_state = (index, guard)    # read by the Trust check
+    return tools
 
 
 def contacts_tools(runner: Runner) -> list[Tool]:

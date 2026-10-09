@@ -83,7 +83,9 @@ def build_tools(settings: Settings, runner, mac_available: bool, eventkit=None, 
         if settings.enable_notes:
             tools += notes_tools(runner)
         if settings.enable_mail:
-            tools += mail_tools(runner)
+            from ..connectors.mailindex import MailIndex
+
+            tools += mail_tools(runner, MailIndex(Path(settings.mail_dir).expanduser()))
         if settings.enable_contacts:
             tools += contacts_tools(runner)
         if settings.enable_messages:

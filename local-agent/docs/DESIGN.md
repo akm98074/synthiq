@@ -213,7 +213,7 @@ Approving or declining resumes a paused run from its saved state (`/api/approval
 | Calendar | `calendar_list_events` (read), `calendar_create_event` (write) | Listing: **EventKit** (pyobjc; expands repeating events, includes every account, invitation status) with an AppleScript fallback that expands repeating series from their RRULE (`connectors/recurrence.py`, python-dateutil). Creating: AppleScript |
 | Reminders | `reminders_list` (read), `reminders_create` (write) | AppleScript |
 | Notes | `notes_search` (read), `notes_create` (draft) | AppleScript |
-| Mail | `mail_list`, `mail_followups`, `mail_read` (read), `mail_draft` (draft), `mail_send` (write) | AppleScript |
+| Mail | `mail_list`, `mail_followups`, `mail_read` (read), `mail_draft` (draft), `mail_send` (write) | Reads from Mail's own index (`Envelope Index`, read-only, Full Disk Access) and `.emlx` files; a bounded AppleScript (newest messages of each inbox, no bodies in lists) only if the index can't be used. Drafts and sends use AppleScript. Background checks never script Mail.app more than every 3 h, nor while Mail is above 2 GB or recently timed out (0.17.2; whole-inbox AppleScript queries had grown Mail to tens of GB). |
 | Contacts | `contacts_find` (read) | AppleScript |
 | Files | `files_search`, `files_list` (read), `files_open` (draft), `files_move` (write), `files_trash` (danger) | Python, confined to allowed folders |
 | Documents | `documents_create_pdf`, `documents_create_spreadsheet` (draft) | fpdf2, openpyxl |
@@ -423,7 +423,7 @@ Before any untrusted read, only a URL whose query string is longer than 120 char
   - **checks** (every `check_every_minutes`, default 30). Candidates are:
     - events starting within 60 min;
     - reminders due within 60 min or overdue;
-    - mail received 1–`followup_days` days ago and never replied to (Mail's `was replied to`).
+    - mail received 1–`followup_days` days ago and never replied to (the index's "answered" flag; Mail's `was replied to` in the fallback).
 
     Each candidate is deduplicated by key, then **decided** (`should_nudge`, `urgency`).
   - **dream** (daily, `dream_time`), as described in section 8.

@@ -73,6 +73,7 @@ class Settings:
     imessage_db: str = "~/Library/Messages/chat.db"
     whatsapp_db: str = "~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite"
     addressbook_dir: str = "~/Library/Application Support/AddressBook"
+    mail_dir: str = "~/Library/Mail"     # Apple Mail's data; its index is read instead of scripting Mail
 
     # Gmail (Step 7b): your own Google OAuth client; tokens live in the Keychain
     enable_gmail: bool = True
